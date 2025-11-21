@@ -3,15 +3,19 @@
 import { useState, useRef } from 'react';
 import { useReactToPrint } from 'react-to-print';
 import { GradingReport } from '@/components/GradingReport';
-import { Upload, FileText, CheckCircle, AlertCircle, Loader2, Sparkles, ArrowRight, BookOpen, PenTool, GraduationCap } from 'lucide-react';
+import { Upload, FileText, CheckCircle, AlertCircle, Loader2, Sparkles, ArrowRight, BookOpen, PenTool, GraduationCap, Plus, Trash2 } from 'lucide-react';
 import { clsx } from 'clsx';
 
 export default function Home() {
-  const [targetLabel, setTargetLabel] = useState('2024年度 第1回 実力テスト 国語 大問2');
+  const [selectedProblems, setSelectedProblems] = useState<{ big: number; small: number }[]>([]);
+  const [currentBig, setCurrentBig] = useState(1);
+  const [currentSmall, setCurrentSmall] = useState(1);
+
   const [studentFile, setStudentFile] = useState<File | null>(null);
   const [answerKeyFile, setAnswerKeyFile] = useState<File | null>(null);
+  const [problemFile, setProblemFile] = useState<File | null>(null);
   const [isLoading, setIsLoading] = useState(false);
-  const [result, setResult] = useState<any>(null);
+  const [results, setResults] = useState<any[] | null>(null);
   const [error, setError] = useState<string | null>(null);
 
   const componentRef = useRef<HTMLDivElement>(null);
@@ -26,21 +30,42 @@ export default function Home() {
     }
   };
 
+  const addProblem = () => {
+    if (selectedProblems.some(p => p.big === currentBig && p.small === currentSmall)) {
+      return; // Duplicate check
+    }
+    setSelectedProblems([...selectedProblems, { big: currentBig, small: currentSmall }]);
+  };
+
+  const removeProblem = (index: number) => {
+    const newProblems = [...selectedProblems];
+    newProblems.splice(index, 1);
+    setSelectedProblems(newProblems);
+  };
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!studentFile || !answerKeyFile) {
-      setError('両方の画像をアップロードしてください。');
+    if (!studentFile || !answerKeyFile || !problemFile) {
+      setError('すべての画像（生徒の解答、模範解答、問題文）をアップロードしてください。');
       return;
+    }
+
+    // If no problems are explicitly added to the list, use the currently selected one from dropdowns
+    let targetProblems = selectedProblems;
+    if (targetProblems.length === 0) {
+      targetProblems = [{ big: currentBig, small: currentSmall }];
     }
 
     setIsLoading(true);
     setError(null);
-    setResult(null);
+    setResults(null);
 
+    const targetLabels = targetProblems.map(p => `大問${p.big} 問${p.small}`);
     const formData = new FormData();
-    formData.append('targetLabel', targetLabel);
+    formData.append('targetLabels', JSON.stringify(targetLabels));
     formData.append('studentImage', studentFile);
     formData.append('answerKeyImage', answerKeyFile);
+    formData.append('problemImage', problemFile);
 
     try {
       const res = await fetch('/api/grade', {
@@ -52,7 +77,7 @@ export default function Home() {
       if (data.status === 'error') {
         setError(data.message);
       } else {
-        setResult(data);
+        setResults(data.results);
       }
     } catch (err: any) {
       setError(err.message || '通信エラーが発生しました。');
@@ -66,14 +91,6 @@ export default function Home() {
     if (score <= 10) return Math.min(100, Math.round(score * 10));
     return Math.min(100, Math.round(score));
   };
-
-  const gradingResult = result?.grading_result;
-  const deductionDetails = gradingResult?.deduction_details ?? [];
-  const normalizedScore = gradingResult ? normalizeScore(gradingResult.score) : 0;
-  const totalDeduction = deductionDetails.reduce(
-    (sum: number, item: any) => sum + (Number(item?.deduction_percentage) || 0),
-    0
-  );
 
   return (
     <main className="min-h-screen bg-slate-50 relative overflow-hidden selection:bg-indigo-100 selection:text-indigo-900 font-sans text-slate-900">
@@ -126,25 +143,69 @@ export default function Home() {
           <div className="p-8 md:p-14">
             <form onSubmit={handleSubmit} className="space-y-12">
 
-              {/* Target Label Input */}
-              <div className="max-w-sm mx-auto">
-                <label htmlFor="targetLabel" className="block text-sm font-bold text-slate-600 mb-3 text-center tracking-wide">
-                  採点対象の問題番号
+              {/* Problem Selector */}
+              <div className="max-w-lg mx-auto">
+                <label className="block text-sm font-bold text-slate-600 mb-3 text-center tracking-wide">
+                  採点対象の問題を選択
                 </label>
-                <div className="relative group">
-                  <div className="absolute -inset-0.5 bg-gradient-to-r from-indigo-500 to-violet-500 rounded-2xl blur opacity-20 group-hover:opacity-40 transition duration-500"></div>
-                  <input
-                    type="text"
-                    id="targetLabel"
-                    value={targetLabel}
-                    onChange={(e) => setTargetLabel(e.target.value)}
-                    className="relative block w-full rounded-xl border-0 bg-white shadow-sm text-center text-2xl font-bold text-slate-800 p-4 focus:ring-2 focus:ring-indigo-500 transition-all placeholder:text-slate-300"
-                    placeholder="例: 問9"
-                  />
+                <div className="flex gap-4 items-center justify-center mb-4">
+                  <div className="relative">
+                    <select
+                      value={currentBig}
+                      onChange={(e) => setCurrentBig(Number(e.target.value))}
+                      className="appearance-none bg-white border border-slate-200 text-slate-700 py-3 px-4 pr-8 rounded-xl leading-tight focus:outline-none focus:bg-white focus:border-indigo-500 font-bold"
+                    >
+                      {[...Array(8)].map((_, i) => (
+                        <option key={i + 1} value={i + 1}>大問 {i + 1}</option>
+                      ))}
+                    </select>
+                    <div className="pointer-events-none absolute inset-y-0 right-0 flex items-center px-2 text-slate-700">
+                      <svg className="fill-current h-4 w-4" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20"><path d="M9.293 12.95l.707.707L15.657 8l-1.414-1.414L10 10.828 5.757 6.586 4.343 8z" /></svg>
+                    </div>
+                  </div>
+                  <div className="relative">
+                    <select
+                      value={currentSmall}
+                      onChange={(e) => setCurrentSmall(Number(e.target.value))}
+                      className="appearance-none bg-white border border-slate-200 text-slate-700 py-3 px-4 pr-8 rounded-xl leading-tight focus:outline-none focus:bg-white focus:border-indigo-500 font-bold"
+                    >
+                      {[...Array(20)].map((_, i) => (
+                        <option key={i + 1} value={i + 1}>問 {i + 1}</option>
+                      ))}
+                    </select>
+                    <div className="pointer-events-none absolute inset-y-0 right-0 flex items-center px-2 text-slate-700">
+                      <svg className="fill-current h-4 w-4" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20"><path d="M9.293 12.95l.707.707L15.657 8l-1.414-1.414L10 10.828 5.757 6.586 4.343 8z" /></svg>
+                    </div>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={addProblem}
+                    className="bg-indigo-100 hover:bg-indigo-200 text-indigo-700 font-bold py-3 px-4 rounded-xl transition-colors flex items-center"
+                  >
+                    <Plus className="w-5 h-5" />
+                  </button>
                 </div>
+
+                {/* Selected Problems List */}
+                {selectedProblems.length > 0 && (
+                  <div className="flex flex-wrap gap-2 justify-center">
+                    {selectedProblems.map((p, index) => (
+                      <div key={index} className="bg-indigo-50 text-indigo-700 px-4 py-2 rounded-full font-bold text-sm flex items-center shadow-sm border border-indigo-100">
+                        大問{p.big} 問{p.small}
+                        <button
+                          type="button"
+                          onClick={() => removeProblem(index)}
+                          className="ml-2 text-indigo-400 hover:text-red-500 transition-colors"
+                        >
+                          <Trash2 className="w-4 h-4" />
+                        </button>
+                      </div>
+                    ))}
+                  </div>
+                )}
               </div>
 
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
                 {/* Student Answer Upload */}
                 <div className="group">
                   <label className="block text-sm font-bold text-slate-600 mb-4 flex items-center justify-center">
@@ -152,7 +213,7 @@ export default function Home() {
                     生徒の解答画像
                   </label>
                   <div className={clsx(
-                    "relative h-72 border-2 border-dashed rounded-3xl transition-all duration-300 ease-out cursor-pointer overflow-hidden",
+                    "relative h-64 border-2 border-dashed rounded-3xl transition-all duration-300 ease-out cursor-pointer overflow-hidden",
                     studentFile
                       ? "border-indigo-500 bg-indigo-50/40"
                       : "border-slate-200 bg-slate-50/50 hover:border-indigo-300 hover:bg-white hover:shadow-lg hover:shadow-indigo-100/50"
@@ -164,22 +225,22 @@ export default function Home() {
                       className="hidden"
                       id="student-upload"
                     />
-                    <label htmlFor="student-upload" className="absolute inset-0 flex flex-col items-center justify-center p-6 cursor-pointer">
+                    <label htmlFor="student-upload" className="absolute inset-0 flex flex-col items-center justify-center p-4 cursor-pointer">
                       {studentFile ? (
                         <div className="animate-scale-in text-center w-full">
-                          <div className="w-20 h-20 bg-white rounded-2xl shadow-xl shadow-indigo-100 flex items-center justify-center mx-auto mb-4 text-indigo-600 transform group-hover:scale-110 transition-transform duration-300">
-                            <CheckCircle className="w-10 h-10" />
+                          <div className="w-16 h-16 bg-white rounded-2xl shadow-xl shadow-indigo-100 flex items-center justify-center mx-auto mb-3 text-indigo-600 transform group-hover:scale-110 transition-transform duration-300">
+                            <CheckCircle className="w-8 h-8" />
                           </div>
-                          <span className="text-base text-indigo-900 font-bold block truncate w-full px-4">{studentFile.name}</span>
+                          <span className="text-sm text-indigo-900 font-bold block truncate w-full px-2">{studentFile.name}</span>
                           <span className="inline-block mt-2 px-3 py-1 bg-indigo-100 text-indigo-600 text-xs font-bold rounded-full">変更する</span>
                         </div>
                       ) : (
                         <div className="text-center group-hover:scale-105 transition-transform duration-300">
-                          <div className="w-20 h-20 bg-white rounded-2xl shadow-sm flex items-center justify-center mx-auto mb-5 text-slate-300 group-hover:text-indigo-500 group-hover:shadow-xl group-hover:shadow-indigo-100 transition-all duration-300">
-                            <Upload className="w-9 h-9" />
+                          <div className="w-16 h-16 bg-white rounded-2xl shadow-sm flex items-center justify-center mx-auto mb-4 text-slate-300 group-hover:text-indigo-500 group-hover:shadow-xl group-hover:shadow-indigo-100 transition-all duration-300">
+                            <Upload className="w-8 h-8" />
                           </div>
-                          <span className="text-base text-slate-600 font-bold block">画像・PDFをアップロード</span>
-                          <span className="text-sm text-slate-400 mt-2 block">ドラッグ＆ドロップ<br />またはクリック</span>
+                          <span className="text-sm text-slate-600 font-bold block">画像・PDF</span>
+                          <span className="text-xs text-slate-400 mt-1 block">ドラッグ＆ドロップ</span>
                         </div>
                       )}
                     </label>
@@ -193,7 +254,7 @@ export default function Home() {
                     模範解答画像
                   </label>
                   <div className={clsx(
-                    "relative h-72 border-2 border-dashed rounded-3xl transition-all duration-300 ease-out cursor-pointer overflow-hidden",
+                    "relative h-64 border-2 border-dashed rounded-3xl transition-all duration-300 ease-out cursor-pointer overflow-hidden",
                     answerKeyFile
                       ? "border-violet-500 bg-violet-50/40"
                       : "border-slate-200 bg-slate-50/50 hover:border-violet-300 hover:bg-white hover:shadow-lg hover:shadow-violet-100/50"
@@ -205,22 +266,63 @@ export default function Home() {
                       className="hidden"
                       id="key-upload"
                     />
-                    <label htmlFor="key-upload" className="absolute inset-0 flex flex-col items-center justify-center p-6 cursor-pointer">
+                    <label htmlFor="key-upload" className="absolute inset-0 flex flex-col items-center justify-center p-4 cursor-pointer">
                       {answerKeyFile ? (
                         <div className="animate-scale-in text-center w-full">
-                          <div className="w-20 h-20 bg-white rounded-2xl shadow-xl shadow-violet-100 flex items-center justify-center mx-auto mb-4 text-violet-600 transform group-hover:scale-110 transition-transform duration-300">
-                            <CheckCircle className="w-10 h-10" />
+                          <div className="w-16 h-16 bg-white rounded-2xl shadow-xl shadow-violet-100 flex items-center justify-center mx-auto mb-3 text-violet-600 transform group-hover:scale-110 transition-transform duration-300">
+                            <CheckCircle className="w-8 h-8" />
                           </div>
-                          <span className="text-base text-violet-900 font-bold block truncate w-full px-4">{answerKeyFile.name}</span>
+                          <span className="text-sm text-violet-900 font-bold block truncate w-full px-2">{answerKeyFile.name}</span>
                           <span className="inline-block mt-2 px-3 py-1 bg-violet-100 text-violet-600 text-xs font-bold rounded-full">変更する</span>
                         </div>
                       ) : (
                         <div className="text-center group-hover:scale-105 transition-transform duration-300">
-                          <div className="w-20 h-20 bg-white rounded-2xl shadow-sm flex items-center justify-center mx-auto mb-5 text-slate-300 group-hover:text-violet-500 group-hover:shadow-xl group-hover:shadow-violet-100 transition-all duration-300">
-                            <FileText className="w-9 h-9" />
+                          <div className="w-16 h-16 bg-white rounded-2xl shadow-sm flex items-center justify-center mx-auto mb-4 text-slate-300 group-hover:text-violet-500 group-hover:shadow-xl group-hover:shadow-violet-100 transition-all duration-300">
+                            <FileText className="w-8 h-8" />
                           </div>
-                          <span className="text-base text-slate-600 font-bold block">画像・PDFをアップロード</span>
-                          <span className="text-sm text-slate-400 mt-2 block">ドラッグ＆ドロップ<br />またはクリック</span>
+                          <span className="text-sm text-slate-600 font-bold block">画像・PDF</span>
+                          <span className="text-xs text-slate-400 mt-1 block">ドラッグ＆ドロップ</span>
+                        </div>
+                      )}
+                    </label>
+                  </div>
+                </div>
+
+                {/* Problem Text Upload */}
+                <div className="group">
+                  <label className="block text-sm font-bold text-slate-600 mb-4 flex items-center justify-center">
+                    <span className="w-2.5 h-2.5 rounded-full bg-emerald-500 mr-2 shadow-[0_0_10px_rgba(16,185,129,0.5)]"></span>
+                    問題文画像
+                  </label>
+                  <div className={clsx(
+                    "relative h-64 border-2 border-dashed rounded-3xl transition-all duration-300 ease-out cursor-pointer overflow-hidden",
+                    problemFile
+                      ? "border-emerald-500 bg-emerald-50/40"
+                      : "border-slate-200 bg-slate-50/50 hover:border-emerald-300 hover:bg-white hover:shadow-lg hover:shadow-emerald-100/50"
+                  )}>
+                    <input
+                      type="file"
+                      accept="image/*,.pdf"
+                      onChange={(e) => handleFileChange(e, setProblemFile)}
+                      className="hidden"
+                      id="problem-upload"
+                    />
+                    <label htmlFor="problem-upload" className="absolute inset-0 flex flex-col items-center justify-center p-4 cursor-pointer">
+                      {problemFile ? (
+                        <div className="animate-scale-in text-center w-full">
+                          <div className="w-16 h-16 bg-white rounded-2xl shadow-xl shadow-emerald-100 flex items-center justify-center mx-auto mb-3 text-emerald-600 transform group-hover:scale-110 transition-transform duration-300">
+                            <CheckCircle className="w-8 h-8" />
+                          </div>
+                          <span className="text-sm text-emerald-900 font-bold block truncate w-full px-2">{problemFile.name}</span>
+                          <span className="inline-block mt-2 px-3 py-1 bg-emerald-100 text-emerald-600 text-xs font-bold rounded-full">変更する</span>
+                        </div>
+                      ) : (
+                        <div className="text-center group-hover:scale-105 transition-transform duration-300">
+                          <div className="w-16 h-16 bg-white rounded-2xl shadow-sm flex items-center justify-center mx-auto mb-4 text-slate-300 group-hover:text-emerald-500 group-hover:shadow-xl group-hover:shadow-emerald-100 transition-all duration-300">
+                            <BookOpen className="w-8 h-8" />
+                          </div>
+                          <span className="text-sm text-slate-600 font-bold block">画像・PDF</span>
+                          <span className="text-xs text-slate-400 mt-1 block">ドラッグ＆ドロップ</span>
                         </div>
                       )}
                     </label>
@@ -261,173 +363,203 @@ export default function Home() {
         </div>
 
         {/* Result Display */}
-        {result && gradingResult && (
-          <div className="mt-20 animate-fade-in-up">
-            <div className="bg-white/80 backdrop-blur-3xl shadow-[0_20px_50px_rgba(0,0,0,0.1)] rounded-[2.5rem] overflow-hidden border border-white/60 ring-1 ring-white/50">
+        {results && results.map((res, index) => {
+          const gradingResult = res.result?.grading_result;
+          if (!gradingResult) return null;
 
-              {/* Result Header */}
-              <div className="p-8 md:p-14 border-b border-slate-100 flex justify-between items-center flex-wrap gap-4">
-                <div className="flex items-center">
-                  <h2 className="text-3xl font-bold text-slate-800 flex items-center">
-                    <Sparkles className="mr-3 h-6 w-6 text-yellow-400 animate-pulse" />
-                    採点レポート
-                  </h2>
-                  <span className="ml-4 text-white/80 text-sm font-bold bg-white/10 backdrop-blur-md px-4 py-1.5 rounded-full border border-white/10 relative z-10 bg-slate-800">
-                    {targetLabel}
-                  </span>
-                </div>
+          const deductionDetails = gradingResult?.deduction_details ?? [];
+          const normalizedScore = gradingResult ? normalizeScore(gradingResult.score) : 0;
+          const totalDeduction = deductionDetails.reduce(
+            (sum: number, item: any) => sum + (Number(item?.deduction_percentage) || 0),
+            0
+          );
 
-                <button
-                  onClick={() => handlePrint()}
-                  className="flex items-center px-4 py-2 bg-slate-800 text-white rounded-lg hover:bg-slate-700 transition-colors shadow-lg"
-                >
-                  <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5 mr-2" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 10v6m0 0l-3-3m3 3l3-3m2 8H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
-                  </svg>
-                  PDFで出力
-                </button>
-              </div>
+          return (
+            <div key={index} className="mt-20 animate-fade-in-up">
+              <div className="bg-white/80 backdrop-blur-3xl shadow-[0_20px_50px_rgba(0,0,0,0.1)] rounded-[2.5rem] overflow-hidden border border-white/60 ring-1 ring-white/50">
 
-              {/* Hidden Report Component for Printing */}
-              <div style={{ display: 'none' }}>
-                <GradingReport
-                  ref={componentRef}
-                  result={result}
-                  targetLabel={targetLabel}
-                  studentFile={studentFile}
-                />
-              </div>
-
-
-              <div className="p-8 md:p-14">
-
-                {/* Original Answer & Correction Section */}
-                <div className="mb-16">
-                  <h3 className="text-xl font-bold text-slate-800 mb-6 flex items-center">
-                    <span className="bg-indigo-100 text-indigo-600 rounded-lg w-8 h-8 flex items-center justify-center mr-3">📝</span>
-                    あなたの答案
-                  </h3>
-
-                  {/* Image Preview (Full Width) */}
-                  <div className="bg-slate-100 rounded-2xl p-5 border border-slate-200 mb-8">
-                    {studentFile && (
-                      studentFile.type === 'application/pdf' ? (
-                        <iframe
-                          src={URL.createObjectURL(studentFile)}
-                          className="w-full h-[640px] rounded-xl bg-white"
-                          title="Student Answer PDF"
-                        />
-                      ) : (
-                        <img
-                          src={URL.createObjectURL(studentFile)}
-                          alt="Student Answer"
-                          className="w-full h-auto rounded-xl object-contain max-h-[720px] bg-white"
-                        />
-                      )
-                    )}
-                    <p className="text-center text-xs text-slate-400 mt-2">提出された答案</p>
+                {/* Result Header */}
+                <div className="p-8 md:p-14 border-b border-slate-100 flex justify-between items-center flex-wrap gap-4">
+                  <div className="flex items-center">
+                    <h2 className="text-3xl font-bold text-slate-800 flex items-center">
+                      <Sparkles className="mr-3 h-6 w-6 text-yellow-400 animate-pulse" />
+                      採点レポート
+                    </h2>
+                    <span className="ml-4 text-white/80 text-sm font-bold bg-white/10 backdrop-blur-md px-4 py-1.5 rounded-full border border-white/10 relative z-10 bg-slate-800">
+                      {res.label}
+                    </span>
                   </div>
 
-                  {/* Deduction Details */}
-                  {deductionDetails.length > 0 && (
-                    <div className="bg-red-50 rounded-2xl p-6 border border-red-100">
-                      <div className="flex items-center justify-between mb-4">
-                        <h4 className="font-bold text-red-800 flex items-center">
-                          <AlertCircle className="w-5 h-5 mr-2" />
-                          減点ポイント
-                        </h4>
-                        <span className="text-red-700 font-bold bg-white px-3 py-1 rounded-full border border-red-100 text-sm">
-                          合計 -{totalDeduction}%
-                        </span>
+                  <button
+                    onClick={() => handlePrint()}
+                    className="flex items-center px-4 py-2 bg-slate-800 text-white rounded-lg hover:bg-slate-700 transition-colors shadow-lg"
+                  >
+                    <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5 mr-2" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 10v6m0 0l-3-3m3 3l3-3m2 8H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+                    </svg>
+                    PDFで出力
+                  </button>
+                </div>
+
+                {/* Hidden Report Component for Printing */}
+                <div style={{ display: 'none' }}>
+                  <GradingReport
+                    ref={componentRef}
+                    result={res.result}
+                    targetLabel={res.label}
+                    studentFile={studentFile}
+                  />
+                </div>
+
+
+                <div className="p-8 md:p-14">
+
+                  {/* Original Answer & Correction Section */}
+                  <div className="mb-16">
+                    <h3 className="text-xl font-bold text-slate-800 mb-6 flex items-center">
+                      <span className="bg-indigo-100 text-indigo-600 rounded-lg w-8 h-8 flex items-center justify-center mr-3">📝</span>
+                      あなたの答案
+                    </h3>
+
+                    {/* Image Preview (Full Width) */}
+                    <div className="bg-slate-100 rounded-2xl p-5 border border-slate-200 mb-8">
+                      {studentFile && (
+                        studentFile.type === 'application/pdf' ? (
+                          <iframe
+                            src={URL.createObjectURL(studentFile)}
+                            className="w-full h-[640px] rounded-xl bg-white"
+                            title="Student Answer PDF"
+                          />
+                        ) : (
+                          <img
+                            src={URL.createObjectURL(studentFile)}
+                            alt="Student Answer"
+                            className="w-full h-auto rounded-xl object-contain max-h-[720px] bg-white"
+                          />
+                        )
+                      )}
+                      <p className="text-center text-xs text-slate-400 mt-2">提出された答案</p>
+                    </div>
+
+                    {/* Recognized Text Section */}
+                    {gradingResult.recognized_text && (
+                      <div className="mb-16">
+                        <h3 className="text-xl font-bold text-slate-800 mb-6 flex items-center">
+                          <span className="bg-blue-100 text-blue-600 rounded-lg w-8 h-8 flex items-center justify-center mr-3">👁️</span>
+                          AI読み取り結果（確認用）
+                        </h3>
+                        <div className="bg-blue-50 rounded-2xl p-6 border border-blue-100">
+                          <p className="text-slate-700 whitespace-pre-wrap font-mono leading-relaxed">
+                            {gradingResult.recognized_text}
+                          </p>
+                          <p className="text-sm text-slate-500 mt-4 text-right">
+                            ※文字数判定の基準となります。誤読がある場合は撮影し直してください。
+                          </p>
+                        </div>
                       </div>
-                      <ul className="space-y-3">
-                        {deductionDetails.map((item: any, idx: number) => (
-                          <li key={idx} className="flex items-start justify-between bg-white p-3 rounded-lg border border-red-100 shadow-sm">
-                            <span className="text-red-700 font-medium">{item.reason}</span>
-                            <span className="text-red-600 font-bold bg-red-50 px-2 py-1 rounded text-sm whitespace-nowrap ml-4">
-                              -{item.deduction_percentage}%
-                            </span>
-                          </li>
-                        ))}
-                      </ul>
-                    </div>
-                  )}
-                </div>
-
-                {/* Score Section (Updated) */}
-                <div className="grid grid-cols-1 md:grid-cols-3 gap-8 mb-16">
-                  <div className="md:col-span-1 bg-gradient-to-br from-indigo-600 to-violet-700 rounded-3xl p-8 text-white shadow-xl relative overflow-hidden group">
-                    <div className="absolute top-0 right-0 w-32 h-32 bg-white/10 rounded-full blur-3xl -mr-16 -mt-16 group-hover:scale-150 transition-transform duration-700"></div>
-                    <h3 className="text-indigo-100 font-bold mb-1 relative z-10">総合スコア (100%満点)</h3>
-                    <div className="flex items-baseline relative z-10">
-                      <span className="text-7xl font-black tracking-tighter">
-                        {normalizedScore}
-                      </span>
-                      <span className="text-2xl font-medium ml-2 opacity-80">%</span>
-                    </div>
-                    <div className="mt-4 w-full bg-black/20 rounded-full h-2 overflow-hidden">
-                      <div
-                        className="bg-white h-full rounded-full transition-all duration-1000 ease-out"
-                        style={{ width: `${normalizedScore}%` }}
-                      ></div>
-                    </div>
-                    {totalDeduction > 0 && (
-                      <p className="mt-3 text-sm text-indigo-100/90">
-                        減点合計: -{totalDeduction}% / 最終 {normalizedScore}%
-                      </p>
                     )}
+
+                    {/* Deduction Details */}
                     {deductionDetails.length > 0 && (
-                      <ul className="mt-3 text-sm text-indigo-50/90 space-y-1">
-                        {deductionDetails.map((item: any, idx: number) => (
-                          <li key={`${item?.reason ?? 'deduction'}-${idx}`}>
-                            ・{item?.reason} で -{item?.deduction_percentage}%
-                          </li>
-                        ))}
-                      </ul>
+                      <div className="bg-red-50 rounded-2xl p-6 border border-red-100">
+                        <div className="flex items-center justify-between mb-4">
+                          <h4 className="font-bold text-red-800 flex items-center">
+                            <AlertCircle className="w-5 h-5 mr-2" />
+                            減点ポイント
+                          </h4>
+                          <span className="text-red-700 font-bold bg-white px-3 py-1 rounded-full border border-red-100 text-sm">
+                            合計 -{totalDeduction}%
+                          </span>
+                        </div>
+                        <ul className="space-y-3">
+                          {deductionDetails.map((item: any, idx: number) => (
+                            <li key={idx} className="flex items-start justify-between bg-white p-3 rounded-lg border border-red-100 shadow-sm">
+                              <span className="text-red-700 font-medium">{item.reason}</span>
+                              <span className="text-red-600 font-bold bg-red-50 px-2 py-1 rounded text-sm whitespace-nowrap ml-4">
+                                -{item.deduction_percentage}%
+                              </span>
+                            </li>
+                          ))}
+                        </ul>
+                      </div>
                     )}
                   </div>
 
-                  {/* Feedback Cards */}
-                  <div className="md:col-span-2 grid grid-cols-1 gap-6">
-                    <div className="bg-green-50 rounded-3xl p-6 border border-green-100 hover:shadow-lg transition-shadow duration-300">
-                      <h3 className="font-bold text-green-800 mb-3 flex items-center">
-                        <span className="bg-green-200 text-green-700 rounded-full w-8 h-8 flex items-center justify-center mr-3 text-lg">👍</span>
-                        良かった点
-                      </h3>
-                      <p className="text-slate-700 leading-relaxed whitespace-pre-wrap">
-                        {gradingResult.feedback_content.good_point}
-                      </p>
+                  {/* Score Section (Updated) */}
+                  <div className="grid grid-cols-1 md:grid-cols-3 gap-8 mb-16">
+                    <div className="md:col-span-1 bg-gradient-to-br from-indigo-600 to-violet-700 rounded-3xl p-8 text-white shadow-xl relative overflow-hidden group">
+                      <div className="absolute top-0 right-0 w-32 h-32 bg-white/10 rounded-full blur-3xl -mr-16 -mt-16 group-hover:scale-150 transition-transform duration-700"></div>
+                      <h3 className="text-indigo-100 font-bold mb-1 relative z-10">総合スコア (100%満点)</h3>
+                      <div className="flex items-baseline relative z-10">
+                        <span className="text-7xl font-black tracking-tighter">
+                          {normalizedScore}
+                        </span>
+                        <span className="text-2xl font-medium ml-2 opacity-80">%</span>
+                      </div>
+                      <div className="mt-4 w-full bg-black/20 rounded-full h-2 overflow-hidden">
+                        <div
+                          className="bg-white h-full rounded-full transition-all duration-1000 ease-out"
+                          style={{ width: `${normalizedScore}%` }}
+                        ></div>
+                      </div>
+                      {totalDeduction > 0 && (
+                        <p className="mt-3 text-sm text-indigo-100/90">
+                          減点合計: -{totalDeduction}% / 最終 {normalizedScore}%
+                        </p>
+                      )}
+                      {deductionDetails.length > 0 && (
+                        <ul className="mt-3 text-sm text-indigo-50/90 space-y-1">
+                          {deductionDetails.map((item: any, idx: number) => (
+                            <li key={`${item?.reason ?? 'deduction'}-${idx}`}>
+                              ・{item?.reason} で -{item?.deduction_percentage}%
+                            </li>
+                          ))}
+                        </ul>
+                      )}
                     </div>
-                    <div className="bg-indigo-50 rounded-3xl p-6 border border-indigo-100 hover:shadow-lg transition-shadow duration-300">
-                      <h3 className="font-bold text-indigo-800 mb-3 flex items-center">
-                        <span className="bg-indigo-200 text-indigo-700 rounded-full w-8 h-8 flex items-center justify-center mr-3 text-lg">💡</span>
-                        改善のアドバイス
-                      </h3>
-                      <p className="text-slate-700 leading-relaxed whitespace-pre-wrap">
-                        {gradingResult.feedback_content.improvement_advice}
+
+                    {/* Feedback Cards */}
+                    <div className="md:col-span-2 grid grid-cols-1 gap-6">
+                      <div className="bg-green-50 rounded-3xl p-6 border border-green-100 hover:shadow-lg transition-shadow duration-300">
+                        <h3 className="font-bold text-green-800 mb-3 flex items-center">
+                          <span className="bg-green-200 text-green-700 rounded-full w-8 h-8 flex items-center justify-center mr-3 text-lg">👍</span>
+                          良かった点
+                        </h3>
+                        <p className="text-slate-700 leading-relaxed whitespace-pre-wrap">
+                          {gradingResult.feedback_content.good_point}
+                        </p>
+                      </div>
+                      <div className="bg-indigo-50 rounded-3xl p-6 border border-indigo-100 hover:shadow-lg transition-shadow duration-300">
+                        <h3 className="font-bold text-indigo-800 mb-3 flex items-center">
+                          <span className="bg-indigo-200 text-indigo-700 rounded-full w-8 h-8 flex items-center justify-center mr-3 text-lg">💡</span>
+                          改善のアドバイス
+                        </h3>
+                        <p className="text-slate-700 leading-relaxed whitespace-pre-wrap">
+                          {gradingResult.feedback_content.improvement_advice}
+                        </p>
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* Rewrite Example */}
+                  <div className="bg-yellow-50/80 rounded-3xl p-8 border border-yellow-100 relative overflow-hidden">
+                    <div className="absolute top-0 right-0 w-40 h-40 bg-yellow-200/20 rounded-full blur-3xl -mr-10 -mt-10"></div>
+                    <h3 className="text-xl font-bold text-yellow-900 mb-6 flex items-center relative z-10">
+                      <span className="bg-yellow-200 text-yellow-700 rounded-lg w-8 h-8 flex items-center justify-center mr-3">✨</span>
+                      満点の書き直し例
+                    </h3>
+                    <div className="bg-white/60 backdrop-blur-sm rounded-2xl p-6 border border-yellow-200/50 shadow-sm relative z-10">
+                      <p className="text-lg leading-loose text-slate-800 font-medium font-serif">
+                        {gradingResult.feedback_content.rewrite_example}
                       </p>
                     </div>
                   </div>
-                </div>
 
-                {/* Rewrite Example */}
-                <div className="bg-yellow-50/80 rounded-3xl p-8 border border-yellow-100 relative overflow-hidden">
-                  <div className="absolute top-0 right-0 w-40 h-40 bg-yellow-200/20 rounded-full blur-3xl -mr-10 -mt-10"></div>
-                  <h3 className="text-xl font-bold text-yellow-900 mb-6 flex items-center relative z-10">
-                    <span className="bg-yellow-200 text-yellow-700 rounded-lg w-8 h-8 flex items-center justify-center mr-3">✨</span>
-                    満点の書き直し例
-                  </h3>
-                  <div className="bg-white/60 backdrop-blur-sm rounded-2xl p-6 border border-yellow-200/50 shadow-sm relative z-10">
-                    <p className="text-lg leading-loose text-slate-800 font-medium font-serif">
-                      {gradingResult.feedback_content.rewrite_example}
-                    </p>
-                  </div>
                 </div>
-
               </div>
             </div>
-          </div>
-        )}
+          );
+        })}
 
       </div>
     </main>

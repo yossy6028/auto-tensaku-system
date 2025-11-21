@@ -12,6 +12,7 @@ interface FeedbackContent {
 }
 
 interface GradingResult {
+    recognized_text?: string;
     score: number;
     deduction_details?: DeductionDetail[];
     feedback_content: FeedbackContent;
@@ -63,20 +64,20 @@ export const GradingReport = React.forwardRef<HTMLDivElement, GradingReportProps
                         <h2 className="text-slate-500 font-bold mb-2 text-sm uppercase tracking-widest">
                             総合スコア (100%満点)
                         </h2>
-                    <div className="flex items-baseline justify-center">
-                        <span className="text-6xl font-black text-slate-800">{score}</span>
-                        <span className="text-xl font-bold text-slate-400 ml-1">%</span>
+                        <div className="flex items-baseline justify-center">
+                            <span className="text-6xl font-black text-slate-800">{score}</span>
+                            <span className="text-xl font-bold text-slate-400 ml-1">%</span>
+                        </div>
+                        {deductionDetails.length > 0 && (
+                            <ul className="mt-3 text-sm text-slate-600 space-y-1">
+                                {deductionDetails.map((item) => (
+                                    <li key={`${item.reason}-${item.deduction_percentage}`}>
+                                        ・{item.reason} で -{item.deduction_percentage}%
+                                    </li>
+                                ))}
+                            </ul>
+                        )}
                     </div>
-                    {deductionDetails.length > 0 && (
-                        <ul className="mt-3 text-sm text-slate-600 space-y-1">
-                            {deductionDetails.map((item) => (
-                                <li key={`${item.reason}-${item.deduction_percentage}`}>
-                                    ・{item.reason} で -{item.deduction_percentage}%
-                                </li>
-                            ))}
-                        </ul>
-                    )}
-                </div>
 
                     <div className="w-2/3 grid grid-cols-1 gap-4">
                         <div className="bg-green-50 rounded-xl p-4 border border-green-100">
@@ -93,6 +94,20 @@ export const GradingReport = React.forwardRef<HTMLDivElement, GradingReportProps
                         </div>
                     </div>
                 </div>
+
+                {gradingResult.recognized_text && (
+                    <div className="mb-8">
+                        <h2 className="text-lg font-bold border-l-4 border-blue-400 pl-3 mb-4">AI読み取り結果（確認用）</h2>
+                        <div className="bg-blue-50 rounded-xl p-4 border border-blue-100">
+                            <p className="text-sm text-slate-700 whitespace-pre-wrap font-mono">
+                                {gradingResult.recognized_text}
+                            </p>
+                            <p className="text-xs text-slate-500 mt-2 text-right">
+                                ※文字数判定の基準となります。誤読がある場合は撮影し直してください。
+                            </p>
+                        </div>
+                    </div>
+                )}
 
                 {deductionDetails.length > 0 && (
                     <div className="mb-8">

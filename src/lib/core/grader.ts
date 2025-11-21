@@ -18,17 +18,18 @@ export class EduShiftGrader {
         });
     }
 
-    async gradeAnswer(targetLabel: string, studentImagePath: string, answerKeyImagePath: string) {
+    async gradeAnswer(targetLabel: string, studentImagePath: string, answerKeyImagePath: string, problemImagePath: string) {
         try {
             const studentImagePart = fileToGenerativePart(studentImagePath, getMimeType(studentImagePath));
             const answerKeyImagePart = fileToGenerativePart(answerKeyImagePath, getMimeType(answerKeyImagePath));
-            return this.executeGrading(targetLabel, studentImagePart, answerKeyImagePart);
+            const problemImagePart = fileToGenerativePart(problemImagePath, getMimeType(problemImagePath));
+            return this.executeGrading(targetLabel, studentImagePart, answerKeyImagePart, problemImagePart);
         } catch (error: any) {
             return this.handleError(error);
         }
     }
 
-    async gradeAnswerFromBuffer(targetLabel: string, studentBuffer: Buffer, studentMime: string, answerKeyBuffer: Buffer, answerKeyMime: string) {
+    async gradeAnswerFromBuffer(targetLabel: string, studentBuffer: Buffer, studentMime: string, answerKeyBuffer: Buffer, answerKeyMime: string, problemBuffer: Buffer, problemMime: string) {
         try {
             const studentImagePart = {
                 inlineData: {
@@ -42,24 +43,31 @@ export class EduShiftGrader {
                     mimeType: answerKeyMime
                 }
             };
-            return this.executeGrading(targetLabel, studentImagePart, answerKeyImagePart);
+            const problemImagePart = {
+                inlineData: {
+                    data: problemBuffer.toString("base64"),
+                    mimeType: problemMime
+                }
+            };
+            return this.executeGrading(targetLabel, studentImagePart, answerKeyImagePart, problemImagePart);
         } catch (error: any) {
             return this.handleError(error);
         }
     }
 
-    private async executeGrading(targetLabel: string, studentImagePart: any, answerKeyImagePart: any) {
+    private async executeGrading(targetLabel: string, studentImagePart: any, answerKeyImagePart: any, problemImagePart: any) {
         const prompt = `
 Target Problem Label: ${targetLabel}
 
-Please analyze the attached images (Student Answer Sheet and Answer Key) and perform the grading process as defined in the System Instruction.
+Please analyze the attached images (Student Answer Sheet, Answer Key, and Problem Text) and perform the grading process as defined in the System Instruction.
 Output the result strictly in JSON format.
 `;
 
         const result = await this.model.generateContent([
             prompt,
             studentImagePart,
-            answerKeyImagePart
+            answerKeyImagePart,
+            problemImagePart
         ]);
 
         const response = await result.response;

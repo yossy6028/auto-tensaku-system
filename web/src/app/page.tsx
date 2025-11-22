@@ -1,7 +1,6 @@
 'use client';
 
-import { useState, useRef } from 'react';
-import { useReactToPrint } from 'react-to-print';
+import React, { useState, useRef } from 'react';
 import { GradingReport } from '@/components/GradingReport';
 import { Upload, FileText, CheckCircle, AlertCircle, Loader2, Sparkles, ArrowRight, BookOpen, PenTool, GraduationCap, Plus, Trash2 } from 'lucide-react';
 import { clsx } from 'clsx';
@@ -11,23 +10,63 @@ export default function Home() {
   const [currentBig, setCurrentBig] = useState(1);
   const [currentSmall, setCurrentSmall] = useState(1);
 
-  const [studentFile, setStudentFile] = useState<File | null>(null);
-  const [answerKeyFile, setAnswerKeyFile] = useState<File | null>(null);
-  const [problemFile, setProblemFile] = useState<File | null>(null);
+  const [uploadedFiles, setUploadedFiles] = useState<File[]>([]);
   const [isLoading, setIsLoading] = useState(false);
   const [results, setResults] = useState<any[] | null>(null);
   const [error, setError] = useState<string | null>(null);
 
-  const componentRef = useRef<HTMLDivElement>(null);
-  const handlePrint = useReactToPrint({
-    contentRef: componentRef,
-    documentTitle: 'EduShift_Grading_Report',
-  });
-
-  const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>, setFile: (f: File | null) => void) => {
-    if (e.target.files && e.target.files[0]) {
-      setFile(e.target.files[0]);
+  const componentRefs = useRef<Map<number, React.RefObject<HTMLDivElement>>>(new Map());
+  
+  const getComponentRef = (index: number): React.RefObject<HTMLDivElement> => {
+    if (!componentRefs.current.has(index)) {
+      componentRefs.current.set(index, React.createRef<HTMLDivElement>());
     }
+    return componentRefs.current.get(index)!;
+  };
+
+  const handlePrint = (index: number) => {
+    const componentRef = getComponentRef(index);
+    if (!componentRef.current) return;
+    
+    const printWindow = window.open('', '_blank');
+    if (!printWindow) return;
+    
+    const content = componentRef.current.innerHTML;
+    const htmlContent = '<!DOCTYPE html>' +
+      '<html>' +
+      '<head>' +
+      '<title>EduShift_Grading_Report</title>' +
+      '<meta charset="utf-8">' +
+      '<style>' +
+      '@media print {' +
+      '  @page { margin: 0; }' +
+      '  body { margin: 0; }' +
+      '}' +
+      'body { font-family: sans-serif; }' +
+      '</style>' +
+      '</head>' +
+      '<body>' +
+      content +
+      '</body>' +
+      '</html>';
+    printWindow.document.write(htmlContent);
+    printWindow.document.close();
+    printWindow.focus();
+    setTimeout(() => {
+      printWindow.print();
+      printWindow.close();
+    }, 250);
+  };
+
+  const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    if (e.target.files && e.target.files.length > 0) {
+      const files = Array.from(e.target.files);
+      setUploadedFiles(prev => [...prev, ...files]);
+    }
+  };
+
+  const removeFile = (index: number) => {
+    setUploadedFiles(prev => prev.filter((_, i) => i !== index));
   };
 
   const addProblem = () => {
@@ -45,8 +84,8 @@ export default function Home() {
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!studentFile || !answerKeyFile || !problemFile) {
-      setError('すべての画像（生徒の解答、模範解答、問題文）をアップロードしてください。');
+    if (uploadedFiles.length === 0) {
+      setError('ファイルをアップロードしてください。本人の答案、問題がすべてクリアに写っていることを確認してください。');
       return;
     }
 
@@ -63,9 +102,11 @@ export default function Home() {
     const targetLabels = targetProblems.map(p => `大問${p.big} 問${p.small}`);
     const formData = new FormData();
     formData.append('targetLabels', JSON.stringify(targetLabels));
-    formData.append('studentImage', studentFile);
-    formData.append('answerKeyImage', answerKeyFile);
-    formData.append('problemImage', problemFile);
+    
+    // すべてのファイルを追加
+    uploadedFiles.forEach((file, index) => {
+      formData.append(`files`, file);
+    });
 
     try {
       const res = await fetch('/api/grade', {
@@ -205,41 +246,50 @@ export default function Home() {
                 )}
               </div>
 
-              <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-                {/* Student Answer Upload */}
-                <div className="group">
-                  <label className="block text-sm font-bold text-slate-600 mb-4 flex items-center justify-center">
-                    <span className="w-2.5 h-2.5 rounded-full bg-indigo-500 mr-2 shadow-[0_0_10px_rgba(99,102,241,0.5)]"></span>
-                    生徒の解答画像
+              {/* File Upload Section */}
+              <div className="space-y-4">
+                <div className="text-center">
+                  <label className="block text-sm font-bold text-slate-600 mb-2">
+                    <span className="w-2.5 h-2.5 rounded-full bg-indigo-500 mr-2 shadow-[0_0_10px_rgba(99,102,241,0.5)] inline-block"></span>
+                    答案・問題・模範解答のファイルをアップロード
                   </label>
+                  <p className="text-xs text-slate-500 mb-4">
+                    ※本人の答案、問題がすべてクリアに写っていることを確認してください
+                  </p>
+                </div>
+                
+                <div className="group">
                   <div className={clsx(
-                    "relative h-64 border-2 border-dashed rounded-3xl transition-all duration-300 ease-out cursor-pointer overflow-hidden",
-                    studentFile
+                    "relative min-h-64 border-2 border-dashed rounded-3xl transition-all duration-300 ease-out cursor-pointer overflow-hidden",
+                    uploadedFiles.length > 0
                       ? "border-indigo-500 bg-indigo-50/40"
                       : "border-slate-200 bg-slate-50/50 hover:border-indigo-300 hover:bg-white hover:shadow-lg hover:shadow-indigo-100/50"
                   )}>
                     <input
                       type="file"
                       accept="image/*,.pdf"
-                      onChange={(e) => handleFileChange(e, setStudentFile)}
+                      multiple
+                      onChange={handleFileChange}
                       className="hidden"
-                      id="student-upload"
+                      id="file-upload"
                     />
-                    <label htmlFor="student-upload" className="absolute inset-0 flex flex-col items-center justify-center p-4 cursor-pointer">
-                      {studentFile ? (
-                        <div className="animate-scale-in text-center w-full">
+                    <label htmlFor="file-upload" className="absolute inset-0 flex flex-col items-center justify-center p-4 cursor-pointer">
+                      {uploadedFiles.length > 0 ? (
+                        <div className="animate-scale-in text-center w-full p-4">
                           <div className="w-16 h-16 bg-white rounded-2xl shadow-xl shadow-indigo-100 flex items-center justify-center mx-auto mb-3 text-indigo-600 transform group-hover:scale-110 transition-transform duration-300">
                             <CheckCircle className="w-8 h-8" />
                           </div>
-                          <span className="text-sm text-indigo-900 font-bold block truncate w-full px-2">{studentFile.name}</span>
-                          <span className="inline-block mt-2 px-3 py-1 bg-indigo-100 text-indigo-600 text-xs font-bold rounded-full">変更する</span>
+                          <span className="text-sm text-indigo-900 font-bold block mb-2">
+                            {uploadedFiles.length}個のファイルが選択されています
+                          </span>
+                          <span className="inline-block px-3 py-1 bg-indigo-100 text-indigo-600 text-xs font-bold rounded-full">追加・変更する</span>
                         </div>
                       ) : (
                         <div className="text-center group-hover:scale-105 transition-transform duration-300">
                           <div className="w-16 h-16 bg-white rounded-2xl shadow-sm flex items-center justify-center mx-auto mb-4 text-slate-300 group-hover:text-indigo-500 group-hover:shadow-xl group-hover:shadow-indigo-100 transition-all duration-300">
                             <Upload className="w-8 h-8" />
                           </div>
-                          <span className="text-sm text-slate-600 font-bold block">画像・PDF</span>
+                          <span className="text-sm text-slate-600 font-bold block">画像・PDF（複数選択可）</span>
                           <span className="text-xs text-slate-400 mt-1 block">ドラッグ＆ドロップ</span>
                         </div>
                       )}
@@ -247,87 +297,32 @@ export default function Home() {
                   </div>
                 </div>
 
-                {/* Answer Key Upload */}
-                <div className="group">
-                  <label className="block text-sm font-bold text-slate-600 mb-4 flex items-center justify-center">
-                    <span className="w-2.5 h-2.5 rounded-full bg-violet-500 mr-2 shadow-[0_0_10px_rgba(139,92,246,0.5)]"></span>
-                    模範解答画像
-                  </label>
-                  <div className={clsx(
-                    "relative h-64 border-2 border-dashed rounded-3xl transition-all duration-300 ease-out cursor-pointer overflow-hidden",
-                    answerKeyFile
-                      ? "border-violet-500 bg-violet-50/40"
-                      : "border-slate-200 bg-slate-50/50 hover:border-violet-300 hover:bg-white hover:shadow-lg hover:shadow-violet-100/50"
-                  )}>
-                    <input
-                      type="file"
-                      accept="image/*,.pdf"
-                      onChange={(e) => handleFileChange(e, setAnswerKeyFile)}
-                      className="hidden"
-                      id="key-upload"
-                    />
-                    <label htmlFor="key-upload" className="absolute inset-0 flex flex-col items-center justify-center p-4 cursor-pointer">
-                      {answerKeyFile ? (
-                        <div className="animate-scale-in text-center w-full">
-                          <div className="w-16 h-16 bg-white rounded-2xl shadow-xl shadow-violet-100 flex items-center justify-center mx-auto mb-3 text-violet-600 transform group-hover:scale-110 transition-transform duration-300">
-                            <CheckCircle className="w-8 h-8" />
+                {/* File List */}
+                {uploadedFiles.length > 0 && (
+                  <div className="bg-white rounded-2xl p-4 border border-slate-200">
+                    <h3 className="text-sm font-bold text-slate-700 mb-3">アップロード済みファイル</h3>
+                    <div className="space-y-2">
+                      {uploadedFiles.map((file, index) => (
+                        <div key={index} className="flex items-center justify-between bg-slate-50 rounded-lg p-3 border border-slate-100">
+                          <div className="flex items-center flex-1 min-w-0">
+                            <FileText className="w-5 h-5 text-indigo-600 mr-2 flex-shrink-0" />
+                            <span className="text-sm text-slate-700 font-medium truncate">{file.name}</span>
+                            <span className="text-xs text-slate-500 ml-2 flex-shrink-0">
+                              ({(file.size / 1024).toFixed(1)} KB)
+                            </span>
                           </div>
-                          <span className="text-sm text-violet-900 font-bold block truncate w-full px-2">{answerKeyFile.name}</span>
-                          <span className="inline-block mt-2 px-3 py-1 bg-violet-100 text-violet-600 text-xs font-bold rounded-full">変更する</span>
+                          <button
+                            type="button"
+                            onClick={() => removeFile(index)}
+                            className="ml-3 text-slate-400 hover:text-red-500 transition-colors flex-shrink-0"
+                          >
+                            <Trash2 className="w-4 h-4" />
+                          </button>
                         </div>
-                      ) : (
-                        <div className="text-center group-hover:scale-105 transition-transform duration-300">
-                          <div className="w-16 h-16 bg-white rounded-2xl shadow-sm flex items-center justify-center mx-auto mb-4 text-slate-300 group-hover:text-violet-500 group-hover:shadow-xl group-hover:shadow-violet-100 transition-all duration-300">
-                            <FileText className="w-8 h-8" />
-                          </div>
-                          <span className="text-sm text-slate-600 font-bold block">画像・PDF</span>
-                          <span className="text-xs text-slate-400 mt-1 block">ドラッグ＆ドロップ</span>
-                        </div>
-                      )}
-                    </label>
+                      ))}
+                    </div>
                   </div>
-                </div>
-
-                {/* Problem Text Upload */}
-                <div className="group">
-                  <label className="block text-sm font-bold text-slate-600 mb-4 flex items-center justify-center">
-                    <span className="w-2.5 h-2.5 rounded-full bg-emerald-500 mr-2 shadow-[0_0_10px_rgba(16,185,129,0.5)]"></span>
-                    問題文画像
-                  </label>
-                  <div className={clsx(
-                    "relative h-64 border-2 border-dashed rounded-3xl transition-all duration-300 ease-out cursor-pointer overflow-hidden",
-                    problemFile
-                      ? "border-emerald-500 bg-emerald-50/40"
-                      : "border-slate-200 bg-slate-50/50 hover:border-emerald-300 hover:bg-white hover:shadow-lg hover:shadow-emerald-100/50"
-                  )}>
-                    <input
-                      type="file"
-                      accept="image/*,.pdf"
-                      onChange={(e) => handleFileChange(e, setProblemFile)}
-                      className="hidden"
-                      id="problem-upload"
-                    />
-                    <label htmlFor="problem-upload" className="absolute inset-0 flex flex-col items-center justify-center p-4 cursor-pointer">
-                      {problemFile ? (
-                        <div className="animate-scale-in text-center w-full">
-                          <div className="w-16 h-16 bg-white rounded-2xl shadow-xl shadow-emerald-100 flex items-center justify-center mx-auto mb-3 text-emerald-600 transform group-hover:scale-110 transition-transform duration-300">
-                            <CheckCircle className="w-8 h-8" />
-                          </div>
-                          <span className="text-sm text-emerald-900 font-bold block truncate w-full px-2">{problemFile.name}</span>
-                          <span className="inline-block mt-2 px-3 py-1 bg-emerald-100 text-emerald-600 text-xs font-bold rounded-full">変更する</span>
-                        </div>
-                      ) : (
-                        <div className="text-center group-hover:scale-105 transition-transform duration-300">
-                          <div className="w-16 h-16 bg-white rounded-2xl shadow-sm flex items-center justify-center mx-auto mb-4 text-slate-300 group-hover:text-emerald-500 group-hover:shadow-xl group-hover:shadow-emerald-100 transition-all duration-300">
-                            <BookOpen className="w-8 h-8" />
-                          </div>
-                          <span className="text-sm text-slate-600 font-bold block">画像・PDF</span>
-                          <span className="text-xs text-slate-400 mt-1 block">ドラッグ＆ドロップ</span>
-                        </div>
-                      )}
-                    </label>
-                  </div>
-                </div>
+                )}
               </div>
 
               {error && (
@@ -379,38 +374,44 @@ export default function Home() {
               <div className="bg-white/80 backdrop-blur-3xl shadow-[0_20px_50px_rgba(0,0,0,0.1)] rounded-[2.5rem] overflow-hidden border border-white/60 ring-1 ring-white/50">
 
                 {/* Result Header */}
-                <div className="p-8 md:p-14 border-b border-slate-100 flex justify-between items-center flex-wrap gap-4">
-                  <div className="flex items-center">
-                    <h2 className="text-3xl font-bold text-slate-800 flex items-center">
-                      <Sparkles className="mr-3 h-6 w-6 text-yellow-400 animate-pulse" />
-                      採点レポート
-                    </h2>
-                    <span className="ml-4 text-white/80 text-sm font-bold bg-white/10 backdrop-blur-md px-4 py-1.5 rounded-full border border-white/10 relative z-10 bg-slate-800">
-                      {res.label}
-                    </span>
+                <div className="p-8 md:p-14 border-b border-slate-100">
+                  {/* 問題番号を最上部に大きく表示 */}
+                  <div className="mb-6 pb-4 border-b-2 border-indigo-500">
+                    <div className="inline-block bg-indigo-600 text-white px-6 py-3 rounded-lg shadow-md">
+                      <span className="text-2xl font-bold tracking-wide">{res.label}</span>
+                    </div>
+                  </div>
+                  
+                  <div className="flex justify-between items-center flex-wrap gap-4">
+                    <div className="flex items-center">
+                      <h2 className="text-3xl font-bold text-slate-800 flex items-center">
+                        <Sparkles className="mr-3 h-6 w-6 text-yellow-400 animate-pulse" />
+                        採点レポート
+                      </h2>
+                    </div>
+                    </div>
+
+                    <button
+                      onClick={() => handlePrint(index)}
+                      className="flex items-center px-4 py-2 bg-slate-800 text-white rounded-lg hover:bg-slate-700 transition-colors shadow-lg"
+                    >
+                      <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5 mr-2" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 10v6m0 0l-3-3m3 3l3-3m2 8H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+                      </svg>
+                      PDFで出力
+                    </button>
                   </div>
 
-                  <button
-                    onClick={() => handlePrint()}
-                    className="flex items-center px-4 py-2 bg-slate-800 text-white rounded-lg hover:bg-slate-700 transition-colors shadow-lg"
-                  >
-                    <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5 mr-2" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 10v6m0 0l-3-3m3 3l3-3m2 8H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
-                    </svg>
-                    PDFで出力
-                  </button>
-                </div>
-
                 {/* Hidden Report Component for Printing */}
-                <div style={{ display: 'none' }}>
-                  <GradingReport
-                    ref={componentRef}
-                    result={res.result}
-                    targetLabel={res.label}
-                    studentFile={studentFile}
-                  />
+                <div style={{ position: 'absolute', left: '-9999px', top: '-9999px', visibility: 'hidden', width: '210mm' }}>
+                  <div ref={getComponentRef(index)}>
+                    <GradingReport
+                      result={res.result}
+                      targetLabel={res.label}
+                      studentFile={uploadedFiles[0] || null}
+                    />
+                  </div>
                 </div>
-
 
                 <div className="p-8 md:p-14">
 
@@ -421,24 +422,35 @@ export default function Home() {
                       あなたの答案
                     </h3>
 
-                    {/* Image Preview (Full Width) */}
+                    {/* Image Preview (Full Width) - 答案のみ表示 */}
                     <div className="bg-slate-100 rounded-2xl p-5 border border-slate-200 mb-8">
-                      {studentFile && (
-                        studentFile.type === 'application/pdf' ? (
-                          <iframe
-                            src={URL.createObjectURL(studentFile)}
-                            className="w-full h-[640px] rounded-xl bg-white"
-                            title="Student Answer PDF"
-                          />
-                        ) : (
-                          <img
-                            src={URL.createObjectURL(studentFile)}
-                            alt="Student Answer"
-                            className="w-full h-auto rounded-xl object-contain max-h-[720px] bg-white"
-                          />
-                        )
+                      {uploadedFiles.length > 0 ? (
+                        (() => {
+                          // 最初のファイルを答案として表示
+                          const answerFile = uploadedFiles[0];
+                          return (
+                            <div className="bg-white rounded-xl p-2">
+                              {answerFile.type === 'application/pdf' ? (
+                                <iframe
+                                  src={`${URL.createObjectURL(answerFile)}#page=1`}
+                                  className="w-full h-[640px] rounded-lg"
+                                  title="Student Answer"
+                                  style={{ pointerEvents: 'none' }}
+                                />
+                              ) : (
+                                <img
+                                  src={URL.createObjectURL(answerFile)}
+                                  alt="Student Answer"
+                                  className="w-full h-auto rounded-lg object-contain max-h-[720px] mx-auto"
+                                />
+                              )}
+                              <p className="text-center text-xs text-slate-400 mt-2">提出された答案</p>
+                            </div>
+                          );
+                        })()
+                      ) : (
+                        <p className="text-center text-slate-400 py-8">ファイルがアップロードされていません</p>
                       )}
-                      <p className="text-center text-xs text-slate-400 mt-2">提出された答案</p>
                     </div>
 
                     {/* Recognized Text Section */}

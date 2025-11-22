@@ -47,29 +47,35 @@ export const GradingReport = React.forwardRef<HTMLDivElement, GradingReportProps
         return (
             <div
                 ref={ref}
-                className="p-8 bg-white text-slate-800 font-sans max-w-[210mm] mx-auto print:max-w-none h-full"
+                className="p-8 bg-white text-slate-800 font-sans max-w-[210mm] mx-auto print:max-w-none print:p-4 h-full"
             >
-                <div className="border-b-2 border-slate-800 pb-4 mb-8 flex justify-between items-end">
-                    <div>
-                        <h1 className="text-2xl font-bold mb-2">採点レポート</h1>
-                        <p className="text-slate-500 text-sm">{targetLabel}</p>
-                    </div>
-                    <div className="text-right">
-                        <p className="text-sm text-slate-500">実施日: {today}</p>
+                {/* 問題番号を最上部に大きく表示 */}
+                <div className="mb-6 pb-4 border-b-2 border-indigo-500 print:break-after-avoid print:mb-4 print:pb-3">
+                    <div className="inline-block bg-indigo-600 text-white px-6 py-3 rounded-lg shadow-md print:bg-indigo-600 print:text-white">
+                        <span className="text-2xl font-bold tracking-wide print:text-xl">{targetLabel}</span>
                     </div>
                 </div>
 
-                <div className="flex gap-8 mb-8">
-                    <div className="w-1/3 bg-slate-50 rounded-xl p-6 border border-slate-200 text-center flex flex-col justify-center">
-                        <h2 className="text-slate-500 font-bold mb-2 text-sm uppercase tracking-widest">
+                <div className="border-b-2 border-slate-800 pb-4 mb-8 flex justify-between items-end print:break-after-avoid print:mb-4 print:pb-3">
+                    <div>
+                        <h1 className="text-2xl font-bold mb-2 print:text-xl print:mb-1">採点レポート</h1>
+                    </div>
+                    <div className="text-right">
+                        <p className="text-sm text-slate-500 print:text-xs">実施日: {today}</p>
+                    </div>
+                </div>
+
+                <div className="flex gap-8 mb-8 print:break-inside-avoid print:mb-4">
+                    <div className="w-1/3 bg-slate-50 rounded-xl p-6 border border-slate-200 text-center flex flex-col justify-center print:break-inside-avoid print:p-4">
+                        <h2 className="text-slate-500 font-bold mb-2 text-sm uppercase tracking-widest print:text-xs">
                             総合スコア (100%満点)
                         </h2>
                         <div className="flex items-baseline justify-center">
-                            <span className="text-6xl font-black text-slate-800">{score}</span>
-                            <span className="text-xl font-bold text-slate-400 ml-1">%</span>
+                            <span className="text-6xl font-black text-slate-800 print:text-5xl">{score}</span>
+                            <span className="text-xl font-bold text-slate-400 ml-1 print:text-lg">%</span>
                         </div>
                         {deductionDetails.length > 0 && (
-                            <ul className="mt-3 text-sm text-slate-600 space-y-1">
+                            <ul className="mt-3 text-sm text-slate-600 space-y-1 print:text-xs print:mt-2">
                                 {deductionDetails.map((item) => (
                                     <li key={`${item.reason}-${item.deduction_percentage}`}>
                                         ・{item.reason} で -{item.deduction_percentage}%
@@ -79,16 +85,16 @@ export const GradingReport = React.forwardRef<HTMLDivElement, GradingReportProps
                         )}
                     </div>
 
-                    <div className="w-2/3 grid grid-cols-1 gap-4">
-                        <div className="bg-green-50 rounded-xl p-4 border border-green-100">
-                            <h3 className="font-bold text-green-800 mb-1 text-sm">👍 良かった点</h3>
-                            <p className="text-sm text-slate-700">
+                    <div className="w-2/3 grid grid-cols-1 gap-4 print:break-inside-avoid print:gap-3">
+                        <div className="bg-green-50 rounded-xl p-4 border border-green-100 print:break-inside-avoid print:p-3">
+                            <h3 className="font-bold text-green-800 mb-1 text-sm print:text-xs">👍 良かった点</h3>
+                            <p className="text-sm text-slate-700 print:text-xs">
                                 {gradingResult.feedback_content.good_point}
                             </p>
                         </div>
-                        <div className="bg-indigo-50 rounded-xl p-4 border border-indigo-100">
-                            <h3 className="font-bold text-indigo-800 mb-1 text-sm">💡 改善のアドバイス</h3>
-                            <p className="text-sm text-slate-700">
+                        <div className="bg-indigo-50 rounded-xl p-4 border border-indigo-100 print:break-inside-avoid print:p-3">
+                            <h3 className="font-bold text-indigo-800 mb-1 text-sm print:text-xs">💡 改善のアドバイス</h3>
+                            <p className="text-sm text-slate-700 print:text-xs">
                                 {gradingResult.feedback_content.improvement_advice}
                             </p>
                         </div>
@@ -96,13 +102,13 @@ export const GradingReport = React.forwardRef<HTMLDivElement, GradingReportProps
                 </div>
 
                 {gradingResult.recognized_text && (
-                    <div className="mb-8">
-                        <h2 className="text-lg font-bold border-l-4 border-blue-400 pl-3 mb-4">AI読み取り結果（確認用）</h2>
-                        <div className="bg-blue-50 rounded-xl p-4 border border-blue-100">
-                            <p className="text-sm text-slate-700 whitespace-pre-wrap font-mono">
+                    <div className="mb-8 print:break-inside-avoid print:mb-4">
+                        <h2 className="text-lg font-bold border-l-4 border-blue-400 pl-3 mb-4 print:text-base print:mb-2 print:break-after-avoid">AI読み取り結果（確認用）</h2>
+                        <div className="bg-blue-50 rounded-xl p-4 border border-blue-100 print:break-inside-avoid print:p-3">
+                            <p className="text-sm text-slate-700 whitespace-pre-wrap font-mono print:text-xs">
                                 {gradingResult.recognized_text}
                             </p>
-                            <p className="text-xs text-slate-500 mt-2 text-right">
+                            <p className="text-xs text-slate-500 mt-2 text-right print:text-[10px] print:mt-1">
                                 ※文字数判定の基準となります。誤読がある場合は撮影し直してください。
                             </p>
                         </div>
@@ -110,22 +116,22 @@ export const GradingReport = React.forwardRef<HTMLDivElement, GradingReportProps
                 )}
 
                 {deductionDetails.length > 0 && (
-                    <div className="mb-8">
-                        <h2 className="text-lg font-bold border-l-4 border-red-500 pl-3 mb-4">減点ポイント</h2>
-                        <table className="w-full text-sm text-left border-collapse">
+                    <div className="mb-8 print:break-inside-avoid print:mb-4">
+                        <h2 className="text-lg font-bold border-l-4 border-red-500 pl-3 mb-4 print:text-base print:mb-2 print:break-after-avoid">減点ポイント</h2>
+                        <table className="w-full text-sm text-left border-collapse print:text-xs print:break-inside-avoid">
                             <thead className="bg-slate-100 text-slate-600">
                                 <tr>
-                                    <th className="p-3 border-b border-slate-200 font-bold">理由</th>
-                                    <th className="p-3 border-b border-slate-200 font-bold w-28 text-right">
+                                    <th className="p-3 border-b border-slate-200 font-bold print:p-2">理由</th>
+                                    <th className="p-3 border-b border-slate-200 font-bold w-28 text-right print:p-2 print:w-20">
                                         減点幅
                                     </th>
                                 </tr>
                             </thead>
                             <tbody>
                                 {deductionDetails.map((item, idx) => (
-                                    <tr key={idx} className="border-b border-slate-100">
-                                        <td className="p-3 text-slate-700">{item.reason}</td>
-                                        <td className="p-3 text-red-600 font-bold text-right">-{item.deduction_percentage}%</td>
+                                    <tr key={idx} className="border-b border-slate-100 print:break-inside-avoid">
+                                        <td className="p-3 text-slate-700 print:p-2">{item.reason}</td>
+                                        <td className="p-3 text-red-600 font-bold text-right print:p-2">-{item.deduction_percentage}%</td>
                                     </tr>
                                 ))}
                             </tbody>
@@ -133,28 +139,44 @@ export const GradingReport = React.forwardRef<HTMLDivElement, GradingReportProps
                     </div>
                 )}
 
-                <div className="mb-8">
-                    <h2 className="text-lg font-bold border-l-4 border-yellow-400 pl-3 mb-4">満点の書き直し例</h2>
-                    <div className="bg-yellow-50 rounded-xl p-6 border border-yellow-100">
-                        <p className="text-slate-800 font-medium leading-relaxed font-serif">
+                <div className="mb-8 print:break-inside-avoid print:mb-4">
+                    <h2 className="text-lg font-bold border-l-4 border-yellow-400 pl-3 mb-4 print:text-base print:mb-2 print:break-after-avoid">満点の書き直し例</h2>
+                    <div className="bg-yellow-50 rounded-xl p-6 border border-yellow-100 print:break-inside-avoid print:p-4">
+                        <p className="text-slate-800 font-medium leading-relaxed font-serif print:text-sm print:leading-relaxed">
                             {gradingResult.feedback_content.rewrite_example}
                         </p>
                     </div>
                 </div>
 
-                <div className="break-inside-avoid">
-                    <h2 className="text-lg font-bold border-l-4 border-slate-400 pl-3 mb-4">提出された答案</h2>
-                    <div className="border border-slate-200 rounded-xl overflow-hidden bg-slate-50 p-3">
+                <div className="break-inside-avoid print:break-inside-avoid">
+                    <h2 className="text-lg font-bold border-l-4 border-slate-400 pl-3 mb-4 print:break-after-avoid">提出された答案</h2>
+                    <div className="border border-slate-200 rounded-xl overflow-hidden bg-slate-50 p-3 print:break-inside-avoid">
                         {studentFile && (
                             studentFile.type === 'application/pdf' ? (
-                                <div className="w-full h-64 bg-white flex items-center justify-center text-slate-400 text-sm">
-                                    (PDFプレビューは印刷時に表示されない場合があります)
+                                <div className="w-full print:break-inside-avoid">
+                                    <iframe
+                                        src={`${URL.createObjectURL(studentFile)}#page=1&toolbar=0&navpanes=0&scrollbar=0`}
+                                        className="w-full h-[600px] print:h-[800px] rounded-lg"
+                                        title="Student Answer"
+                                        style={{ 
+                                            pointerEvents: 'none',
+                                            printColorAdjust: 'exact',
+                                            WebkitPrintColorAdjust: 'exact'
+                                        }}
+                                    />
+                                    <p className="text-xs text-slate-500 mt-2 text-center print:hidden">
+                                        ※PDFの最初のページ（答案）のみを表示しています
+                                    </p>
                                 </div>
                             ) : (
                                 <img
                                     src={URL.createObjectURL(studentFile)}
                                     alt="Student Answer"
-                                    className="w-full h-auto object-contain max-h-[520px] bg-white mx-auto"
+                                    className="w-full h-auto object-contain max-h-[520px] print:max-h-none print:max-w-full bg-white mx-auto print:break-inside-avoid"
+                                    style={{
+                                        printColorAdjust: 'exact',
+                                        WebkitPrintColorAdjust: 'exact'
+                                    }}
                                 />
                             )
                         )}

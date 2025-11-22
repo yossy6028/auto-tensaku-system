@@ -55,6 +55,22 @@ export class EduShiftGrader {
         }
     }
 
+    async gradeAnswerFromMultipleFiles(targetLabel: string, files: Array<{ buffer: Buffer; mimeType: string; name: string }>) {
+        try {
+            // すべてのファイルを画像パートに変換
+            const imageParts = files.map(file => ({
+                inlineData: {
+                    data: file.buffer.toString("base64"),
+                    mimeType: file.mimeType
+                }
+            }));
+
+            return this.executeGradingWithMultipleFiles(targetLabel, imageParts);
+        } catch (error: any) {
+            return this.handleError(error);
+        }
+    }
+
     private async executeGrading(targetLabel: string, studentImagePart: any, answerKeyImagePart: any, problemImagePart: any) {
         const prompt = `
 Target Problem Label: ${targetLabel}
@@ -68,6 +84,49 @@ Output the result strictly in JSON format.
             studentImagePart,
             answerKeyImagePart,
             problemImagePart
+        ]);
+
+        const response = await result.response;
+        const text = response.text();
+
+        // Clean up markdown code blocks if present
+        const jsonString = text.replace(/```json\n|\n```/g, "").trim();
+
+        try {
+            const parsed = JSON.parse(jsonString);
+            if (parsed?.debug_info) {
+                delete parsed.debug_info;
+            }
+            return parsed;
+        } catch (e) {
+            console.error("Failed to parse JSON response:", text);
+            return {
+                status: "error",
+                message: "System Error: Failed to parse AI response.",
+                debug_info: { raw_response: text }
+            };
+        }
+    }
+
+    private async executeGradingWithMultipleFiles(targetLabel: string, imageParts: any[]) {
+        const prompt = `
+Target Problem Label: ${targetLabel}
+
+Please analyze the attached images. These images may contain:
+- Student Answer Sheet (本人の答案)
+- Answer Key (模範解答)
+- Problem Text (問題文)
+
+The images may be in a single file or multiple files. Please identify and analyze all relevant content (Student Answer Sheet, Answer Key, and Problem Text) from the provided images and perform the grading process as defined in the System Instruction.
+
+Important: Ensure that the student's answer and the problem are clearly visible in the images. If the images are not clear or complete, please note this in your response.
+
+Output the result strictly in JSON format.
+`;
+
+        const result = await this.model.generateContent([
+            prompt,
+            ...imageParts
         ]);
 
         const response = await result.response;

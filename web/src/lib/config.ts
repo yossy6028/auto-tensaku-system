@@ -2,7 +2,8 @@
 
 export const CONFIG = {
     GEMINI_API_KEY: process.env.GEMINI_API_KEY || '',
-    // Using gemini-1.5-pro as a proxy for "Gemini 3 Pro" capabilities
-    // or gemini-2.0-flash-exp if available and preferred for speed/experimental features
-    MODEL_NAME: process.env.MODEL_NAME || 'gemini-1.5-pro',
+    // Gemini 3 Pro Image Preview - 最新の画像認識特化モデル
+    // 参照: https://ai.google.dev/gemini-api/docs/models?hl=ja#gemini-3-pro
+    // 代替: 'gemini-3-pro-preview' (テキスト重視の場合)
+    MODEL_NAME: process.env.MODEL_NAME || 'gemini-3-pro-image-preview',
 };

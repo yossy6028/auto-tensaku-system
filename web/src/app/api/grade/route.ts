@@ -7,6 +7,9 @@ import type { Database } from '@/lib/supabase/types';
 // Force dynamic to prevent caching
 export const dynamic = 'force-dynamic';
 
+// Vercel Proプラン: タイムアウトを60秒に設定
+export const maxDuration = 60;
+
 type UploadedFilePart = {
     buffer: Buffer;
     mimeType: string;
@@ -90,10 +93,8 @@ async function convertPdfToImages(
         return images;
         
     } catch (error) {
-        console.warn('[PDF Converter] ⚠️ PDF to image conversion failed. Sending PDF directly to Gemini.');
-        console.warn('[PDF Converter] Error details:', error instanceof Error ? error.message : error);
-        console.warn('[PDF Converter] Note: Gemini can still read PDFs directly, but page extraction may be less precise.');
-        // 変換に失敗した場合は元のPDFをそのまま返す（GeminiはPDFを直接読める）
+        console.error('[PDF Converter] Error converting PDF:', error);
+        // 変換に失敗した場合は元のPDFをそのまま返す
         return [{
             buffer: pdfBuffer,
             mimeType: 'application/pdf',
@@ -142,71 +143,32 @@ export async function POST(req: NextRequest) {
             );
         }
 
-        // RPCクライアントを定義（後で使用するため）
         const supabaseRpc = supabase as unknown as {
             rpc: (fn: string, args: Record<string, unknown>) => Promise<{ data: unknown; error: { message?: string } | null }>;
         };
 
-        // 管理者アカウントの場合は利用可能として扱う
-        let isAdmin = false;
-        try {
-            const { data: profile, error: profileError } = await supabase
-                .from('user_profiles')
-                .select('role')
-                .eq('id', user.id)
-                .maybeSingle();
-
-            if (profileError) {
-                console.warn('[Grade API] Profile fetch error (may be RLS issue):', profileError.message);
-                // RLSエラーの場合は続行（SECURITY DEFINER付きRPCで再確認）
-            } else {
-                isAdmin = !!(profile && (profile as { role?: string }).role === 'admin');
-            }
-        } catch (profileErr) {
-            console.warn('[Grade API] Profile fetch exception:', profileErr);
+        // 利用可否チェック
+        const { data: usageData, error: usageError } = await supabaseRpc
+            .rpc('can_use_service', { p_user_id: user.id });
+        const usageRows = usageData as CanUseServiceResult[] | null;
+        
+        if (usageError) {
+            console.error('Usage check error:', usageError);
+            return NextResponse.json(
+                { status: 'error', message: '利用状況の確認中にエラーが発生しました。' },
+                { status: 500 }
+            );
         }
 
-        // 利用可否チェック（RPC関数はSECURITY DEFINERなのでRLSをバイパス）
-        let canProceed = isAdmin;
-        
-        if (!isAdmin) {
-            try {
-                const { data: usageData, error: usageError } = await supabaseRpc
-                    .rpc('can_use_service', { p_user_id: user.id });
-                const usageRows = usageData as CanUseServiceResult[] | null;
-                
-                if (usageError) {
-                    // RLSエラーの可能性 - 一時的に続行を許可
-                    console.warn('[Grade API] Usage check error (may be RLS issue):', usageError.message);
-                    console.log('[Grade API] Allowing access temporarily due to RLS error');
-                    canProceed = true;
-                } else if (!usageRows || usageRows.length === 0) {
-                    // データが取得できない場合も一時的に続行を許可
-                    console.warn('[Grade API] No usage data returned, allowing access temporarily');
-                    canProceed = true;
-                } else if (usageRows[0].can_use) {
-                    canProceed = true;
-                } else {
-                    return NextResponse.json(
-                        { 
-                            status: 'error', 
-                            message: usageRows[0].message || '利用可能なプランがありません。プランを購入してください。',
-                            requirePlan: true
-                        },
-                        { status: 403 }
-                    );
-                }
-            } catch (usageErr) {
-                console.warn('[Grade API] Usage check exception:', usageErr);
-                // 例外発生時も一時的に続行を許可
-                canProceed = true;
-            }
-        }
-        
-        if (isAdmin) {
-            console.log('[Grade API] Admin user detected, allowing access');
-        } else if (canProceed) {
-            console.log('[Grade API] User can proceed with grading');
+        if (!usageRows || usageRows.length === 0 || !usageRows[0].can_use) {
+            return NextResponse.json(
+                { 
+                    status: 'error', 
+                    message: usageRows?.[0]?.message || '利用可能なプランがありません。プランを購入してください。',
+                    requirePlan: true
+                },
+                { status: 403 }
+            );
         }
 
         const formData = await req.formData();
@@ -324,10 +286,10 @@ export async function POST(req: NextRequest) {
             }
         }
 
-        // 採点成功時に利用回数をインクリメント（管理者は除く）
+        // 採点成功時に利用回数をインクリメント
         const successfulGradings = results.filter(r => r.result && !r.error);
         
-        if (successfulGradings.length > 0 && !isAdmin) {
+        if (successfulGradings.length > 0) {
             // 各採点成功ごとに利用回数をインクリメント
             for (const grading of successfulGradings) {
                 const { error: incrementError } = await supabaseRpc
@@ -345,13 +307,10 @@ export async function POST(req: NextRequest) {
             }
         }
 
-        // 更新後の利用情報を取得（管理者は除く）
-        let updatedUsageRows: CanUseServiceResult[] | null = null;
-        if (!isAdmin) {
-            const { data: updatedUsageData } = await supabaseRpc
-                .rpc('can_use_service', { p_user_id: user.id });
-            updatedUsageRows = updatedUsageData as CanUseServiceResult[] | null;
-        }
+        // 更新後の利用情報を取得
+        const { data: updatedUsageData } = await supabaseRpc
+            .rpc('can_use_service', { p_user_id: user.id });
+        const updatedUsageRows = updatedUsageData as CanUseServiceResult[] | null;
         
         const usageInfo = updatedUsageRows?.[0] ? {
             remainingCount: updatedUsageRows[0].remaining_count,

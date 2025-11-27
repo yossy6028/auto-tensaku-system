@@ -301,8 +301,12 @@ export class EduShiftGrader {
             });
         }
 
-        // 3. OCR列ごと読み取りの検証
-        this.validateOcrDebug(parsed);
+        // 3. OCR列ごと読み取りの検証（エラーが発生しても採点は続行）
+        try {
+            this.validateOcrDebug(parsed);
+        } catch (e) {
+            console.warn("[Grader] OCR検証中にエラー:", e);
+        }
 
         // 更新したdeduction_detailsを設定
         gradingResult.deduction_details = deductionDetails;

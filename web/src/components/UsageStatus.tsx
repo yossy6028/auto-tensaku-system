@@ -10,9 +10,10 @@ interface UsageStatusProps {
 }
 
 export function UsageStatus({ compact = false, className = '' }: UsageStatusProps) {
-  const { usageInfo, subscription, isLoading, user, profile } = useAuth();
+  const { usageInfo, subscription, isLoading, user, profile, session } = useAuth();
 
-  if (!user) {
+  // ユーザーまたはセッションがない場合は何も表示しない
+  if (!user || !session) {
     return null;
   }
 

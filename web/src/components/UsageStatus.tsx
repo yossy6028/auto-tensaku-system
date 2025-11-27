@@ -26,8 +26,13 @@ export function UsageStatus({ compact = false, className = '' }: UsageStatusProp
     );
   }
 
-  // 管理者アカウントの場合はsubscriptionがなくても表示
+  // 管理者アカウントのチェック（usageInfoが取得される前でも判定できるように）
   const isAdmin = profile?.role === 'admin' || usageInfo?.accessType === 'admin';
+  
+  // 管理者アカウントの場合は、usageInfoがなくても表示しない（後で取得されるまで待つ）
+  if (!usageInfo && isAdmin) {
+    return null;
+  }
   
   if (!usageInfo) {
     return (

@@ -284,20 +284,33 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       return;
     }
 
-    // 管理者アカウントの場合は常に無制限で利用可能
-    if (profile?.role === 'admin') {
-      console.log('[AuthProvider] Admin user detected, setting unlimited access');
-      setUsageInfo({
-        canUse: true,
-        message: '管理者アカウント: 無制限で利用可能です',
-        usageCount: null,
-        usageLimit: null,
-        remainingCount: null,
-        planName: '管理者プラン',
-        accessType: 'admin',
-      });
-      return;
+    // プロファイルを直接取得して管理者チェック（profileがまだ取得されていない場合に備える）
+    try {
+      const { data: profileData, error: profileError } = await supabaseClient
+        .from('user_profiles')
+        .select('role')
+        .eq('id', user.id)
+        .maybeSingle();
+
+      if (!profileError && profileData && (profileData as { role?: string }).role === 'admin') {
+        console.log('[AuthProvider] Admin user detected, setting unlimited access');
+        setUsageInfo({
+          canUse: true,
+          message: '管理者アカウント: 無制限で利用可能です',
+          usageCount: null,
+          usageLimit: null,
+          remainingCount: null,
+          planName: '管理者プラン',
+          accessType: 'admin',
+        });
+        return;
+      }
+    } catch (error) {
+      console.warn('[AuthProvider] Failed to check admin status:', error);
+      // エラーが発生しても続行（通常の利用可否チェックへ）
     }
+
+    // 管理者でない場合、または管理者チェックに失敗した場合は通常の利用可否チェック
 
     try {
       const rpcClient = supabaseClient as unknown as {
@@ -359,7 +372,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         accessType: 'none',
       });
     }
-  }, [supabaseClient, user, profile, fetchFreeAccessInfo]);
+  }, [supabaseClient, user, fetchFreeAccessInfo]);
 
   // 初期化
   useEffect(() => {

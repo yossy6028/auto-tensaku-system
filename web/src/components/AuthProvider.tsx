@@ -537,7 +537,22 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
   const signInWithPassword = async (email: string, password: string) => {
     if (!supabase) return { error: new Error('Supabase is not configured') };
-    const { error } = await supabase.auth.signInWithPassword({ email, password });
+    const { data, error } = await supabase.auth.signInWithPassword({ email, password });
+    
+    if (!error && data?.session) {
+      // ログイン成功後、即座にセッションとユーザー情報を設定
+      console.log('[AuthProvider] Login successful, setting session immediately');
+      setSession(data.session);
+      setUser(data.session.user);
+      
+      // プロファイルとその他の情報を取得
+      if (data.session.user) {
+        await fetchProfile(data.session.user.id).catch(() => {});
+        await fetchSubscription(data.session.user.id).catch(() => {});
+        await refreshUsageInfo().catch(() => {});
+      }
+    }
+    
     return { error };
   };
 

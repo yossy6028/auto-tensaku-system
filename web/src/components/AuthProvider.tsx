@@ -287,10 +287,19 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
   // 利用可否情報を取得
   const refreshUsageInfo = useCallback(async () => {
-    if (!supabaseClient || !user) {
+    if (!supabaseClient) {
+      console.log('[AuthProvider] refreshUsageInfo: supabaseClient is null');
       setUsageInfo(null);
       return;
     }
+    
+    if (!user) {
+      console.log('[AuthProvider] refreshUsageInfo: user is null');
+      setUsageInfo(null);
+      return;
+    }
+
+    console.log('[AuthProvider] refreshUsageInfo called for user:', user.id);
 
     // プロファイルを直接取得して管理者チェック（profileがまだ取得されていない場合に備える）
     try {
@@ -304,7 +313,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       console.log('[AuthProvider] Profile fetch result:', { 
         hasData: !!profileData, 
         role: profileData ? (profileData as { role?: string }).role : null,
-        error: profileError 
+        error: profileError?.message || null
       });
 
       if (!profileError && profileData && (profileData as { role?: string }).role === 'admin') {

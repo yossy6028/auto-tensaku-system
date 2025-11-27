@@ -1478,11 +1478,26 @@ export default function Home() {
 
         {/* Result Display */}
         {results && results.map((res, index) => {
-          const gradingResult = res.result?.grading_result;
-          if (!gradingResult) return null;
+          // grading_resultがない場合は、resultをそのままgrading_resultとして扱う（互換性対応）
+          const rawResult = res.result?.grading_result || res.result;
+          const gradingResult = rawResult as GradingResultPayload | undefined;
+          
+          // エラーの場合や結果がない場合
+          if (!gradingResult || res.error) {
+            if (res.error) {
+              return (
+                <div key={index} className="mt-8 bg-red-50 border border-red-200 rounded-2xl p-6">
+                  <h3 className="text-lg font-bold text-red-800 mb-2">{res.label} - エラー</h3>
+                  <p className="text-red-700">{res.error}</p>
+                </div>
+              );
+            }
+            console.warn(`[Page] No grading result for ${res.label}:`, res);
+            return null;
+          }
 
-          const deductionDetails: DeductionDetail[] = gradingResult?.deduction_details ?? [];
-          const normalizedScore = gradingResult ? normalizeScore(gradingResult.score) : 0;
+          const deductionDetails: DeductionDetail[] = gradingResult.deduction_details ?? [];
+          const normalizedScore = normalizeScore(gradingResult.score);
           const totalDeduction = deductionDetails.reduce((sum: number, item: DeductionDetail) => {
             return sum + (Number(item?.deduction_percentage) || 0);
           }, 0);

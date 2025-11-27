@@ -69,27 +69,41 @@ export default function AdminPage() {
   const fetchStats = async () => {
     if (!supabaseClient) return;
     
-    // ユーザー数
-    const { count: userCount } = await supabaseClient
-      .from('user_profiles')
-      .select('*', { count: 'exact', head: true });
+    try {
+      // ユーザー数
+      const { count: userCount, error: userError } = await supabaseClient
+        .from('user_profiles')
+        .select('*', { count: 'exact', head: true });
 
-    // アクティブサブスクリプション数
-    const { count: subCount } = await supabaseClient
-      .from('subscriptions')
-      .select('*', { count: 'exact', head: true })
-      .eq('status', 'active');
+      // アクティブサブスクリプション数
+      const { count: subCount, error: subError } = await supabaseClient
+        .from('subscriptions')
+        .select('*', { count: 'exact', head: true })
+        .eq('status', 'active');
 
-    // 総利用回数
-    const { count: usageCount } = await supabaseClient
-      .from('usage_logs')
-      .select('*', { count: 'exact', head: true });
+      // 総利用回数
+      const { count: usageCount, error: usageError } = await supabaseClient
+        .from('usage_logs')
+        .select('*', { count: 'exact', head: true });
 
-    setStats({
-      totalUsers: userCount || 0,
-      activeSubscriptions: subCount || 0,
-      totalUsage: usageCount || 0,
-    });
+      // エラーが発生した場合は0を設定
+      if (userError) console.warn('[Admin] Failed to fetch user count:', userError.message);
+      if (subError) console.warn('[Admin] Failed to fetch subscription count:', subError.message);
+      if (usageError) console.warn('[Admin] Failed to fetch usage count:', usageError.message);
+
+      setStats({
+        totalUsers: userCount || 0,
+        activeSubscriptions: subCount || 0,
+        totalUsage: usageCount || 0,
+      });
+    } catch (error) {
+      console.warn('[Admin] fetchStats error:', error);
+      setStats({
+        totalUsers: 0,
+        activeSubscriptions: 0,
+        totalUsage: 0,
+      });
+    }
   };
 
   // システム設定を取得

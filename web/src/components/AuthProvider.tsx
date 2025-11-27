@@ -136,14 +136,28 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const fetchProfile = useCallback(async (userId: string) => {
     if (!supabaseClient) return;
 
-    const { data } = await supabaseClient
-      .from('user_profiles')
-      .select('*')
-      .eq('id', userId)
-      .single();
+    try {
+      const { data, error } = await supabaseClient
+        .from('user_profiles')
+        .select('*')
+        .eq('id', userId)
+        .single();
 
-    if (data) {
-      setProfile(data as UserProfile);
+      if (error) {
+        // テーブルが存在しない、またはRLSポリシーでアクセスできない場合
+        console.warn('[AuthProvider] Failed to fetch user profile:', error.message);
+        setProfile(null);
+        return;
+      }
+
+      if (data) {
+        setProfile(data as UserProfile);
+      } else {
+        setProfile(null);
+      }
+    } catch (error) {
+      console.warn('[AuthProvider] fetchProfile error:', error);
+      setProfile(null);
     }
   }, [supabaseClient]);
 
@@ -151,18 +165,30 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const fetchSubscription = useCallback(async (userId: string) => {
     if (!supabaseClient) return;
 
-    const { data } = await supabaseClient
-      .from('subscriptions')
-      .select('*')
-      .eq('user_id', userId)
-      .eq('status', 'active')
-      .order('purchased_at', { ascending: false })
-      .limit(1)
-      .single();
+    try {
+      const { data, error } = await supabaseClient
+        .from('subscriptions')
+        .select('*')
+        .eq('user_id', userId)
+        .eq('status', 'active')
+        .order('purchased_at', { ascending: false })
+        .limit(1)
+        .maybeSingle();
 
-    if (data) {
-      setSubscription(data as Subscription);
-    } else {
+      if (error) {
+        // テーブルが存在しない、またはRLSポリシーでアクセスできない場合
+        console.warn('[AuthProvider] Failed to fetch subscription:', error.message);
+        setSubscription(null);
+        return;
+      }
+
+      if (data) {
+        setSubscription(data as Subscription);
+      } else {
+        setSubscription(null);
+      }
+    } catch (error) {
+      console.warn('[AuthProvider] fetchSubscription error:', error);
       setSubscription(null);
     }
   }, [supabaseClient]);
@@ -264,9 +290,10 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
         if (session?.user) {
           console.log('[AuthProvider] Fetching user specific data...');
-          await fetchProfile(session.user.id).catch((e) => console.error('[AuthProvider] fetchProfile error', e));
-          await fetchSubscription(session.user.id).catch((e) => console.error('[AuthProvider] fetchSubscription error', e));
-          await fetchFreeAccessInfo(session.user.id).catch((e) => console.error('[AuthProvider] fetchFreeAccessInfo error', e));
+          // エラーは各関数内で処理されるため、ここでは静かに失敗させる
+          await fetchProfile(session.user.id).catch(() => {});
+          await fetchSubscription(session.user.id).catch(() => {});
+          await fetchFreeAccessInfo(session.user.id).catch(() => {});
         }
       } catch (error) {
         console.error('[AuthProvider] Auth initialization error:', error);
@@ -286,9 +313,10 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         setUser(session?.user ?? null);
 
         if (session?.user) {
-          await fetchProfile(session.user.id);
-          await fetchSubscription(session.user.id);
-          await fetchFreeAccessInfo(session.user.id);
+          // エラーは各関数内で処理されるため、ここでは静かに失敗させる
+          await fetchProfile(session.user.id).catch(() => {});
+          await fetchSubscription(session.user.id).catch(() => {});
+          await fetchFreeAccessInfo(session.user.id).catch(() => {});
         } else {
           setProfile(null);
           setSubscription(null);

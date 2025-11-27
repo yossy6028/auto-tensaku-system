@@ -847,7 +847,7 @@ export default function Home() {
           </div>
 
           <div className="flex items-center gap-4">
-            {user && usageInfo && (
+            {user && session && usageInfo && (
               <UsageStatus compact className="hidden md:flex" />
             )}
             <Link

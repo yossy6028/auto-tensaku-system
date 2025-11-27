@@ -79,11 +79,25 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const fetchSystemSettings = useCallback(async () => {
     if (!supabaseClient) return;
 
-    const { data } = await supabaseClient
-      .from('system_settings')
-      .select('key, value');
+    try {
+      const { data, error } = await supabaseClient
+        .from('system_settings')
+        .select('key, value');
 
-    if (data) {
+      if (error) {
+        console.warn('[AuthProvider] Failed to fetch system settings:', error.message);
+        // デフォルト値を設定
+        setSystemSettings({
+          freeTrialDays: 7,
+          freeTrialUsageLimit: 3,
+          freeAccessEnabled: false,
+          freeAccessUntil: null,
+          freeAccessMessage: '',
+        });
+        return;
+      }
+
+      if (data) {
       const settings: SystemSettings = {
         freeTrialDays: 7,
         freeTrialUsageLimit: 3,
@@ -114,6 +128,17 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       });
 
       setSystemSettings(settings);
+      }
+    } catch (error) {
+      console.warn('[AuthProvider] fetchSystemSettings error:', error);
+      // デフォルト値を設定
+      setSystemSettings({
+        freeTrialDays: 7,
+        freeTrialUsageLimit: 3,
+        freeAccessEnabled: false,
+        freeAccessUntil: null,
+        freeAccessMessage: '',
+      });
     }
   }, [supabaseClient]);
 
@@ -121,14 +146,27 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const fetchPlans = useCallback(async () => {
     if (!supabaseClient) return;
 
-    const { data } = await supabaseClient
-      .from('pricing_plans')
-      .select('*')
-      .eq('is_active', true)
-      .order('sort_order');
+    try {
+      const { data, error } = await supabaseClient
+        .from('pricing_plans')
+        .select('*')
+        .eq('is_active', true)
+        .order('sort_order');
 
-    if (data) {
-      setPlans(data as PricingPlan[]);
+      if (error) {
+        console.warn('[AuthProvider] Failed to fetch plans:', error.message);
+        setPlans([]);
+        return;
+      }
+
+      if (data) {
+        setPlans(data as PricingPlan[]);
+      } else {
+        setPlans([]);
+      }
+    } catch (error) {
+      console.warn('[AuthProvider] fetchPlans error:', error);
+      setPlans([]);
     }
   }, [supabaseClient]);
 
@@ -197,27 +235,40 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const fetchFreeAccessInfo = useCallback(async (userId: string) => {
     if (!supabaseClient) return;
 
-    const rpcClient = supabaseClient as unknown as {
-      rpc: (fn: string, args: Record<string, unknown>) => Promise<{ data: unknown }>;
-    };
-    const { data } = await rpcClient.rpc('check_free_access', { p_user_id: userId });
-
-    if (data && Array.isArray(data) && data.length > 0) {
-      const info = data[0];
-      const freeInfo: FreeAccessInfo = {
-        hasFreeAccess: info.has_free_access,
-        freeAccessType: info.free_access_type,
-        message: info.message,
-        trialDaysRemaining: info.trial_days_remaining,
-        trialUsageRemaining: info.trial_usage_remaining,
-        promoEndDate: info.promo_end_date,
+    try {
+      const rpcClient = supabaseClient as unknown as {
+        rpc: (fn: string, args: Record<string, unknown>) => Promise<{ data: unknown; error: unknown }>;
       };
-      setFreeAccessInfo(freeInfo);
+      const { data, error } = await rpcClient.rpc('check_free_access', { p_user_id: userId });
 
-      // 無料体験終了時にモーダル表示
-      if (info.free_access_type === 'expired') {
-        setShowTrialEndedModal(true);
+      if (error) {
+        console.warn('[AuthProvider] Failed to fetch free access info:', error);
+        setFreeAccessInfo(null);
+        return;
       }
+
+      if (data && Array.isArray(data) && data.length > 0) {
+        const info = data[0];
+        const freeInfo: FreeAccessInfo = {
+          hasFreeAccess: info.has_free_access,
+          freeAccessType: info.free_access_type,
+          message: info.message,
+          trialDaysRemaining: info.trial_days_remaining,
+          trialUsageRemaining: info.trial_usage_remaining,
+          promoEndDate: info.promo_end_date,
+        };
+        setFreeAccessInfo(freeInfo);
+
+        // 無料体験終了時にモーダル表示
+        if (info.free_access_type === 'expired') {
+          setShowTrialEndedModal(true);
+        }
+      } else {
+        setFreeAccessInfo(null);
+      }
+    } catch (error) {
+      console.warn('[AuthProvider] fetchFreeAccessInfo error:', error);
+      setFreeAccessInfo(null);
     }
   }, [supabaseClient]);
 
@@ -228,32 +279,59 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       return;
     }
 
-    const rpcClient = supabaseClient as unknown as {
-      rpc: (fn: string, args: Record<string, unknown>) => Promise<{ data: unknown }>;
-    };
+    try {
+      const rpcClient = supabaseClient as unknown as {
+        rpc: (fn: string, args: Record<string, unknown>) => Promise<{ data: unknown; error: unknown }>;
+      };
 
-    const { data } = await rpcClient.rpc('can_use_service', { p_user_id: user.id });
+      const { data, error } = await rpcClient.rpc('can_use_service', { p_user_id: user.id });
 
-    if (data && Array.isArray(data) && data.length > 0) {
-      const info = data[0];
-      setUsageInfo({
-        canUse: info.can_use,
-        message: info.message,
-        usageCount: info.usage_count,
-        usageLimit: info.usage_limit,
-        remainingCount: info.remaining_count,
-        planName: info.plan_name,
-        accessType: info.access_type || 'none',
-      });
-
-      // 無料体験終了チェック
-      if (!info.can_use && info.access_type === 'none') {
-        await fetchFreeAccessInfo(user.id);
+      if (error) {
+        console.warn('[AuthProvider] Failed to fetch usage info:', error);
+        setUsageInfo({
+          canUse: true, // エラー時は利用可能として扱う
+          message: '利用制限の確認に失敗しました。',
+          usageCount: null,
+          usageLimit: null,
+          remainingCount: null,
+          planName: null,
+          accessType: 'none',
+        });
+        return;
       }
-    } else {
+
+      if (data && Array.isArray(data) && data.length > 0) {
+        const info = data[0];
+        setUsageInfo({
+          canUse: info.can_use,
+          message: info.message,
+          usageCount: info.usage_count,
+          usageLimit: info.usage_limit,
+          remainingCount: info.remaining_count,
+          planName: info.plan_name,
+          accessType: info.access_type || 'none',
+        });
+
+        // 無料体験終了チェック
+        if (!info.can_use && info.access_type === 'none') {
+          await fetchFreeAccessInfo(user.id).catch(() => {});
+        }
+      } else {
+        setUsageInfo({
+          canUse: true, // データがない場合は利用可能として扱う
+          message: '利用可能です。',
+          usageCount: null,
+          usageLimit: null,
+          remainingCount: null,
+          planName: null,
+          accessType: 'none',
+        });
+      }
+    } catch (error) {
+      console.warn('[AuthProvider] refreshUsageInfo error:', error);
       setUsageInfo({
-        canUse: false,
-        message: '利用可能なプランがありません。プランを購入してください。',
+        canUse: true, // エラー時は利用可能として扱う
+        message: '利用制限の確認に失敗しました。',
         usageCount: null,
         usageLimit: null,
         remainingCount: null,
@@ -265,45 +343,76 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
   // 初期化
   useEffect(() => {
+    let isMounted = true;
     const initAuth = async () => {
       if (!supabase) {
-        setIsLoading(false);
+        if (isMounted) setIsLoading(false);
         return;
       }
 
       setIsLoading(true);
 
+      // 全体のタイムアウトを設定（10秒後には必ずローディングを解除）
+      const globalTimeout = setTimeout(() => {
+        if (isMounted) {
+          console.warn('[AuthProvider] Initialization timeout, forcing loading to false');
+          setIsLoading(false);
+        }
+      }, 10000);
+
       try {
         // これらは失敗しても続行（テーブルが存在しない場合など）
+        // タイムアウトを設定して、長時間待機しないようにする
         console.log('[AuthProvider] Fetching system settings...');
-        await fetchSystemSettings().catch((e) => console.log('[AuthProvider] system_settings error', e));
+        await Promise.race([
+          fetchSystemSettings().catch(() => {}),
+          new Promise(resolve => setTimeout(resolve, 3000))
+        ]);
 
         console.log('[AuthProvider] Fetching plans...');
-        await fetchPlans().catch((e) => console.log('[AuthProvider] pricing_plans error', e));
+        await Promise.race([
+          fetchPlans().catch(() => {}),
+          new Promise(resolve => setTimeout(resolve, 3000))
+        ]);
 
         console.log('[AuthProvider] Getting session...');
         const { data: { session } } = await supabase.auth.getSession();
         console.log('[AuthProvider] Session retrieved:', session ? 'Found' : 'Null');
 
-        setSession(session);
-        setUser(session?.user ?? null);
+        if (isMounted) {
+          setSession(session);
+          setUser(session?.user ?? null);
+        }
 
-        if (session?.user) {
+        if (session?.user && isMounted) {
           console.log('[AuthProvider] Fetching user specific data...');
           // エラーは各関数内で処理されるため、ここでは静かに失敗させる
-          await fetchProfile(session.user.id).catch(() => {});
-          await fetchSubscription(session.user.id).catch(() => {});
-          await fetchFreeAccessInfo(session.user.id).catch(() => {});
+          // ユーザー固有のデータ取得は並列で実行し、タイムアウトを設定
+          await Promise.race([
+            Promise.all([
+              fetchProfile(session.user.id).catch(() => {}),
+              fetchSubscription(session.user.id).catch(() => {}),
+              fetchFreeAccessInfo(session.user.id).catch(() => {})
+            ]),
+            new Promise(resolve => setTimeout(resolve, 5000))
+          ]);
         }
       } catch (error) {
         console.error('[AuthProvider] Auth initialization error:', error);
       } finally {
-        console.log('[AuthProvider] initAuth finished, setting isLoading to false');
-        setIsLoading(false);
+        clearTimeout(globalTimeout);
+        if (isMounted) {
+          console.log('[AuthProvider] initAuth finished, setting isLoading to false');
+          setIsLoading(false);
+        }
       }
     };
 
     initAuth();
+
+    return () => {
+      isMounted = false;
+    };
 
     if (!supabase) return;
 

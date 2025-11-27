@@ -451,9 +451,8 @@ Output the result strictly in JSON format.
             }
         }
 
-        // OCRステップをスキップして直接採点（タイムアウト対策）
-        // 本番環境でタイムアウトが解消されたら、OCRを再有効化可能
-        const SKIP_OCR_STEP = true;
+        // OCRステップを有効化（Fluid Compute有効化でタイムアウト解消済み）
+        const SKIP_OCR_STEP = false;
         let recognizedText = "";
         
         if (!SKIP_OCR_STEP && categorizedFiles) {

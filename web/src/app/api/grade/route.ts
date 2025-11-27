@@ -69,8 +69,8 @@ export async function POST(req: NextRequest) {
     const startTime = Date.now();
     const log = (msg: string) => console.log(`[Grade API] [${Date.now() - startTime}ms] ${msg}`);
     
-    // デバッグモード: Supabaseチェックをスキップしてテスト
-    const DEBUG_SKIP_SUPABASE = true;
+    // 本番モード: Supabaseチェックを有効化
+    const DEBUG_SKIP_SUPABASE = false;
     // デバッグモード: Gemini APIの最小テスト (false=実際の採点を実行)
     const DEBUG_MINIMAL_TEST = false;
     

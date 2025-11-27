@@ -646,6 +646,22 @@ export default function Home() {
       return;
     }
 
+    // ファイルサイズチェック（Vercelの制限: 4.5MB、Base64変換で1.33倍になるため実質3MB）
+    const MAX_TOTAL_SIZE = 3 * 1024 * 1024; // 3MB
+    const MAX_SINGLE_FILE_SIZE = 2 * 1024 * 1024; // 2MB
+    const totalSize = uploadedFiles.reduce((sum, file) => sum + file.size, 0);
+    
+    const oversizedFile = uploadedFiles.find(file => file.size > MAX_SINGLE_FILE_SIZE);
+    if (oversizedFile) {
+      setError(`ファイル「${oversizedFile.name}」が大きすぎます（${(oversizedFile.size / 1024 / 1024).toFixed(1)}MB）。2MB以下のファイルをアップロードしてください。画像を圧縮するか、解像度を下げてください。`);
+      return;
+    }
+    
+    if (totalSize > MAX_TOTAL_SIZE) {
+      setError(`ファイルの合計サイズが大きすぎます（${(totalSize / 1024 / 1024).toFixed(1)}MB）。合計3MB以下になるようにしてください。`);
+      return;
+    }
+
     // If no problems are explicitly added to the list, use the currently selected one
     let targetLabels = selectedProblems;
     if (targetLabels.length === 0) {

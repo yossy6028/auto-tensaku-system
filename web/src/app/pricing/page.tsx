@@ -23,6 +23,10 @@ const plans = [
     popular: false,
     gradient: 'from-emerald-400 to-teal-500',
     shadow: 'shadow-emerald-500/20',
+    bg: 'bg-emerald-50',
+    border: 'border-emerald-200',
+    text: 'text-emerald-600',
+    badge: 'bg-emerald-100 text-emerald-700',
   },
   {
     name: 'スタンダード',
@@ -43,6 +47,10 @@ const plans = [
     popular: true,
     gradient: 'from-indigo-500 via-purple-500 to-violet-500',
     shadow: 'shadow-indigo-500/30',
+    bg: 'bg-indigo-50',
+    border: 'border-indigo-300',
+    text: 'text-indigo-600',
+    badge: 'bg-indigo-100 text-indigo-700',
   },
   {
     name: '無制限',
@@ -63,28 +71,29 @@ const plans = [
     popular: false,
     gradient: 'from-amber-400 to-orange-500',
     shadow: 'shadow-amber-500/20',
+    bg: 'bg-amber-50',
+    border: 'border-amber-200',
+    text: 'text-amber-600',
+    badge: 'bg-amber-100 text-amber-700',
   },
 ];
 
 export default function PricingPage() {
   return (
-    <main className="min-h-screen bg-slate-950 relative overflow-hidden selection:bg-indigo-500/30 selection:text-indigo-200 font-sans text-slate-100">
-      {/* Dynamic Background */}
-      <div className="absolute inset-0 w-full h-full overflow-hidden -z-10">
-        <div className="absolute top-0 left-0 w-full h-full bg-[radial-gradient(ellipse_at_top,_var(--tw-gradient-stops))] from-slate-900 via-slate-950 to-black"></div>
-        <div className="absolute top-[-20%] left-[-10%] w-[50%] h-[50%] rounded-full bg-indigo-500/10 blur-[120px] animate-pulse-slow"></div>
-        <div className="absolute bottom-[-20%] right-[-10%] w-[50%] h-[50%] rounded-full bg-violet-500/10 blur-[120px] animate-pulse-slow delay-1000"></div>
-        <div className="absolute top-[40%] left-[20%] w-[30%] h-[30%] rounded-full bg-blue-500/5 blur-[100px] animate-pulse-slow delay-2000"></div>
-
-        {/* Grid Pattern */}
-        <div className="absolute inset-0 bg-[url('/grid.svg')] bg-center [mask-image:linear-gradient(180deg,white,rgba(255,255,255,0))] opacity-10"></div>
+    <main className="min-h-screen bg-slate-50 relative overflow-hidden selection:bg-indigo-100 selection:text-indigo-900 font-sans text-slate-900">
+      {/* Background Decoration (Same as Top Page) */}
+      <div className="absolute top-0 left-0 w-full h-full overflow-hidden -z-10 pointer-events-none">
+        <div className="absolute inset-0 bg-[radial-gradient(#6366f1_1px,transparent_1px)] [background-size:24px_24px] opacity-[0.03]"></div>
+        <div className="absolute top-[-10%] left-[-10%] w-[40%] h-[40%] rounded-full bg-indigo-400/20 blur-[100px] animate-pulse-slow"></div>
+        <div className="absolute top-[20%] right-[-5%] w-[30%] h-[30%] rounded-full bg-violet-400/20 blur-[100px] animate-pulse-slow delay-1000"></div>
+        <div className="absolute bottom-[-10%] left-[20%] w-[35%] h-[35%] rounded-full bg-blue-400/20 blur-[100px] animate-pulse-slow delay-2000"></div>
       </div>
 
       <div className="max-w-7xl mx-auto py-12 px-4 sm:px-6 lg:px-8 relative z-10">
         {/* Back Link */}
         <Link
           href="/"
-          className="inline-flex items-center text-slate-400 hover:text-white font-medium mb-12 transition-all group hover:bg-white/5 px-4 py-2 rounded-full backdrop-blur-sm border border-transparent hover:border-white/10"
+          className="inline-flex items-center text-indigo-600 hover:text-indigo-800 font-medium mb-12 transition-all group hover:bg-indigo-50 px-4 py-2 rounded-full"
         >
           <ArrowLeft className="w-5 h-5 mr-2 group-hover:-translate-x-1 transition-transform" />
           トップページに戻る
@@ -95,29 +104,29 @@ export default function PricingPage() {
           {/* 期間限定バナー */}
           <div className="mb-8 inline-block animate-bounce-slow">
             <div className="relative group cursor-default">
-              <div className="absolute -inset-1 bg-gradient-to-r from-red-600 via-pink-600 to-purple-600 rounded-full blur opacity-75 group-hover:opacity-100 transition duration-1000 group-hover:duration-200 animate-tilt"></div>
-              <div className="relative px-8 py-3 bg-black rounded-full leading-none flex items-center">
-                <span className="text-transparent bg-clip-text bg-gradient-to-r from-red-400 via-pink-400 to-purple-400 font-bold text-lg">
+              <div className="absolute -inset-1 bg-gradient-to-r from-red-500 via-pink-500 to-purple-500 rounded-full blur opacity-75 group-hover:opacity-100 transition duration-1000 group-hover:duration-200 animate-tilt"></div>
+              <div className="relative px-8 py-3 bg-white rounded-full leading-none flex items-center shadow-lg">
+                <span className="text-transparent bg-clip-text bg-gradient-to-r from-red-500 via-pink-500 to-purple-500 font-bold text-lg">
                   🎊 期間限定キャンペーン実施中！ 🎊
                 </span>
               </div>
             </div>
           </div>
 
-          <h1 className="text-5xl md:text-7xl font-black text-white tracking-tight mb-6 drop-shadow-2xl">
+          <h1 className="text-5xl md:text-7xl font-black text-slate-800 tracking-tight mb-6 drop-shadow-sm">
             料金プラン
           </h1>
-          <p className="text-xl text-slate-400 max-w-2xl mx-auto leading-relaxed">
+          <p className="text-xl text-slate-600 max-w-2xl mx-auto leading-relaxed">
             あなたの学習スタイルに合わせて、<br className="hidden sm:block" />
             最適なプランをお選びください
           </p>
 
           {/* 特価強調 */}
           <div className="mt-8 inline-block relative group">
-            <div className="absolute inset-0 bg-gradient-to-r from-yellow-400/20 to-orange-500/20 blur-xl rounded-2xl transform group-hover:scale-110 transition-transform duration-500"></div>
-            <div className="relative bg-white/5 backdrop-blur-xl border border-yellow-500/30 rounded-2xl px-8 py-4 shadow-2xl">
-              <p className="text-yellow-200 font-bold text-lg">
-                ✨ 今だけ全プラン <span className="text-transparent bg-clip-text bg-gradient-to-r from-yellow-300 to-orange-300 text-2xl font-black">最大34%OFF</span> でご提供中！ ✨
+            <div className="absolute inset-0 bg-gradient-to-r from-yellow-400/40 to-orange-500/40 blur-xl rounded-2xl transform group-hover:scale-110 transition-transform duration-500"></div>
+            <div className="relative bg-white/80 backdrop-blur-xl border border-yellow-400 rounded-2xl px-8 py-4 shadow-xl">
+              <p className="text-yellow-800 font-bold text-lg">
+                ✨ 今だけ全プラン <span className="text-transparent bg-clip-text bg-gradient-to-r from-red-500 to-orange-600 text-2xl font-black">最大34%OFF</span> でご提供中！ ✨
               </p>
             </div>
           </div>
@@ -125,16 +134,16 @@ export default function PricingPage() {
 
         {/* Reset Notice */}
         <div className="max-w-3xl mx-auto mb-16">
-          <div className="bg-blue-900/20 backdrop-blur-md border border-blue-500/30 rounded-2xl p-6 flex items-start shadow-lg shadow-blue-900/10">
-            <div className="bg-blue-500/20 rounded-full p-3 mr-5 flex-shrink-0">
-              <RefreshCw className="w-6 h-6 text-blue-400" />
+          <div className="bg-blue-50/80 backdrop-blur-md border border-blue-200 rounded-2xl p-6 flex items-start shadow-lg shadow-blue-100">
+            <div className="bg-blue-100 rounded-full p-3 mr-5 flex-shrink-0">
+              <RefreshCw className="w-6 h-6 text-blue-600" />
             </div>
             <div>
-              <h3 className="font-bold text-blue-200 mb-2 text-lg">回数リセットについて</h3>
-              <p className="text-blue-100/80 leading-relaxed">
-                ライト・スタンダードプランの採点回数は、<strong className="text-white border-b border-blue-400/50">ご契約日から30日ごとに自動的にリセット</strong>されます。
+              <h3 className="font-bold text-blue-800 mb-2 text-lg">回数リセットについて</h3>
+              <p className="text-blue-700 leading-relaxed">
+                ライト・スタンダードプランの採点回数は、<strong className="text-blue-900 border-b border-blue-300">ご契約日から30日ごとに自動的にリセット</strong>されます。
                 未使用分の翌月繰り越しはありませんので、ご了承ください。
-                <span className="block mt-2 text-sm opacity-70">※ 無制限プランは回数制限がないため、リセットの対象外です。</span>
+                <span className="block mt-2 text-sm opacity-80">※ 無制限プランは回数制限がないため、リセットの対象外です。</span>
               </p>
             </div>
           </div>
@@ -149,17 +158,17 @@ export default function PricingPage() {
               <div
                 key={plan.name}
                 className={`relative group flex flex-col h-full rounded-[2.5rem] transition-all duration-500 ${plan.popular
-                    ? 'bg-slate-900/80 border-2 border-indigo-500/50 shadow-2xl shadow-indigo-500/20 scale-105 z-10'
-                    : 'bg-slate-900/40 border border-white/10 hover:bg-slate-800/60 hover:border-white/20 hover:shadow-xl hover:-translate-y-2'
+                    ? 'bg-white border-2 border-indigo-400 shadow-2xl shadow-indigo-200 scale-105 z-10'
+                    : 'bg-white/80 border border-slate-200 hover:bg-white hover:border-indigo-200 hover:shadow-xl hover:-translate-y-2'
                   } backdrop-blur-xl overflow-hidden`}
               >
                 {/* Popular Badge */}
                 {plan.popular && (
-                  <div className="absolute top-0 inset-x-0 h-1 bg-gradient-to-r from-indigo-500 via-purple-500 to-violet-500"></div>
+                  <div className="absolute top-0 inset-x-0 h-1.5 bg-gradient-to-r from-indigo-500 via-purple-500 to-violet-500"></div>
                 )}
                 {plan.popular && (
                   <div className="absolute top-5 right-5">
-                    <div className="bg-gradient-to-r from-indigo-600 to-violet-600 text-white text-xs font-bold px-4 py-1.5 rounded-full shadow-lg shadow-indigo-500/30 flex items-center">
+                    <div className="bg-gradient-to-r from-indigo-600 to-violet-600 text-white text-xs font-bold px-4 py-1.5 rounded-full shadow-lg shadow-indigo-200 flex items-center">
                       <Crown className="w-3 h-3 mr-1" />
                       人気No.1
                     </div>
@@ -170,13 +179,13 @@ export default function PricingPage() {
                   {/* Icon & Name */}
                   <div className="flex items-center mb-6">
                     <div className={`w-14 h-14 rounded-2xl bg-gradient-to-br ${plan.gradient} p-0.5 shadow-lg`}>
-                      <div className="w-full h-full bg-slate-900 rounded-[14px] flex items-center justify-center">
-                        <Icon className={`w-7 h-7 text-white`} />
+                      <div className="w-full h-full bg-white rounded-[14px] flex items-center justify-center">
+                        <Icon className={`w-7 h-7 ${plan.text}`} />
                       </div>
                     </div>
                     <div className="ml-4">
-                      <h2 className="text-2xl font-bold text-white">{plan.name}</h2>
-                      <p className="text-sm text-slate-400">{plan.description}</p>
+                      <h2 className="text-2xl font-bold text-slate-800">{plan.name}</h2>
+                      <p className="text-sm text-slate-500">{plan.description}</p>
                     </div>
                   </div>
 
@@ -184,41 +193,41 @@ export default function PricingPage() {
                   <div className="mb-8">
                     {/* 期間限定特価バッジ */}
                     <div className="mb-3">
-                      <span className="inline-block bg-red-500/20 text-red-300 border border-red-500/30 text-xs font-bold px-3 py-1 rounded-full animate-pulse">
+                      <span className="inline-block bg-red-100 text-red-600 border border-red-200 text-xs font-bold px-3 py-1 rounded-full animate-pulse">
                         🎉 期間限定特価
                       </span>
                     </div>
 
                     {/* 本来価格 */}
                     <div className="mb-1">
-                      <span className="text-slate-500 text-lg relative">
+                      <span className="text-slate-400 text-lg relative">
                         ¥{plan.originalPrice.toLocaleString()}
-                        <div className="absolute inset-x-0 top-1/2 h-px bg-slate-500 rotate-[-10deg]"></div>
+                        <div className="absolute inset-x-0 top-1/2 h-px bg-slate-400 rotate-[-10deg]"></div>
                       </span>
                     </div>
 
                     {/* 特価 */}
                     <div className="flex items-baseline">
-                      <span className="text-2xl text-white font-bold mr-1">¥</span>
+                      <span className="text-2xl text-slate-700 font-bold mr-1">¥</span>
                       <span className={`text-6xl font-black text-transparent bg-clip-text bg-gradient-to-br ${plan.gradient}`}>
                         {plan.price.toLocaleString()}
                       </span>
-                      <span className="text-slate-400 ml-2">/{plan.period}</span>
+                      <span className="text-slate-500 ml-2">/{plan.period}</span>
                     </div>
                     <p className="text-sm text-slate-500 mt-1">（税込）</p>
 
                     {/* 割引率 */}
                     <div className="mt-4">
-                      <span className="inline-block bg-white/5 text-white text-sm font-bold px-4 py-1.5 rounded-full border border-white/10">
+                      <span className="inline-block bg-slate-100 text-slate-600 text-sm font-bold px-4 py-1.5 rounded-full border border-slate-200">
                         {Math.round((1 - plan.price / plan.originalPrice) * 100)}%OFF
                       </span>
                     </div>
                   </div>
 
                   {/* Limit Badge */}
-                  <div className={`bg-white/5 rounded-xl px-5 py-3 text-sm font-bold inline-flex items-center mb-8 border border-white/5 w-full justify-center`}>
-                    <span className="text-slate-400 mr-2">採点回数:</span>
-                    <span className="text-white text-lg">{plan.limit}</span>
+                  <div className={`${plan.badge} rounded-xl px-5 py-3 text-sm font-bold inline-flex items-center mb-8 w-full justify-center`}>
+                    <span className="mr-2 opacity-80">採点回数:</span>
+                    <span className="text-lg">{plan.limit}</span>
                   </div>
 
                   {/* Features */}
@@ -226,11 +235,11 @@ export default function PricingPage() {
                     {plan.features.map((feature, index) => (
                       <li key={index} className="flex items-start group/item">
                         <div className={`w-6 h-6 rounded-full bg-gradient-to-br ${plan.gradient} p-[1px] mr-3 flex-shrink-0 mt-0.5 opacity-80 group-hover/item:opacity-100 transition-opacity`}>
-                          <div className="w-full h-full bg-slate-900 rounded-full flex items-center justify-center">
-                            <Check className="w-3.5 h-3.5 text-white" />
+                          <div className="w-full h-full bg-white rounded-full flex items-center justify-center">
+                            <Check className={`w-3.5 h-3.5 ${plan.text}`} />
                           </div>
                         </div>
-                        <span className="text-slate-300 group-hover/item:text-white transition-colors">{feature}</span>
+                        <span className="text-slate-600 group-hover/item:text-slate-900 transition-colors">{feature}</span>
                       </li>
                     ))}
                   </ul>
@@ -251,8 +260,8 @@ export default function PricingPage() {
 
         {/* FAQ Section */}
         <div className="max-w-4xl mx-auto">
-          <h2 className="text-3xl font-bold text-white text-center mb-12 flex items-center justify-center">
-            <HelpCircle className="w-8 h-8 mr-3 text-indigo-400" />
+          <h2 className="text-3xl font-bold text-slate-800 text-center mb-12 flex items-center justify-center">
+            <HelpCircle className="w-8 h-8 mr-3 text-indigo-500" />
             よくあるご質問
           </h2>
 
@@ -275,12 +284,12 @@ export default function PricingPage() {
                 a: "初回ご登録の方には、3回分の無料採点をプレゼントしております。まずはお試しいただき、サービスの品質をご確認ください。"
               }
             ].map((item, i) => (
-              <div key={i} className="bg-white/5 backdrop-blur-sm rounded-2xl p-8 border border-white/10 hover:bg-white/10 transition-colors">
-                <h3 className="font-bold text-white text-lg mb-3 flex items-start">
-                  <span className="text-indigo-400 mr-3 text-xl">Q.</span>
+              <div key={i} className="bg-white/60 backdrop-blur-sm rounded-2xl p-8 border border-slate-200 hover:bg-white hover:shadow-md transition-all">
+                <h3 className="font-bold text-slate-800 text-lg mb-3 flex items-start">
+                  <span className="text-indigo-500 mr-3 text-xl">Q.</span>
                   {item.q}
                 </h3>
-                <p className="text-slate-400 leading-relaxed pl-8">
+                <p className="text-slate-600 leading-relaxed pl-8">
                   {item.a}
                 </p>
               </div>
@@ -295,7 +304,7 @@ export default function PricingPage() {
           </p>
           <a
             href="mailto:katsu.yoshii@gmail.com"
-            className="inline-flex items-center text-indigo-400 hover:text-indigo-300 font-medium transition-colors px-6 py-3 rounded-full bg-white/5 hover:bg-white/10 border border-white/5"
+            className="inline-flex items-center text-indigo-600 hover:text-indigo-800 font-medium transition-colors px-6 py-3 rounded-full bg-white border border-slate-200 hover:bg-slate-50 shadow-sm"
           >
             katsu.yoshii@gmail.com
           </a>

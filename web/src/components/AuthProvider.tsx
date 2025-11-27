@@ -352,57 +352,70 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
       setIsLoading(true);
 
-      // 全体のタイムアウトを設定（10秒後には必ずローディングを解除）
+      // 全体のタイムアウトを設定（5秒後には必ずローディングを解除）
       const globalTimeout = setTimeout(() => {
         if (isMounted) {
-          console.warn('[AuthProvider] Initialization timeout, forcing loading to false');
+          console.warn('[AuthProvider] Initialization timeout (5s), forcing loading to false');
           setIsLoading(false);
         }
-      }, 10000);
+      }, 5000);
 
       try {
-        // これらは失敗しても続行（テーブルが存在しない場合など）
-        // タイムアウトを設定して、長時間待機しないようにする
-        console.log('[AuthProvider] Fetching system settings...');
-        await Promise.race([
-          fetchSystemSettings().catch(() => {}),
-          new Promise(resolve => setTimeout(resolve, 3000))
-        ]);
-
-        console.log('[AuthProvider] Fetching plans...');
-        await Promise.race([
-          fetchPlans().catch(() => {}),
-          new Promise(resolve => setTimeout(resolve, 3000))
-        ]);
-
+        // セッション取得を最優先（これが完了すればローディングを解除）
         console.log('[AuthProvider] Getting session...');
-        const { data: { session } } = await supabase.auth.getSession();
+        if (!supabase) {
+          clearTimeout(globalTimeout);
+          if (isMounted) setIsLoading(false);
+          return;
+        }
+        
+        const sessionPromise = supabase.auth.getSession();
+        const sessionTimeout = new Promise((resolve) => 
+          setTimeout(() => resolve({ data: { session: null } }), 2000)
+        );
+        
+        const { data: { session } } = await Promise.race([sessionPromise, sessionTimeout]) as { data: { session: any } };
         console.log('[AuthProvider] Session retrieved:', session ? 'Found' : 'Null');
 
         if (isMounted) {
           setSession(session);
           setUser(session?.user ?? null);
+          
+          // セッション取得が完了したら、すぐにローディングを解除
+          console.log('[AuthProvider] Session set, clearing loading state');
+          clearTimeout(globalTimeout);
+          setIsLoading(false);
         }
 
+        // 以下の処理はバックグラウンドで実行（ローディング解除をブロックしない）
+        console.log('[AuthProvider] Starting background data fetch...');
+        
+        // システム設定とプランを並列で取得（タイムアウト付き）
+        Promise.all([
+          Promise.race([
+            fetchSystemSettings().catch(() => {}),
+            new Promise(resolve => setTimeout(resolve, 2000))
+          ]),
+          Promise.race([
+            fetchPlans().catch(() => {}),
+            new Promise(resolve => setTimeout(resolve, 2000))
+          ])
+        ]).catch(() => {});
+
+        // ユーザー固有のデータ取得（セッションがある場合のみ）
         if (session?.user && isMounted) {
-          console.log('[AuthProvider] Fetching user specific data...');
-          // エラーは各関数内で処理されるため、ここでは静かに失敗させる
-          // ユーザー固有のデータ取得は並列で実行し、タイムアウトを設定
-          await Promise.race([
-            Promise.all([
-              fetchProfile(session.user.id).catch(() => {}),
-              fetchSubscription(session.user.id).catch(() => {}),
-              fetchFreeAccessInfo(session.user.id).catch(() => {})
-            ]),
-            new Promise(resolve => setTimeout(resolve, 5000))
-          ]);
+          console.log('[AuthProvider] Fetching user specific data in background...');
+          Promise.all([
+            fetchProfile(session.user.id).catch(() => {}),
+            fetchSubscription(session.user.id).catch(() => {}),
+            fetchFreeAccessInfo(session.user.id).catch(() => {})
+          ]).catch(() => {});
         }
       } catch (error) {
         console.error('[AuthProvider] Auth initialization error:', error);
-      } finally {
         clearTimeout(globalTimeout);
         if (isMounted) {
-          console.log('[AuthProvider] initAuth finished, setting isLoading to false');
+          console.log('[AuthProvider] Error occurred, setting isLoading to false');
           setIsLoading(false);
         }
       }
@@ -413,7 +426,10 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     return () => {
       isMounted = false;
     };
+  }, [supabase, fetchSystemSettings, fetchPlans, fetchProfile, fetchSubscription, fetchFreeAccessInfo]);
 
+  // 認証状態の変更を監視
+  useEffect(() => {
     if (!supabase) return;
 
     const { data: { subscription: authSubscription } } = supabase.auth.onAuthStateChange(
@@ -438,7 +454,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     return () => {
       authSubscription.unsubscribe();
     };
-  }, [supabase, fetchSystemSettings, fetchPlans, fetchProfile, fetchSubscription, fetchFreeAccessInfo]);
+  }, [supabase, fetchProfile, fetchSubscription, fetchFreeAccessInfo]);
 
   useEffect(() => {
     if (user) {

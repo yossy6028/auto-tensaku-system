@@ -190,12 +190,20 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
       if (data) {
         const userProfile = data as UserProfile;
+        console.log('[AuthProvider] Profile fetched:', {
+          userId: userProfile.id,
+          role: userProfile.role,
+          email: userProfile.email || 'no email'
+        });
         setProfile(userProfile);
         // プロファイルが取得されたら、利用可否情報を更新（管理者チェックのため）
         if (userProfile.role === 'admin') {
-          console.log('[AuthProvider] Admin profile detected, will update usage info');
+          console.log('[AuthProvider] ✅ Admin profile detected, will update usage info');
+        } else {
+          console.log('[AuthProvider] ❌ Profile role is not admin:', userProfile.role);
         }
       } else {
+        console.log('[AuthProvider] ❌ No profile data found');
         setProfile(null);
       }
     } catch (error) {
@@ -286,14 +294,21 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
     // プロファイルを直接取得して管理者チェック（profileがまだ取得されていない場合に備える）
     try {
+      console.log('[AuthProvider] Checking admin status for user:', user.id);
       const { data: profileData, error: profileError } = await supabaseClient
         .from('user_profiles')
         .select('role')
         .eq('id', user.id)
         .maybeSingle();
 
+      console.log('[AuthProvider] Profile fetch result:', { 
+        hasData: !!profileData, 
+        role: profileData ? (profileData as { role?: string }).role : null,
+        error: profileError 
+      });
+
       if (!profileError && profileData && (profileData as { role?: string }).role === 'admin') {
-        console.log('[AuthProvider] Admin user detected, setting unlimited access');
+        console.log('[AuthProvider] ✅ Admin user detected, setting unlimited access');
         setUsageInfo({
           canUse: true,
           message: '管理者アカウント: 無制限で利用可能です',
@@ -304,6 +319,11 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
           accessType: 'admin',
         });
         return;
+      } else {
+        console.log('[AuthProvider] ❌ Not an admin user or profile fetch failed:', {
+          profileError: profileError?.message,
+          role: profileData ? (profileData as { role?: string }).role : 'no data'
+        });
       }
     } catch (error) {
       console.warn('[AuthProvider] Failed to check admin status:', error);
@@ -409,6 +429,10 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         
         const { data: { session } } = await Promise.race([sessionPromise, sessionTimeout]) as { data: { session: any } };
         console.log('[AuthProvider] Session retrieved:', session ? 'Found' : 'Null');
+        if (session?.user) {
+          console.log('[AuthProvider] User ID:', session.user.id);
+          console.log('[AuthProvider] User email:', session.user.email);
+        }
 
         if (isMounted) {
           setSession(session);

@@ -86,11 +86,12 @@ export class EduShiftGrader {
 
     /**
      * 減点詳細からスコアを計算
+     * 5%刻みで正確に計算（切り捨て）
+     * 例: 5%減点 → 95%、10%減点 → 90%、15%減点 → 85%
      */
     private computeFinalScore(gradingResult: GradingResult | null): number | null {
         if (!gradingResult) return null;
         
-        const normalized = this.normalizeScore(gradingResult.score);
         const deductions = Array.isArray(gradingResult.deduction_details) ? gradingResult.deduction_details : [];
         
         const totalDeduction = deductions.reduce((sum, d) => {
@@ -100,16 +101,22 @@ export class EduShiftGrader {
             return Number.isFinite(n) ? sum + n : sum;
         }, 0);
 
-        const deductionScore = Math.max(0, Math.min(100, Math.round(100 - totalDeduction)));
-
-        // 減点がある場合は減点スコアを優先
+        // 減点がある場合は減点スコアを計算（5%刻みで切り捨て）
+        // 例: 5%減点 → 95%、7%減点 → 95%、10%減点 → 90%
         if (totalDeduction > 0) {
-            return Math.max(0, Math.min(100, Math.round(deductionScore / 10) * 10));
+            const rawScore = 100 - totalDeduction;
+            const finalScore = Math.floor(rawScore / 5) * 5;
+            return Math.max(0, Math.min(100, finalScore));
         }
+        
+        // モデルが返したスコアを正規化
+        const normalized = this.normalizeScore(gradingResult.score);
         if (normalized !== null) {
-            return Math.max(0, Math.min(100, Math.round(normalized / 10) * 10));
+            // 5%刻みに切り捨て
+            return Math.max(0, Math.min(100, Math.floor(normalized / 5) * 5));
         }
-        return deductionScore ? Math.max(0, Math.min(100, Math.round(deductionScore / 10) * 10)) : null;
+        
+        return null;
     }
 
     /**

@@ -29,18 +29,14 @@ export function UsageStatus({ compact = false, className = '' }: UsageStatusProp
   // 管理者アカウントのチェック（usageInfoが取得される前でも判定できるように）
   const isAdmin = profile?.role === 'admin' || usageInfo?.accessType === 'admin';
   
-  // 管理者アカウントの場合は、usageInfoがなくても表示しない（後で取得されるまで待つ）
-  if (!usageInfo && isAdmin) {
-    return null;
-  }
-  
+  // usageInfoがまだ取得されていない場合は、読み込み中として扱う（管理者の場合は特に待つ）
   if (!usageInfo) {
-    return (
-      <div className={`flex items-center text-amber-600 ${className}`}>
-        <AlertCircle className="w-4 h-4 mr-2" />
-        <span className="text-sm">プランを購入してください</span>
-      </div>
-    );
+    // 管理者の場合は取得されるまで待つ
+    if (isAdmin) {
+      return null;
+    }
+    // 通常ユーザーの場合も、まだ読み込み中の可能性があるため表示しない
+    return null;
   }
 
   // 管理者アカウントの場合はsubscriptionチェックをスキップ

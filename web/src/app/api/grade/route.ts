@@ -142,6 +142,11 @@ export async function POST(req: NextRequest) {
             );
         }
 
+        // RPCクライアントを定義（後で使用するため）
+        const supabaseRpc = supabase as unknown as {
+            rpc: (fn: string, args: Record<string, unknown>) => Promise<{ data: unknown; error: { message?: string } | null }>;
+        };
+
         // 管理者アカウントの場合は利用可能として扱う
         const { data: profile, error: profileError } = await supabase
             .from('user_profiles')
@@ -150,10 +155,6 @@ export async function POST(req: NextRequest) {
             .maybeSingle();
 
         const isAdmin = !profileError && profile && (profile as { role?: string }).role === 'admin';
-
-        const supabaseRpc = supabase as unknown as {
-            rpc: (fn: string, args: Record<string, unknown>) => Promise<{ data: unknown; error: { message?: string } | null }>;
-        };
 
         // 管理者でない場合のみ利用可否チェック
         if (!isAdmin) {

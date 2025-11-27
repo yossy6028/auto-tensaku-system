@@ -93,3 +93,56 @@ export default nextConfig;
 **Root Directory設定が反映されない場合:**
 - Settings → General でRoot Directoryを一度削除してから再度`web`を設定
 - プロジェクトを削除して再インポート（最終手段）
+
+## ⚠️ セキュリティ: 機密情報の漏洩対策
+
+### 機密情報がGitHubにプッシュされた場合の対応
+
+**重要**: 機密情報（APIキー、パスワード、トークンなど）がGitHubに公開された場合、以下を**即座に実行**してください：
+
+#### 1. 現在のファイルから機密情報を削除（完了済み）
+- ✅ `DEPLOY.md`から機密情報を削除済み
+
+#### 2. **即座にAPIキーを無効化・再生成（最重要）**
+1. **Gemini APIキー**:
+   - Google Cloud Console (https://console.cloud.google.com/) にアクセス
+   - 「APIとサービス」→「認証情報」を開く
+   - 漏洩したAPIキーを**削除または無効化**
+   - 新しいAPIキーを生成
+   - `.env.local`とVercelの環境変数を新しいキーに更新
+
+2. **Supabaseキー**:
+   - Supabaseダッシュボード (https://app.supabase.com/) にアクセス
+   - 「Settings」→「API」を開く
+   - 漏洩したキーを確認
+   - 必要に応じてキーをローテーション
+   - Vercelの環境変数を更新
+
+#### 3. Git履歴から機密情報を削除
+Git履歴には機密情報が残っているため、以下を実行：
+
+```bash
+# BFG Repo-Cleanerを使用（推奨）
+# または git filter-repo を使用
+
+# 機密情報を含むコミットを特定
+git log --all --full-history -p -S "AIzaSy" -- DEPLOY.md
+
+# 機密情報を置換（例：git filter-repo使用）
+# 注意: これは破壊的操作です。共有リポジトリの場合は全員に周知が必要です
+```
+
+#### 4. 今後の対策
+- ✅ `.gitignore`に`.env*`ファイルが追加されていることを確認済み
+- ✅ `DEPLOY.md`などのドキュメントに機密情報を含めない
+- 環境変数は`.env.local`に保存し、Gitにコミットしない
+- ドキュメントに環境変数の例を書く場合は、`<YOUR_API_KEY>`のようなプレースホルダーを使用
+
+### チェックリスト（機密情報漏洩時）
+
+- [ ] 漏洩したAPIキー/トークンを無効化
+- [ ] 新しいAPIキー/トークンを生成
+- [ ] `.env.local`とVercelの環境変数を更新
+- [ ] 現在のファイルから機密情報を削除
+- [ ] Git履歴から機密情報を削除（可能であれば）
+- [ ] `.gitignore`に`.env*`が含まれていることを確認

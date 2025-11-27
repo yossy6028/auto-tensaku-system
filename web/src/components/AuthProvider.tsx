@@ -452,7 +452,17 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
         if (isMounted) {
           setSession(session);
-          setUser(session?.user ?? null);
+          // セッションがない場合は、userも確実にnullに設定
+          const user = session?.user ?? null;
+          setUser(user);
+          
+          if (!session) {
+            console.log('[AuthProvider] Session is null, clearing all user data');
+            setProfile(null);
+            setSubscription(null);
+            setUsageInfo(null);
+            setFreeAccessInfo(null);
+          }
           
           // セッション取得が完了したら、すぐにローディングを解除
           console.log('[AuthProvider] Session set, clearing loading state');

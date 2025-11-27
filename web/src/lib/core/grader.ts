@@ -301,6 +301,9 @@ export class EduShiftGrader {
             });
         }
 
+        // 3. OCR列ごと読み取りの検証
+        this.validateOcrDebug(parsed);
+
         // 更新したdeduction_detailsを設定
         gradingResult.deduction_details = deductionDetails;
 
@@ -314,6 +317,60 @@ export class EduShiftGrader {
         }
 
         return parsed;
+    }
+
+    /**
+     * OCRの列ごと読み取り結果を検証
+     * AIがocr_debugを正しく出力しているか、列ごとの文字数が一致しているかを確認
+     */
+    private validateOcrDebug(parsed: Record<string, unknown>): void {
+        const ocrDebug = parsed.ocr_debug as {
+            chars_per_column?: number;
+            columns_used?: number;
+            column_readings?: string[];
+            verification?: string;
+        } | undefined;
+
+        if (!ocrDebug) {
+            console.warn("[Grader] ⚠️ ocr_debugがありません - AIが列ごと読み取りを実行していない可能性");
+            return;
+        }
+
+        const { chars_per_column, columns_used, column_readings, verification } = ocrDebug;
+        
+        console.log("[Grader] OCR検証:", {
+            基準マス数: chars_per_column,
+            使用列数: columns_used,
+            列ごと読み取り結果: column_readings?.length,
+            AI自己検証: verification
+        });
+
+        if (!column_readings || !Array.isArray(column_readings)) {
+            console.warn("[Grader] ⚠️ column_readingsがありません - 列ごと読み取りが未実行");
+            return;
+        }
+
+        if (!chars_per_column || chars_per_column < 15 || chars_per_column > 40) {
+            console.warn(`[Grader] ⚠️ 基準マス数が異常: ${chars_per_column} (通常は20〜30)`);
+        }
+
+        // 各列の文字数を検証（最後の列以外はchars_per_columnと一致すべき）
+        const errors: string[] = [];
+        for (let i = 0; i < column_readings.length; i++) {
+            const columnText = column_readings[i];
+            const charCount = columnText?.length || 0;
+            const isLastColumn = i === column_readings.length - 1;
+
+            if (!isLastColumn && chars_per_column && charCount !== chars_per_column) {
+                errors.push(`列${i + 1}: ${charCount}文字（期待: ${chars_per_column}文字）`);
+            }
+        }
+
+        if (errors.length > 0) {
+            console.error("[Grader] ❌ 列ごと文字数不一致（読み飛ばしの可能性）:", errors);
+        } else {
+            console.log("[Grader] ✅ 列ごと文字数検証OK");
+        }
     }
 
     /**

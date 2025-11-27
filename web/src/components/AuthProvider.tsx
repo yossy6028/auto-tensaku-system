@@ -545,11 +545,13 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       setSession(data.session);
       setUser(data.session.user);
       
-      // プロファイルとその他の情報を取得
+      // プロファイルとその他の情報を取得（非同期で実行）
       if (data.session.user) {
-        await fetchProfile(data.session.user.id).catch(() => {});
-        await fetchSubscription(data.session.user.id).catch(() => {});
-        await refreshUsageInfo().catch(() => {});
+        Promise.all([
+          fetchProfile(data.session.user.id).catch(() => {}),
+          fetchSubscription(data.session.user.id).catch(() => {}),
+          refreshUsageInfo().catch(() => {})
+        ]).catch(() => {});
       }
     }
     

@@ -55,8 +55,10 @@ export default function Home() {
 
   const [uploadedFiles, setUploadedFiles] = useState<File[]>([]);
   const [answerFileIndex, setAnswerFileIndex] = useState<number | null>(null);
-  // 各ファイルの役割を管理（answer=答案, problem=問題, model=模範解答, other=その他）
-  const [fileRoles, setFileRoles] = useState<Record<number, 'answer' | 'problem' | 'model' | 'other'>>({});
+  // 各ファイルの役割を管理
+  // answer=答案, problem=問題, model=模範解答, problem_model=問題+模範解答, all=全部, other=その他
+  type FileRole = 'answer' | 'problem' | 'model' | 'problem_model' | 'answer_problem' | 'all' | 'other';
+  const [fileRoles, setFileRoles] = useState<Record<number, FileRole>>({});
   const [isLoading, setIsLoading] = useState(false);
   const [results, setResults] = useState<GradingResponseItem[] | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -535,7 +537,7 @@ export default function Home() {
         setAnswerFileIndex(detectAnswerIndex(next, answerFileIndex));
         
         // 新しいファイルに対して役割を自動推定
-        const newRoles: Record<number, 'answer' | 'problem' | 'model' | 'other'> = { ...fileRoles };
+        const newRoles: Record<number, FileRole> = { ...fileRoles };
         const startIndex = prev.length;
         files.forEach((file, i) => {
           const idx = startIndex + i;
@@ -547,12 +549,10 @@ export default function Home() {
           } else if (/(model|key|模範|解説|正解|解答例)/.test(name)) {
             newRoles[idx] = 'model';
           } else {
-            // デフォルト: 1つ目は答案、2つ目は問題、3つ目は模範解答
-            const existingAnswers = Object.values(newRoles).filter(r => r === 'answer').length;
-            const existingProblems = Object.values(newRoles).filter(r => r === 'problem').length;
+            // デフォルト: 1つ目は答案、2つ目以降は問題+模範解答
+            const existingAnswers = Object.values(newRoles).filter(r => r === 'answer' || r === 'answer_problem' || r === 'all').length;
             if (existingAnswers === 0) newRoles[idx] = 'answer';
-            else if (existingProblems === 0) newRoles[idx] = 'problem';
-            else newRoles[idx] = 'model';
+            else newRoles[idx] = 'problem_model';  // 問題と模範解答が一緒のケースが多い
           }
         });
         setFileRoles(newRoles);
@@ -565,7 +565,7 @@ export default function Home() {
   const removeFile = (index: number) => {
     // 役割情報も更新（インデックスをずらす）
     setFileRoles(prev => {
-      const newRoles: Record<number, 'answer' | 'problem' | 'model' | 'other'> = {};
+      const newRoles: Record<number, FileRole> = {};
       Object.entries(prev).forEach(([key, value]) => {
         const oldIdx = parseInt(key);
         if (oldIdx < index) newRoles[oldIdx] = value;
@@ -1528,18 +1528,24 @@ export default function Home() {
                           {/* ファイルの役割選択 */}
                           <select
                             value={fileRoles[index] || 'other'}
-                            onChange={(e) => setFileRoles(prev => ({ ...prev, [index]: e.target.value as 'answer' | 'problem' | 'model' | 'other' }))}
+                            onChange={(e) => setFileRoles(prev => ({ ...prev, [index]: e.target.value as FileRole }))}
                             className={clsx(
                               "ml-3 px-3 py-1.5 text-xs font-bold rounded-lg border transition-all cursor-pointer",
                               fileRoles[index] === 'answer' ? "bg-indigo-100 border-indigo-300 text-indigo-700" :
                               fileRoles[index] === 'problem' ? "bg-amber-100 border-amber-300 text-amber-700" :
                               fileRoles[index] === 'model' ? "bg-emerald-100 border-emerald-300 text-emerald-700" :
+                              fileRoles[index] === 'problem_model' ? "bg-cyan-100 border-cyan-300 text-cyan-700" :
+                              fileRoles[index] === 'answer_problem' ? "bg-violet-100 border-violet-300 text-violet-700" :
+                              fileRoles[index] === 'all' ? "bg-rose-100 border-rose-300 text-rose-700" :
                               "bg-slate-100 border-slate-300 text-slate-600"
                             )}
                           >
                             <option value="answer">📝 答案</option>
-                            <option value="problem">📋 問題</option>
-                            <option value="model">✅ 模範解答</option>
+                            <option value="problem">📋 問題のみ</option>
+                            <option value="model">✅ 模範解答のみ</option>
+                            <option value="problem_model">📋✅ 問題+模範解答</option>
+                            <option value="answer_problem">📝📋 答案+問題</option>
+                            <option value="all">📦 全部入り</option>
                             <option value="other">📎 その他</option>
                           </select>
                           <button

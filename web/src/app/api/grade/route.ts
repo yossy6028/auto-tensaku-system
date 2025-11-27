@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { createServerClient } from '@supabase/ssr';
 import { cookies } from 'next/headers';
-import { EduShiftGrader } from '@/lib/core/grader';
+import { EduShiftGrader, type FileRole } from '@/lib/core/grader';
 import type { Database } from '@/lib/supabase/types';
 
 // Force dynamic to prevent caching
@@ -17,6 +17,7 @@ type UploadedFilePart = {
     name: string;
     pageNumber?: number;
     sourceFileName?: string;
+    role?: FileRole;
 };
 
 type CanUseServiceResult = Database['public']['Functions']['can_use_service']['Returns'][number];
@@ -109,7 +110,7 @@ function sanitizeLabel(label: string): string {
 async function convertFilesToBuffers(
     files: File[],
     pdfPageInfo: { answerPage?: string; problemPage?: string; modelAnswerPage?: string } | null,
-    fileRoles: Record<string, 'answer' | 'problem' | 'model' | 'other'> = {}
+    fileRoles: Record<string, FileRole> = {}
 ): Promise<UploadedFilePart[]> {
     const fileBuffersNested = await Promise.all<UploadedFilePart[]>(
         files.map(async (file, index) => {
@@ -201,7 +202,7 @@ export async function POST(req: NextRequest) {
         }
         
         // ファイル役割情報を解析
-        let fileRoles: Record<string, 'answer' | 'problem' | 'model' | 'other'> = {};
+        let fileRoles: Record<string, FileRole> = {};
         if (fileRolesJson) {
             try {
                 fileRoles = JSON.parse(fileRolesJson);

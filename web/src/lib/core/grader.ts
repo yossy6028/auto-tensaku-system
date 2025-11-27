@@ -3,13 +3,16 @@ import { CONFIG } from "../config";
 import { SYSTEM_INSTRUCTION } from "../prompts/eduShift";
 
 // 型定義
+// ファイルの役割タイプ（エクスポート）
+export type FileRole = 'answer' | 'problem' | 'model' | 'problem_model' | 'answer_problem' | 'all' | 'other';
+
 type UploadedFilePart = {
     buffer: Buffer;
     mimeType: string;
     name: string;
     pageNumber?: number;
     sourceFileName?: string;
-    role?: 'answer' | 'problem' | 'model' | 'other';  // ユーザー指定の役割
+    role?: FileRole;  // ユーザー指定の役割
 };
 
 type CategorizedFiles = {
@@ -94,7 +97,7 @@ export class EduShiftGrader {
         targetLabel: string, 
         files: UploadedFilePart[],
         pdfPageInfo?: { answerPage?: string; problemPage?: string; modelAnswerPage?: string } | null,
-        fileRoles?: Record<string, 'answer' | 'problem' | 'model' | 'other'>
+        fileRoles?: Record<string, FileRole>
     ) {
         try {
             // ファイルに役割情報がすでに付与されていない場合は付与
@@ -470,10 +473,29 @@ export class EduShiftGrader {
 
             // 1. ユーザー指定の役割を最優先
             if (file.role) {
+                // 単一役割
                 if (file.role === 'answer') { buckets.studentFiles.push(file); continue; }
                 if (file.role === 'problem') { buckets.problemFiles.push(file); continue; }
                 if (file.role === 'model') { buckets.modelAnswerFiles.push(file); continue; }
                 if (file.role === 'other') { buckets.otherFiles.push(file); continue; }
+                
+                // 複合役割（1つのファイルを複数カテゴリに追加）
+                if (file.role === 'problem_model') {
+                    buckets.problemFiles.push(file);
+                    buckets.modelAnswerFiles.push(file);
+                    continue;
+                }
+                if (file.role === 'answer_problem') {
+                    buckets.studentFiles.push(file);
+                    buckets.problemFiles.push(file);
+                    continue;
+                }
+                if (file.role === 'all') {
+                    buckets.studentFiles.push(file);
+                    buckets.problemFiles.push(file);
+                    buckets.modelAnswerFiles.push(file);
+                    continue;
+                }
             }
 
             // 2. ページ番号による分類

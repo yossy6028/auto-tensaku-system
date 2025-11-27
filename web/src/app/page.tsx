@@ -38,7 +38,7 @@ type GradingResponseItem = {
 };
 
 export default function Home() {
-  const { user, usageInfo, refreshUsageInfo, isLoading: authLoading } = useAuth();
+  const { user, usageInfo, refreshUsageInfo, isLoading: authLoading, profile } = useAuth();
   const [isAuthModalOpen, setIsAuthModalOpen] = useState(false);
   const [authMode, setAuthMode] = useState<'signin' | 'signup'>('signin');
 
@@ -610,8 +610,9 @@ export default function Home() {
       return;
     }
 
-    // 利用可否チェック
-    if (!usageInfo?.canUse) {
+    // 利用可否チェック（管理者アカウントは除く）
+    const isAdmin = profile?.role === 'admin' || usageInfo?.accessType === 'admin';
+    if (!usageInfo?.canUse && !isAdmin) {
       setError('利用可能なプランがありません。プランを購入してください。');
       setRequirePlan(true);
       return;

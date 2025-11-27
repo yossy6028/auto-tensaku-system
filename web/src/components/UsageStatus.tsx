@@ -10,7 +10,7 @@ interface UsageStatusProps {
 }
 
 export function UsageStatus({ compact = false, className = '' }: UsageStatusProps) {
-  const { usageInfo, subscription, isLoading, user } = useAuth();
+  const { usageInfo, subscription, isLoading, user, profile } = useAuth();
 
   if (!user) {
     return null;
@@ -25,7 +25,20 @@ export function UsageStatus({ compact = false, className = '' }: UsageStatusProp
     );
   }
 
-  if (!usageInfo || !subscription) {
+  // 管理者アカウントの場合はsubscriptionがなくても表示
+  const isAdmin = profile?.role === 'admin' || usageInfo?.accessType === 'admin';
+  
+  if (!usageInfo) {
+    return (
+      <div className={`flex items-center text-amber-600 ${className}`}>
+        <AlertCircle className="w-4 h-4 mr-2" />
+        <span className="text-sm">プランを購入してください</span>
+      </div>
+    );
+  }
+
+  // 管理者アカウントの場合はsubscriptionチェックをスキップ
+  if (!subscription && !isAdmin) {
     return (
       <div className={`flex items-center text-amber-600 ${className}`}>
         <AlertCircle className="w-4 h-4 mr-2" />

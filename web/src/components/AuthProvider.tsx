@@ -299,6 +299,13 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       return;
     }
 
+    // セッションが存在することを確認
+    if (!session) {
+      console.log('[AuthProvider] refreshUsageInfo: session is null, skipping');
+      setUsageInfo(null);
+      return;
+    }
+
     console.log('[AuthProvider] refreshUsageInfo called for user:', user.id);
 
     // プロファイルを直接取得して管理者チェック（profileがまだ取得されていない場合に備える）

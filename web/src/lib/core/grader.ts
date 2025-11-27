@@ -38,11 +38,12 @@ export class EduShiftGrader {
     private model: ReturnType<GoogleGenerativeAI["getGenerativeModel"]>;
     
     // 採点用の設定（systemInstructionと組み合わせて使用）
-    // temperature=0: OCR精度を最大化するため、創造性を排除
+    // temperature=0, topP=0.1: OCR精度を最大化するため、創造性を排除
+    // 開発初期の高精度設定に戻す
     private readonly gradingConfig = {
         temperature: 0,
-        topP: 0.6,
-        topK: 32,
+        topP: 0.1,  // 0.6→0.1: 上位10%の確率の単語のみ選択（補完・置換を防ぐ）
+        topK: 16,   // 32→16: さらに選択肢を絞る
         responseMimeType: "application/json" as const
     };
 

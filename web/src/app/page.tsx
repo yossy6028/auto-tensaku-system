@@ -699,14 +699,19 @@ export default function Home() {
           setRequirePlan(true);
         }
       } else {
+        console.log('[Page] Grading successful, setting results...');
         setResults(data.results);
-        // 利用情報を更新
-        await refreshUsageInfo();
+        // 利用情報を更新（エラーが発生しても続行、非同期で実行）
+        refreshUsageInfo().catch((err) => {
+          console.warn('[Page] Failed to refresh usage info:', err);
+        });
       }
     } catch (err: unknown) {
+      console.error('[Page] Grading error:', err);
       const message = err instanceof Error ? err.message : '通信エラーが発生しました。';
       setError(message);
     } finally {
+      console.log('[Page] Grading process complete, clearing loading state');
       setIsLoading(false);
     }
   };

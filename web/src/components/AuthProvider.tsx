@@ -493,6 +493,13 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     if (user) {
       refreshUsageInfo();
     }
+  }, [user, refreshUsageInfo]);
+
+  // プロファイルが変更されたときにも利用可否情報を更新
+  useEffect(() => {
+    if (user && profile) {
+      refreshUsageInfo();
+    }
   }, [user, profile, refreshUsageInfo]);
 
   const signInWithEmail = async (email: string) => {

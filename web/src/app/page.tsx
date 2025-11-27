@@ -93,11 +93,12 @@ export default function Home() {
 
   // セッションがなくなった場合、エラーメッセージをクリア
   useEffect(() => {
-    if (!session) {
+    if (!session || !user) {
+      console.log('[Page] Session or user is null, clearing error message', { hasSession: !!session, hasUser: !!user });
       setError(null);
       setRequirePlan(false);
     }
-  }, [session]);
+  }, [session, user]);
 
   const getComponentRef = (index: number): React.RefObject<HTMLDivElement | null> => {
     if (!componentRefs.current.has(index)) {

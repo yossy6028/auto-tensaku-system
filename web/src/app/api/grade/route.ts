@@ -108,21 +108,26 @@ function sanitizeLabel(label: string): string {
  */
 async function convertFilesToBuffers(
     files: File[],
-    pdfPageInfo: { answerPage?: string; problemPage?: string; modelAnswerPage?: string } | null
+    pdfPageInfo: { answerPage?: string; problemPage?: string; modelAnswerPage?: string } | null,
+    fileRoles: Record<string, 'answer' | 'problem' | 'model' | 'other'> = {}
 ): Promise<UploadedFilePart[]> {
     const fileBuffersNested = await Promise.all<UploadedFilePart[]>(
-        files.map(async (file) => {
+        files.map(async (file, index) => {
             const buffer = Buffer.from(await file.arrayBuffer());
+            const role = fileRoles[index.toString()] || 'other';
             
             if (file.type === 'application/pdf') {
-                return processPdfFile(buffer, file.name);
+                // PDFの場合は各ページに役割を引き継ぐ
+                const pdfPages = await processPdfFile(buffer, file.name);
+                return pdfPages.map(page => ({ ...page, role }));
             }
             
             return [{
                 buffer,
                 mimeType: file.type,
                 name: file.name,
-                sourceFileName: file.name
+                sourceFileName: file.name,
+                role  // 役割情報を追加
             }];
         })
     );
@@ -174,6 +179,7 @@ export async function POST(req: NextRequest) {
         const targetLabelsJson = formData.get('targetLabels') as string;
         const files = formData.getAll('files') as File[];
         const pdfPageInfoJson = formData.get('pdfPageInfo') as string | null;
+        const fileRolesJson = formData.get('fileRoles') as string | null;
 
         if (!targetLabelsJson || !files || files.length === 0) {
             return NextResponse.json(
@@ -194,6 +200,17 @@ export async function POST(req: NextRequest) {
             }
         }
         
+        // ファイル役割情報を解析
+        let fileRoles: Record<string, 'answer' | 'problem' | 'model' | 'other'> = {};
+        if (fileRolesJson) {
+            try {
+                fileRoles = JSON.parse(fileRolesJson);
+                console.log('[API] File roles:', fileRoles);
+            } catch {
+                // パース失敗時は無視
+            }
+        }
+        
         if (!Array.isArray(targetLabels) || targetLabels.length === 0) {
             return NextResponse.json(
                 { status: 'error', message: 'Invalid target labels' },
@@ -204,8 +221,8 @@ export async function POST(req: NextRequest) {
         // ラベルのサニタイズ
         const sanitizedLabels = targetLabels.map(sanitizeLabel);
 
-        // ファイルをバッファに変換
-        const fileBuffers = await convertFilesToBuffers(files, pdfPageInfo);
+        // ファイルをバッファに変換（役割情報を付与）
+        const fileBuffers = await convertFilesToBuffers(files, pdfPageInfo, fileRoles);
 
         // 採点実行
         const grader = new EduShiftGrader();
@@ -213,7 +230,7 @@ export async function POST(req: NextRequest) {
 
         for (const label of sanitizedLabels) {
             try {
-                const result = await grader.gradeAnswerFromMultipleFiles(label, fileBuffers, pdfPageInfo);
+                const result = await grader.gradeAnswerFromMultipleFiles(label, fileBuffers, pdfPageInfo, fileRoles);
                 results.push({ label, result });
             } catch (error: unknown) {
                 const message = error instanceof Error ? error.message : 'Unknown error';

@@ -55,6 +55,8 @@ export default function Home() {
 
   const [uploadedFiles, setUploadedFiles] = useState<File[]>([]);
   const [answerFileIndex, setAnswerFileIndex] = useState<number | null>(null);
+  // 各ファイルの役割を管理（answer=答案, problem=問題, model=模範解答, other=その他）
+  const [fileRoles, setFileRoles] = useState<Record<number, 'answer' | 'problem' | 'model' | 'other'>>({});
   const [isLoading, setIsLoading] = useState(false);
   const [results, setResults] = useState<GradingResponseItem[] | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -531,12 +533,47 @@ export default function Home() {
       setUploadedFiles(prev => {
         const next = [...prev, ...files];
         setAnswerFileIndex(detectAnswerIndex(next, answerFileIndex));
+        
+        // 新しいファイルに対して役割を自動推定
+        const newRoles: Record<number, 'answer' | 'problem' | 'model' | 'other'> = { ...fileRoles };
+        const startIndex = prev.length;
+        files.forEach((file, i) => {
+          const idx = startIndex + i;
+          const name = file.name.toLowerCase();
+          if (/(answer|ans|student|解答|答案|生徒)/.test(name)) {
+            newRoles[idx] = 'answer';
+          } else if (/(problem|question|課題|設問|問題|本文)/.test(name)) {
+            newRoles[idx] = 'problem';
+          } else if (/(model|key|模範|解説|正解|解答例)/.test(name)) {
+            newRoles[idx] = 'model';
+          } else {
+            // デフォルト: 1つ目は答案、2つ目は問題、3つ目は模範解答
+            const existingAnswers = Object.values(newRoles).filter(r => r === 'answer').length;
+            const existingProblems = Object.values(newRoles).filter(r => r === 'problem').length;
+            if (existingAnswers === 0) newRoles[idx] = 'answer';
+            else if (existingProblems === 0) newRoles[idx] = 'problem';
+            else newRoles[idx] = 'model';
+          }
+        });
+        setFileRoles(newRoles);
+        
         return next;
       });
     }
   };
 
   const removeFile = (index: number) => {
+    // 役割情報も更新（インデックスをずらす）
+    setFileRoles(prev => {
+      const newRoles: Record<number, 'answer' | 'problem' | 'model' | 'other'> = {};
+      Object.entries(prev).forEach(([key, value]) => {
+        const oldIdx = parseInt(key);
+        if (oldIdx < index) newRoles[oldIdx] = value;
+        else if (oldIdx > index) newRoles[oldIdx - 1] = value;
+      });
+      return newRoles;
+    });
+    
     setUploadedFiles(prev => {
       const next = prev.filter((_, i) => i !== index);
       const nextAnswerIndex =
@@ -692,10 +729,15 @@ export default function Home() {
       console.log('[Page] PDF page info:', pdfPageInfo);
     }
 
+    // ファイルの役割情報を追加
+    formData.append('fileRoles', JSON.stringify(fileRoles));
+    console.log('[Page] File roles:', fileRoles);
+
     // すべてのファイルを追加
     uploadedFiles.forEach((file, idx) => {
       formData.append(`files`, file);
-      console.log(`[Page] File ${idx}: ${file.name} (${(file.size / 1024).toFixed(1)} KB)`);
+      const role = fileRoles[idx] || 'other';
+      console.log(`[Page] File ${idx}: ${file.name} (${(file.size / 1024).toFixed(1)} KB) - Role: ${role}`);
     });
 
     try {
@@ -1450,7 +1492,7 @@ export default function Home() {
                     </h3>
                     <p className="text-xs text-indigo-700 font-bold bg-indigo-50 px-4 py-3 rounded-xl mb-4 flex items-center border border-indigo-100">
                       <span className="mr-2 text-lg">👆</span>
-                      答案として表示するファイルを選択してください（ラジオボタン）
+                      各ファイルの役割を選択してください（答案・問題・模範解答）
                     </p>
                     <div className="space-y-3">
                       {uploadedFiles.map((file, index) => (
@@ -1483,10 +1525,27 @@ export default function Home() {
                               </p>
                             </div>
                           </div>
+                          {/* ファイルの役割選択 */}
+                          <select
+                            value={fileRoles[index] || 'other'}
+                            onChange={(e) => setFileRoles(prev => ({ ...prev, [index]: e.target.value as 'answer' | 'problem' | 'model' | 'other' }))}
+                            className={clsx(
+                              "ml-3 px-3 py-1.5 text-xs font-bold rounded-lg border transition-all cursor-pointer",
+                              fileRoles[index] === 'answer' ? "bg-indigo-100 border-indigo-300 text-indigo-700" :
+                              fileRoles[index] === 'problem' ? "bg-amber-100 border-amber-300 text-amber-700" :
+                              fileRoles[index] === 'model' ? "bg-emerald-100 border-emerald-300 text-emerald-700" :
+                              "bg-slate-100 border-slate-300 text-slate-600"
+                            )}
+                          >
+                            <option value="answer">📝 答案</option>
+                            <option value="problem">📋 問題</option>
+                            <option value="model">✅ 模範解答</option>
+                            <option value="other">📎 その他</option>
+                          </select>
                           <button
                             type="button"
                             onClick={() => removeFile(index)}
-                            className="ml-3 p-2 text-slate-400 hover:text-red-500 hover:bg-red-50 rounded-lg transition-all"
+                            className="ml-2 p-2 text-slate-400 hover:text-red-500 hover:bg-red-50 rounded-lg transition-all"
                             title="削除"
                           >
                             <Trash2 className="w-4 h-4" />

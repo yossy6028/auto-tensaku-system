@@ -9,6 +9,7 @@ type UploadedFilePart = {
     name: string;
     pageNumber?: number;
     sourceFileName?: string;
+    role?: 'answer' | 'problem' | 'model' | 'other';  // ユーザー指定の役割
 };
 
 type CategorizedFiles = {
@@ -92,9 +93,18 @@ export class EduShiftGrader {
     async gradeAnswerFromMultipleFiles(
         targetLabel: string, 
         files: UploadedFilePart[],
-        pdfPageInfo?: { answerPage?: string; problemPage?: string; modelAnswerPage?: string } | null
+        pdfPageInfo?: { answerPage?: string; problemPage?: string; modelAnswerPage?: string } | null,
+        fileRoles?: Record<string, 'answer' | 'problem' | 'model' | 'other'>
     ) {
         try {
+            // ファイルに役割情報がすでに付与されていない場合は付与
+            if (fileRoles) {
+                files.forEach((file, idx) => {
+                    if (!file.role) {
+                        file.role = fileRoles[idx.toString()];
+                    }
+                });
+            }
             const categorizedFiles = this.categorizeFiles(files, pdfPageInfo);
             const imageParts = this.buildContentSequence(categorizedFiles);
             return await this.executeGrading(targetLabel, imageParts, pdfPageInfo, categorizedFiles);
@@ -458,14 +468,22 @@ export class EduShiftGrader {
             const name = file.name || "";
             const pageNumber = file.pageNumber;
 
-            // ページ番号による分類を優先
+            // 1. ユーザー指定の役割を最優先
+            if (file.role) {
+                if (file.role === 'answer') { buckets.studentFiles.push(file); continue; }
+                if (file.role === 'problem') { buckets.problemFiles.push(file); continue; }
+                if (file.role === 'model') { buckets.modelAnswerFiles.push(file); continue; }
+                if (file.role === 'other') { buckets.otherFiles.push(file); continue; }
+            }
+
+            // 2. ページ番号による分類
             if (pageNumber !== undefined) {
                 if (answerPages.has(pageNumber)) { buckets.studentFiles.push(file); continue; }
                 if (problemPages.has(pageNumber)) { buckets.problemFiles.push(file); continue; }
                 if (modelPages.has(pageNumber)) { buckets.modelAnswerFiles.push(file); continue; }
             }
 
-            // ファイル名による分類
+            // 3. ファイル名による分類
             if (FILE_PATTERNS.answer.test(name)) { buckets.studentFiles.push(file); continue; }
             if (FILE_PATTERNS.problem.test(name)) { buckets.problemFiles.push(file); continue; }
             if (FILE_PATTERNS.model.test(name)) { buckets.modelAnswerFiles.push(file); continue; }

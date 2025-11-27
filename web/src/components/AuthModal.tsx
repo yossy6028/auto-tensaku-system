@@ -13,12 +13,23 @@ interface AuthModalProps {
 type AuthMode = 'signin' | 'signup' | 'magic';
 
 export function AuthModal({ isOpen, onClose, initialMode = 'signin' }: AuthModalProps) {
-  const { signInWithEmail, signInWithPassword, signUp } = useAuth();
+  const { signInWithEmail, signInWithPassword, signUp, user } = useAuth();
   const [mode, setMode] = useState<AuthMode>(initialMode);
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [isLoading, setIsLoading] = useState(false);
   const [message, setMessage] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
+
+  // ログイン成功時にモーダルを自動的に閉じる
+  useEffect(() => {
+    if (user && isOpen && mode === 'signin') {
+      // ユーザーがログインしたら少し待ってからモーダルを閉じる
+      const timer = setTimeout(() => {
+        onClose();
+      }, 500);
+      return () => clearTimeout(timer);
+    }
+  }, [user, isOpen, mode, onClose]);
 
   // initialModeが変更されたらmodeを更新
   useEffect(() => {

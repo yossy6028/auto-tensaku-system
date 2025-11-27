@@ -1,7 +1,7 @@
 /* eslint-disable @next/next/no-img-element */
 'use client';
 
-import React, { useState, useRef } from 'react';
+import React, { useState, useRef, useEffect } from 'react';
 import { GradingReport } from '@/components/GradingReport';
 import { Upload, FileText, CheckCircle, AlertCircle, Loader2, Sparkles, ArrowRight, BookOpen, PenTool, GraduationCap, Plus, Trash2, CreditCard, LogIn, UserPlus, Edit3, Save, X, User, UserCheck } from 'lucide-react';
 import { clsx } from 'clsx';
@@ -90,6 +90,14 @@ export default function Home() {
   }>>({});
 
   const componentRefs = useRef<Map<number, React.RefObject<HTMLDivElement | null>>>(new Map());
+
+  // セッションがなくなった場合、エラーメッセージをクリア
+  useEffect(() => {
+    if (!session) {
+      setError(null);
+      setRequirePlan(false);
+    }
+  }, [session]);
 
   const getComponentRef = (index: number): React.RefObject<HTMLDivElement | null> => {
     if (!componentRefs.current.has(index)) {

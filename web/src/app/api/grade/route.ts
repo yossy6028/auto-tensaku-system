@@ -300,10 +300,10 @@ export async function POST(req: NextRequest) {
             }
         }
 
-        // 採点成功時に利用回数をインクリメント
+        // 採点成功時に利用回数をインクリメント（管理者は除く）
         const successfulGradings = results.filter(r => r.result && !r.error);
         
-        if (successfulGradings.length > 0) {
+        if (successfulGradings.length > 0 && !isAdmin) {
             // 各採点成功ごとに利用回数をインクリメント
             for (const grading of successfulGradings) {
                 const { error: incrementError } = await supabaseRpc
@@ -321,10 +321,13 @@ export async function POST(req: NextRequest) {
             }
         }
 
-        // 更新後の利用情報を取得
-        const { data: updatedUsageData } = await supabaseRpc
-            .rpc('can_use_service', { p_user_id: user.id });
-        const updatedUsageRows = updatedUsageData as CanUseServiceResult[] | null;
+        // 更新後の利用情報を取得（管理者は除く）
+        let updatedUsageRows: CanUseServiceResult[] | null = null;
+        if (!isAdmin) {
+            const { data: updatedUsageData } = await supabaseRpc
+                .rpc('can_use_service', { p_user_id: user.id });
+            updatedUsageRows = updatedUsageData as CanUseServiceResult[] | null;
+        }
         
         const usageInfo = updatedUsageRows?.[0] ? {
             remainingCount: updatedUsageRows[0].remaining_count,

@@ -661,11 +661,11 @@ export default function Home() {
     setError(null);
     setRequirePlan(false);
     setResults(null);
-    
+
     console.log('[Page] Starting grading process...');
     console.log('[Page] Target labels:', targetLabels);
     console.log('[Page] Files count:', uploadedFiles.length);
-    
+
     const formData = new FormData();
     formData.append('targetLabels', JSON.stringify(targetLabels));
 
@@ -690,11 +690,11 @@ export default function Home() {
         credentials: 'include',
       });
       console.log('[Page] Response status:', res.status);
-      
+
       // レスポンスをテキストで取得してからJSONパース（エラー時のデバッグ用）
       const responseText = await res.text();
       console.log('[Page] Response text:', responseText.substring(0, 500));
-      
+
       let data;
       try {
         data = JSON.parse(responseText);
@@ -944,6 +944,52 @@ export default function Home() {
             指導歴20年超のベテラン国語講師のノウハウと<br className="hidden sm:block" />
             最新AIによる解析で、あなたの思考に寄り添うフィードバックを。
           </p>
+
+          {/* Handwritten Answer Support Highlight */}
+          <div className="mt-12 mb-12 relative group max-w-4xl mx-auto">
+            <div className="absolute inset-0 bg-gradient-to-r from-indigo-500/20 via-purple-500/20 to-pink-500/20 blur-xl rounded-3xl transform group-hover:scale-105 transition-transform duration-500"></div>
+            <div className="relative bg-white/60 backdrop-blur-xl border border-white/60 rounded-3xl p-8 shadow-xl flex flex-col md:flex-row items-center gap-8">
+              <div className="flex-shrink-0 relative">
+                <div className="absolute inset-0 bg-indigo-400 blur-2xl opacity-20 rounded-full animate-pulse-slow"></div>
+                <div className="relative bg-gradient-to-br from-indigo-500 to-violet-600 w-20 h-20 rounded-2xl flex items-center justify-center shadow-lg transform rotate-3 group-hover:rotate-6 transition-transform duration-300">
+                  <Edit3 className="w-10 h-10 text-white" />
+                </div>
+              </div>
+              <div className="text-center md:text-left flex-1">
+                <h3 className="text-2xl font-bold text-slate-800 mb-3 flex items-center justify-center md:justify-start gap-2">
+                  <span className="text-transparent bg-clip-text bg-gradient-to-r from-indigo-600 to-violet-600">手書きの答案</span>
+                  もそのままOK！
+                </h3>
+                <p className="text-slate-600 leading-relaxed">
+                  スマホで撮影した手書きの答案画像をそのままアップロードしてください。<br className="hidden md:block" />
+                  最新のAI文字認識技術が、あなたの文字を正確に読み取り、的確な添削を行います。<br />
+                  <span className="text-sm text-slate-500 mt-2 block bg-slate-100/50 inline-block px-3 py-1 rounded-full border border-slate-200/50">
+                    ✨ 多少の癖字や乱筆でも高精度に認識します
+                  </span>
+                </p>
+              </div>
+              <div className="hidden md:block flex-shrink-0">
+                <div className="bg-white rounded-xl p-4 transform -rotate-2 group-hover:rotate-0 transition-transform duration-300 border border-slate-100 shadow-md w-48">
+                  <div className="flex items-center gap-2 text-xs text-slate-500 mb-3 border-b border-slate-100 pb-2">
+                    <span className="w-2 h-2 rounded-full bg-green-500 animate-pulse"></span>
+                    AI認識中...
+                  </div>
+                  <div className="space-y-2 opacity-60">
+                    <div className="h-2 bg-slate-200 rounded w-3/4"></div>
+                    <div className="h-2 bg-slate-200 rounded w-full"></div>
+                    <div className="h-2 bg-slate-200 rounded w-5/6"></div>
+                  </div>
+                  <div className="mt-3 pt-2 border-t border-slate-100">
+                    <div className="flex justify-end">
+                      <div className="w-6 h-6 rounded-full bg-indigo-100 flex items-center justify-center text-indigo-600">
+                        <CheckCircle className="w-4 h-4" />
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
 
           {/* 免責事項とプライバシー情報 */}
           <div className="mt-8 max-w-3xl mx-auto space-y-4">
@@ -1493,7 +1539,7 @@ export default function Home() {
           // grading_resultがない場合は、resultをそのままgrading_resultとして扱う（互換性対応）
           const rawResult = res.result?.grading_result || res.result;
           const gradingResult = rawResult as GradingResultPayload | undefined;
-          
+
           // エラーの場合や結果がない場合
           if (!gradingResult || res.error) {
             if (res.error) {

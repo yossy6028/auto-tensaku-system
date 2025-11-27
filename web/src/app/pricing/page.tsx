@@ -2,7 +2,7 @@
 
 import React from 'react';
 import Link from 'next/link';
-import { ArrowLeft, Check, Sparkles, Zap, Crown, RefreshCw } from 'lucide-react';
+import { ArrowLeft, Check, Sparkles, Zap, Crown, RefreshCw, HelpCircle } from 'lucide-react';
 
 const plans = [
   {
@@ -21,6 +21,8 @@ const plans = [
     icon: Zap,
     color: 'emerald',
     popular: false,
+    gradient: 'from-emerald-400 to-teal-500',
+    shadow: 'shadow-emerald-500/20',
   },
   {
     name: 'スタンダード',
@@ -39,6 +41,8 @@ const plans = [
     icon: Sparkles,
     color: 'indigo',
     popular: true,
+    gradient: 'from-indigo-500 via-purple-500 to-violet-500',
+    shadow: 'shadow-indigo-500/30',
   },
   {
     name: '無制限',
@@ -57,183 +61,185 @@ const plans = [
     icon: Crown,
     color: 'amber',
     popular: false,
+    gradient: 'from-amber-400 to-orange-500',
+    shadow: 'shadow-amber-500/20',
   },
 ];
 
-const colorClasses = {
-  emerald: {
-    bg: 'bg-emerald-50',
-    border: 'border-emerald-200',
-    text: 'text-emerald-600',
-    button: 'bg-emerald-600 hover:bg-emerald-700',
-    icon: 'bg-emerald-100 text-emerald-600',
-    badge: 'bg-emerald-100 text-emerald-700',
-  },
-  indigo: {
-    bg: 'bg-indigo-50',
-    border: 'border-indigo-300',
-    text: 'text-indigo-600',
-    button: 'bg-indigo-600 hover:bg-indigo-700',
-    icon: 'bg-indigo-100 text-indigo-600',
-    badge: 'bg-indigo-100 text-indigo-700',
-  },
-  amber: {
-    bg: 'bg-amber-50',
-    border: 'border-amber-200',
-    text: 'text-amber-600',
-    button: 'bg-amber-600 hover:bg-amber-700',
-    icon: 'bg-amber-100 text-amber-600',
-    badge: 'bg-amber-100 text-amber-700',
-  },
-};
-
 export default function PricingPage() {
   return (
-    <main className="min-h-screen bg-slate-50 relative overflow-hidden selection:bg-indigo-100 selection:text-indigo-900 font-sans text-slate-900">
-      {/* Background Decoration */}
-      <div className="absolute top-0 left-0 w-full h-full overflow-hidden -z-10 pointer-events-none">
-        <div className="absolute inset-0 bg-[radial-gradient(#6366f1_1px,transparent_1px)] [background-size:24px_24px] opacity-[0.03]"></div>
-        <div className="absolute top-[-10%] left-[-10%] w-[40%] h-[40%] rounded-full bg-indigo-400/20 blur-[100px]"></div>
-        <div className="absolute bottom-[-10%] right-[-5%] w-[30%] h-[30%] rounded-full bg-violet-400/20 blur-[100px]"></div>
+    <main className="min-h-screen bg-slate-950 relative overflow-hidden selection:bg-indigo-500/30 selection:text-indigo-200 font-sans text-slate-100">
+      {/* Dynamic Background */}
+      <div className="absolute inset-0 w-full h-full overflow-hidden -z-10">
+        <div className="absolute top-0 left-0 w-full h-full bg-[radial-gradient(ellipse_at_top,_var(--tw-gradient-stops))] from-slate-900 via-slate-950 to-black"></div>
+        <div className="absolute top-[-20%] left-[-10%] w-[50%] h-[50%] rounded-full bg-indigo-500/10 blur-[120px] animate-pulse-slow"></div>
+        <div className="absolute bottom-[-20%] right-[-10%] w-[50%] h-[50%] rounded-full bg-violet-500/10 blur-[120px] animate-pulse-slow delay-1000"></div>
+        <div className="absolute top-[40%] left-[20%] w-[30%] h-[30%] rounded-full bg-blue-500/5 blur-[100px] animate-pulse-slow delay-2000"></div>
+
+        {/* Grid Pattern */}
+        <div className="absolute inset-0 bg-[url('/grid.svg')] bg-center [mask-image:linear-gradient(180deg,white,rgba(255,255,255,0))] opacity-10"></div>
       </div>
 
-      <div className="max-w-6xl mx-auto py-12 px-4 sm:px-6 lg:px-8 relative z-10">
+      <div className="max-w-7xl mx-auto py-12 px-4 sm:px-6 lg:px-8 relative z-10">
         {/* Back Link */}
-        <Link 
-          href="/" 
-          className="inline-flex items-center text-indigo-600 hover:text-indigo-800 font-medium mb-8 transition-colors group"
+        <Link
+          href="/"
+          className="inline-flex items-center text-slate-400 hover:text-white font-medium mb-12 transition-all group hover:bg-white/5 px-4 py-2 rounded-full backdrop-blur-sm border border-transparent hover:border-white/10"
         >
           <ArrowLeft className="w-5 h-5 mr-2 group-hover:-translate-x-1 transition-transform" />
           トップページに戻る
         </Link>
 
         {/* Header */}
-        <div className="text-center mb-12">
+        <div className="text-center mb-20 relative">
           {/* 期間限定バナー */}
-          <div className="mb-6">
-            <div className="inline-block bg-gradient-to-r from-red-500 via-pink-500 to-red-500 text-white px-6 py-3 rounded-full shadow-lg animate-pulse">
-              <span className="text-lg font-bold">🎊 期間限定キャンペーン実施中！ 🎊</span>
+          <div className="mb-8 inline-block animate-bounce-slow">
+            <div className="relative group cursor-default">
+              <div className="absolute -inset-1 bg-gradient-to-r from-red-600 via-pink-600 to-purple-600 rounded-full blur opacity-75 group-hover:opacity-100 transition duration-1000 group-hover:duration-200 animate-tilt"></div>
+              <div className="relative px-8 py-3 bg-black rounded-full leading-none flex items-center">
+                <span className="text-transparent bg-clip-text bg-gradient-to-r from-red-400 via-pink-400 to-purple-400 font-bold text-lg">
+                  🎊 期間限定キャンペーン実施中！ 🎊
+                </span>
+              </div>
             </div>
           </div>
-          
-          <h1 className="text-4xl md:text-5xl font-black text-slate-800 tracking-tight mb-4">
+
+          <h1 className="text-5xl md:text-7xl font-black text-white tracking-tight mb-6 drop-shadow-2xl">
             料金プラン
           </h1>
-          <p className="text-lg text-slate-600 max-w-2xl mx-auto">
-            あなたの学習スタイルに合わせて、最適なプランをお選びください
+          <p className="text-xl text-slate-400 max-w-2xl mx-auto leading-relaxed">
+            あなたの学習スタイルに合わせて、<br className="hidden sm:block" />
+            最適なプランをお選びください
           </p>
-          
+
           {/* 特価強調 */}
-          <div className="mt-6 inline-block bg-yellow-100 border-2 border-yellow-400 rounded-2xl px-6 py-3">
-            <p className="text-yellow-800 font-bold">
-              ✨ 今だけ全プラン <span className="text-red-600 text-xl">最大34%OFF</span> でご提供中！ ✨
-            </p>
+          <div className="mt-8 inline-block relative group">
+            <div className="absolute inset-0 bg-gradient-to-r from-yellow-400/20 to-orange-500/20 blur-xl rounded-2xl transform group-hover:scale-110 transition-transform duration-500"></div>
+            <div className="relative bg-white/5 backdrop-blur-xl border border-yellow-500/30 rounded-2xl px-8 py-4 shadow-2xl">
+              <p className="text-yellow-200 font-bold text-lg">
+                ✨ 今だけ全プラン <span className="text-transparent bg-clip-text bg-gradient-to-r from-yellow-300 to-orange-300 text-2xl font-black">最大34%OFF</span> でご提供中！ ✨
+              </p>
+            </div>
           </div>
         </div>
 
         {/* Reset Notice */}
-        <div className="max-w-2xl mx-auto mb-10">
-          <div className="bg-blue-50 border border-blue-200 rounded-2xl p-5 flex items-start">
-            <div className="bg-blue-100 rounded-full p-2 mr-4 flex-shrink-0">
-              <RefreshCw className="w-5 h-5 text-blue-600" />
+        <div className="max-w-3xl mx-auto mb-16">
+          <div className="bg-blue-900/20 backdrop-blur-md border border-blue-500/30 rounded-2xl p-6 flex items-start shadow-lg shadow-blue-900/10">
+            <div className="bg-blue-500/20 rounded-full p-3 mr-5 flex-shrink-0">
+              <RefreshCw className="w-6 h-6 text-blue-400" />
             </div>
             <div>
-              <h3 className="font-bold text-blue-800 mb-1">回数リセットについて</h3>
-              <p className="text-sm text-blue-700">
-                ライト・スタンダードプランの採点回数は、<strong>ご契約日から30日ごとに自動的にリセット</strong>されます。
+              <h3 className="font-bold text-blue-200 mb-2 text-lg">回数リセットについて</h3>
+              <p className="text-blue-100/80 leading-relaxed">
+                ライト・スタンダードプランの採点回数は、<strong className="text-white border-b border-blue-400/50">ご契約日から30日ごとに自動的にリセット</strong>されます。
                 未使用分の翌月繰り越しはありませんので、ご了承ください。
-                無制限プランは回数制限がないため、リセットの対象外です。
+                <span className="block mt-2 text-sm opacity-70">※ 無制限プランは回数制限がないため、リセットの対象外です。</span>
               </p>
             </div>
           </div>
         </div>
 
         {/* Pricing Cards */}
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-8 mb-16">
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-8 lg:gap-10 mb-24 max-w-7xl mx-auto">
           {plans.map((plan) => {
-            const colors = colorClasses[plan.color as keyof typeof colorClasses];
             const Icon = plan.icon;
-            
+
             return (
               <div
                 key={plan.name}
-                className={`relative bg-white rounded-3xl shadow-lg border-2 ${
-                  plan.popular ? 'border-indigo-400 ring-4 ring-indigo-100' : 'border-slate-200'
-                } overflow-hidden transition-all duration-300 hover:shadow-xl hover:-translate-y-1`}
+                className={`relative group flex flex-col h-full rounded-[2.5rem] transition-all duration-500 ${plan.popular
+                    ? 'bg-slate-900/80 border-2 border-indigo-500/50 shadow-2xl shadow-indigo-500/20 scale-105 z-10'
+                    : 'bg-slate-900/40 border border-white/10 hover:bg-slate-800/60 hover:border-white/20 hover:shadow-xl hover:-translate-y-2'
+                  } backdrop-blur-xl overflow-hidden`}
               >
                 {/* Popular Badge */}
                 {plan.popular && (
-                  <div className="absolute top-0 right-0">
-                    <div className="bg-indigo-600 text-white text-xs font-bold px-4 py-1.5 rounded-bl-xl">
+                  <div className="absolute top-0 inset-x-0 h-1 bg-gradient-to-r from-indigo-500 via-purple-500 to-violet-500"></div>
+                )}
+                {plan.popular && (
+                  <div className="absolute top-5 right-5">
+                    <div className="bg-gradient-to-r from-indigo-600 to-violet-600 text-white text-xs font-bold px-4 py-1.5 rounded-full shadow-lg shadow-indigo-500/30 flex items-center">
+                      <Crown className="w-3 h-3 mr-1" />
                       人気No.1
                     </div>
                   </div>
                 )}
 
-                <div className="p-8">
+                <div className="p-8 flex-grow">
                   {/* Icon & Name */}
-                  <div className="flex items-center mb-4">
-                    <div className={`${colors.icon} rounded-xl p-3 mr-4`}>
-                      <Icon className="w-6 h-6" />
+                  <div className="flex items-center mb-6">
+                    <div className={`w-14 h-14 rounded-2xl bg-gradient-to-br ${plan.gradient} p-0.5 shadow-lg`}>
+                      <div className="w-full h-full bg-slate-900 rounded-[14px] flex items-center justify-center">
+                        <Icon className={`w-7 h-7 text-white`} />
+                      </div>
                     </div>
-                    <div>
-                      <h2 className="text-2xl font-bold text-slate-800">{plan.name}</h2>
-                      <p className="text-sm text-slate-500">{plan.description}</p>
+                    <div className="ml-4">
+                      <h2 className="text-2xl font-bold text-white">{plan.name}</h2>
+                      <p className="text-sm text-slate-400">{plan.description}</p>
                     </div>
                   </div>
 
                   {/* Price */}
-                  <div className="mb-6">
+                  <div className="mb-8">
                     {/* 期間限定特価バッジ */}
-                    <div className="mb-2">
-                      <span className="inline-block bg-red-500 text-white text-xs font-bold px-3 py-1 rounded-full animate-pulse">
+                    <div className="mb-3">
+                      <span className="inline-block bg-red-500/20 text-red-300 border border-red-500/30 text-xs font-bold px-3 py-1 rounded-full animate-pulse">
                         🎉 期間限定特価
                       </span>
                     </div>
-                    
-                    {/* 本来価格（二重取り消し線） */}
+
+                    {/* 本来価格 */}
                     <div className="mb-1">
-                      <span className="text-slate-400 text-lg" style={{ textDecoration: 'line-through', textDecorationStyle: 'double' }}>
+                      <span className="text-slate-500 text-lg relative">
                         ¥{plan.originalPrice.toLocaleString()}
+                        <div className="absolute inset-x-0 top-1/2 h-px bg-slate-500 rotate-[-10deg]"></div>
                       </span>
                     </div>
-                    
+
                     {/* 特価 */}
                     <div className="flex items-baseline">
-                      <span className="text-lg text-red-500 font-bold">¥</span>
-                      <span className="text-5xl font-black text-red-500 mx-1">
+                      <span className="text-2xl text-white font-bold mr-1">¥</span>
+                      <span className={`text-6xl font-black text-transparent bg-clip-text bg-gradient-to-br ${plan.gradient}`}>
                         {plan.price.toLocaleString()}
                       </span>
-                      <span className="text-slate-500">/{plan.period}</span>
+                      <span className="text-slate-400 ml-2">/{plan.period}</span>
                     </div>
                     <p className="text-sm text-slate-500 mt-1">（税込）</p>
-                    
+
                     {/* 割引率 */}
-                    <div className="mt-2">
-                      <span className="inline-block bg-red-100 text-red-600 text-sm font-bold px-3 py-1 rounded-full">
+                    <div className="mt-4">
+                      <span className="inline-block bg-white/5 text-white text-sm font-bold px-4 py-1.5 rounded-full border border-white/10">
                         {Math.round((1 - plan.price / plan.originalPrice) * 100)}%OFF
                       </span>
                     </div>
                   </div>
 
                   {/* Limit Badge */}
-                  <div className={`${colors.badge} rounded-full px-4 py-2 text-sm font-bold inline-block mb-6`}>
-                    採点回数: {plan.limit}
+                  <div className={`bg-white/5 rounded-xl px-5 py-3 text-sm font-bold inline-flex items-center mb-8 border border-white/5 w-full justify-center`}>
+                    <span className="text-slate-400 mr-2">採点回数:</span>
+                    <span className="text-white text-lg">{plan.limit}</span>
                   </div>
 
                   {/* Features */}
-                  <ul className="space-y-3 mb-8">
+                  <ul className="space-y-4 mb-8">
                     {plan.features.map((feature, index) => (
-                      <li key={index} className="flex items-start">
-                        <Check className={`w-5 h-5 ${colors.text} mr-3 flex-shrink-0 mt-0.5`} />
-                        <span className="text-slate-700">{feature}</span>
+                      <li key={index} className="flex items-start group/item">
+                        <div className={`w-6 h-6 rounded-full bg-gradient-to-br ${plan.gradient} p-[1px] mr-3 flex-shrink-0 mt-0.5 opacity-80 group-hover/item:opacity-100 transition-opacity`}>
+                          <div className="w-full h-full bg-slate-900 rounded-full flex items-center justify-center">
+                            <Check className="w-3.5 h-3.5 text-white" />
+                          </div>
+                        </div>
+                        <span className="text-slate-300 group-hover/item:text-white transition-colors">{feature}</span>
                       </li>
                     ))}
                   </ul>
+                </div>
 
-                  {/* CTA Button */}
+                {/* CTA Button */}
+                <div className="p-8 pt-0">
                   <button
-                    className={`w-full ${colors.button} text-white font-bold py-4 px-6 rounded-xl transition-colors shadow-lg`}
+                    className={`w-full py-4 px-6 rounded-xl font-bold text-white transition-all duration-300 shadow-lg hover:shadow-xl hover:-translate-y-1 bg-gradient-to-r ${plan.gradient} ${plan.shadow}`}
                   >
                     このプランを選択
                   </button>
@@ -244,53 +250,52 @@ export default function PricingPage() {
         </div>
 
         {/* FAQ Section */}
-        <div className="max-w-3xl mx-auto">
-          <h2 className="text-2xl font-bold text-slate-800 text-center mb-8">
+        <div className="max-w-4xl mx-auto">
+          <h2 className="text-3xl font-bold text-white text-center mb-12 flex items-center justify-center">
+            <HelpCircle className="w-8 h-8 mr-3 text-indigo-400" />
             よくあるご質問
           </h2>
-          
-          <div className="space-y-4">
-            <div className="bg-white rounded-2xl p-6 border border-slate-200 shadow-sm">
-              <h3 className="font-bold text-slate-800 mb-2">Q. 途中でプラン変更はできますか？</h3>
-              <p className="text-slate-600">
-                はい、いつでもプラン変更が可能です。アップグレードの場合は即時反映され、
-                ダウングレードの場合は次回更新日から適用されます。
-              </p>
-            </div>
-            
-            <div className="bg-white rounded-2xl p-6 border border-slate-200 shadow-sm">
-              <h3 className="font-bold text-slate-800 mb-2">Q. 解約はいつでもできますか？</h3>
-              <p className="text-slate-600">
-                はい、いつでも解約可能です。解約後も、現在の契約期間終了まではサービスをご利用いただけます。
-              </p>
-            </div>
-            
-            <div className="bg-white rounded-2xl p-6 border border-slate-200 shadow-sm">
-              <h3 className="font-bold text-slate-800 mb-2">Q. 回数を使い切った場合はどうなりますか？</h3>
-              <p className="text-slate-600">
-                月の採点回数を使い切った場合、次のリセット日まで採点機能はご利用いただけません。
-                上位プランへのアップグレードをご検討いただくか、次回リセット日までお待ちください。
-              </p>
-            </div>
-            
-            <div className="bg-white rounded-2xl p-6 border border-slate-200 shadow-sm">
-              <h3 className="font-bold text-slate-800 mb-2">Q. 無料トライアルはありますか？</h3>
-              <p className="text-slate-600">
-                初回ご登録の方には、3回分の無料採点をプレゼントしております。
-                まずはお試しいただき、サービスの品質をご確認ください。
-              </p>
-            </div>
+
+          <div className="grid gap-6">
+            {[
+              {
+                q: "途中でプラン変更はできますか？",
+                a: "はい、いつでもプラン変更が可能です。アップグレードの場合は即時反映され、ダウングレードの場合は次回更新日から適用されます。"
+              },
+              {
+                q: "解約はいつでもできますか？",
+                a: "はい、いつでも解約可能です。解約後も、現在の契約期間終了まではサービスをご利用いただけます。"
+              },
+              {
+                q: "回数を使い切った場合はどうなりますか？",
+                a: "月の採点回数を使い切った場合、次のリセット日まで採点機能はご利用いただけません。上位プランへのアップグレードをご検討いただくか、次回リセット日までお待ちください。"
+              },
+              {
+                q: "無料トライアルはありますか？",
+                a: "初回ご登録の方には、3回分の無料採点をプレゼントしております。まずはお試しいただき、サービスの品質をご確認ください。"
+              }
+            ].map((item, i) => (
+              <div key={i} className="bg-white/5 backdrop-blur-sm rounded-2xl p-8 border border-white/10 hover:bg-white/10 transition-colors">
+                <h3 className="font-bold text-white text-lg mb-3 flex items-start">
+                  <span className="text-indigo-400 mr-3 text-xl">Q.</span>
+                  {item.q}
+                </h3>
+                <p className="text-slate-400 leading-relaxed pl-8">
+                  {item.a}
+                </p>
+              </div>
+            ))}
           </div>
         </div>
 
         {/* Contact Section */}
-        <div className="text-center mt-16">
-          <p className="text-slate-600 mb-4">
+        <div className="text-center mt-24 pb-12">
+          <p className="text-slate-500 mb-6">
             ご不明な点がございましたら、お気軽にお問い合わせください
           </p>
-          <a 
+          <a
             href="mailto:katsu.yoshii@gmail.com"
-            className="inline-flex items-center text-indigo-600 hover:text-indigo-800 font-medium transition-colors"
+            className="inline-flex items-center text-indigo-400 hover:text-indigo-300 font-medium transition-colors px-6 py-3 rounded-full bg-white/5 hover:bg-white/10 border border-white/5"
           >
             katsu.yoshii@gmail.com
           </a>

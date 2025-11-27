@@ -700,6 +700,17 @@ export default function Home() {
         }
       } else {
         console.log('[Page] Grading successful, setting results...');
+        console.log('[Page] Results detail:', JSON.stringify(data.results, null, 2));
+        // 各結果の構造を確認
+        data.results.forEach((r: { label: string; result?: unknown; error?: string }, idx: number) => {
+          console.log(`[Page] Result ${idx}:`, {
+            label: r.label,
+            hasResult: !!r.result,
+            resultKeys: r.result ? Object.keys(r.result as object) : [],
+            hasGradingResult: !!(r.result as Record<string, unknown>)?.grading_result,
+            error: r.error
+          });
+        });
         setResults(data.results);
         // 利用情報を更新（エラーが発生しても続行、非同期で実行）
         refreshUsageInfo().catch((err) => {

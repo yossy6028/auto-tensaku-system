@@ -5,6 +5,6 @@
   "functions": {
     "src/app/api/grade/route.ts": {
       "maxDuration": 60
-    }
+}
   }
 }

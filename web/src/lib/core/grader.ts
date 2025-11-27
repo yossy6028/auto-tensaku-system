@@ -37,15 +37,7 @@ export class EduShiftGrader {
     private genAI: GoogleGenerativeAI;
     private model: ReturnType<GoogleGenerativeAI["getGenerativeModel"]>;
     
-    // OCR用の設定（低温度で正確性重視）
-    private readonly ocrConfig = {
-        temperature: 0,
-        topP: 0.1,
-        topK: 32,
-        responseMimeType: "application/json" as const
-    };
-    
-    // 採点用の設定
+    // 採点用の設定（systemInstructionと組み合わせて使用）
     private readonly gradingConfig = {
         temperature: 0.2,
         topP: 0.6,
@@ -240,42 +232,6 @@ export class EduShiftGrader {
     }
 
     /**
-     * 低温度OCRで答案テキストを抽出（補完・推測を防ぐ）
-     */
-    private async runStrictOcr(categorizedFiles: CategorizedFiles): Promise<string> {
-        if (categorizedFiles.studentFiles.length === 0) {
-            throw new Error("生徒の答案画像が見つかりません。");
-        }
-
-        const studentParts: ContentPart[] = [
-            { text: "【OCR対象】生徒の答案だけを1文字ずつ転写してください。補完・修正は禁止です。" }
-        ];
-        
-        categorizedFiles.studentFiles.forEach((file, idx) => {
-            const pageInfo = file.pageNumber ? ` (page ${file.pageNumber})` : "";
-            studentParts.push({ text: `生徒答案 ${idx + 1}${pageInfo} - ${file.name}` });
-            studentParts.push(this.toGenerativePart(file));
-        });
-
-        const ocrPrompt = `あなたはOCRエンジンです。生徒の答案画像から見えた文字だけをそのまま転写してください。
-- 読めない箇所は推測せず「〓」を使う
-- 句読点・改行・空白の有無をそのまま保持する
-- 誤字も修正しない
-出力は必ず JSON で { "recognized_text": "<逐字テキスト>" } 形式のみ。`;
-
-        const result = await this.model.generateContent({
-            contents: [{ role: "user", parts: [{ text: ocrPrompt }, ...studentParts] }],
-            generationConfig: this.ocrConfig
-        });
-
-        const text = result.response.text();
-        const parsed = this.extractJsonFromText(text);
-        const recognized = parsed?.recognized_text;
-
-        return typeof recognized === "string" ? recognized : "";
-    }
-
-    /**
      * テキストからJSONを抽出
      */
     private extractJsonFromText(text: string): Record<string, unknown> | null {
@@ -329,15 +285,10 @@ export class EduShiftGrader {
             }
         }
 
-        // OCRステップ実行
-        let recognizedText = "";
-        if (categorizedFiles) {
-            try {
-                recognizedText = await this.runStrictOcr(categorizedFiles);
-            } catch {
-                // OCR失敗時は直接採点にフォールバック
-            }
-        }
+        // OCRステップは廃止（過去の修正記録より）
+        // 2段階処理（OCR→採点）はsystemInstructionの適用漏れで精度低下を招くため、
+        // 1回のAPI呼び出しで画像から直接読み取りながら採点する方式に統一
+        const recognizedText = "";
 
         // 採点プロンプト
         const prompt = `Target Problem Label: ${sanitizedLabel}

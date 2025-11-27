@@ -627,18 +627,18 @@ export default function Home() {
       return;
     }
 
-    // usageInfoがまだ取得されていない場合は、エラーを表示しない
-    if (!usageInfo) {
-      console.log('[Page] usageInfo is not yet loaded, skipping plan check');
-      return;
-    }
-
-    // 利用可否チェック（管理者アカウントは除く）
-    const isAdmin = profile?.role === 'admin' || usageInfo?.accessType === 'admin';
-    if (!usageInfo.canUse && !isAdmin) {
-      setError('利用可能なプランがありません。プランを購入してください。');
-      setRequirePlan(true);
-      return;
+    // usageInfoがまだ取得されていない場合は、利用可否チェックをスキップしてAPIに任せる
+    // APIサーバーサイドでも利用可否チェックが行われるため、クライアントチェックはオプショナル
+    if (usageInfo) {
+      // 利用可否チェック（管理者アカウントは除く）
+      const isAdmin = profile?.role === 'admin' || usageInfo.accessType === 'admin';
+      if (!usageInfo.canUse && !isAdmin) {
+        setError('利用可能なプランがありません。プランを購入してください。');
+        setRequirePlan(true);
+        return;
+      }
+    } else {
+      console.log('[Page] usageInfo is not yet loaded, proceeding with API call (server will check)');
     }
 
     if (uploadedFiles.length === 0) {

@@ -59,11 +59,7 @@ export function AuthModal({ isOpen, onClose, initialMode = 'signin' }: AuthModal
         }
       } else if (mode === 'signin') {
         result = await signInWithPassword(email, password);
-        if (!result.error) {
-          // ログイン成功後、セッションが確立されるまで少し待つ
-          await new Promise(resolve => setTimeout(resolve, 500));
-          onClose();
-        }
+        // ログイン成功時はuseEffectで自動的にモーダルが閉じられる
       } else {
         result = await signUp(email, password);
         if (!result.error) {

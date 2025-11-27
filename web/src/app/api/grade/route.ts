@@ -7,8 +7,8 @@ import type { Database } from '@/lib/supabase/types';
 // Force dynamic to prevent caching
 export const dynamic = 'force-dynamic';
 
-// Vercel Proプラン: タイムアウトを60秒に設定
-export const maxDuration = 60;
+// Vercel Proプラン: タイムアウトを300秒（5分）に設定
+export const maxDuration = 300;
 
 type UploadedFilePart = {
     buffer: Buffer;

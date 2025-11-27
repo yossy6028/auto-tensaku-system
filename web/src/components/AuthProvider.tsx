@@ -507,8 +507,10 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
     const { data: { subscription: authSubscription } } = supabase.auth.onAuthStateChange(
       async (event, session) => {
+        console.log('[AuthProvider] onAuthStateChange:', event, session ? 'session exists' : 'session null');
         setSession(session);
-        setUser(session?.user ?? null);
+        const user = session?.user ?? null;
+        setUser(user);
 
         if (session?.user) {
           // エラーは各関数内で処理されるため、ここでは静かに失敗させる
@@ -516,10 +518,13 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
           await fetchSubscription(session.user.id).catch(() => {});
           await fetchFreeAccessInfo(session.user.id).catch(() => {});
         } else {
+          // セッションがない場合は、すべてのユーザー関連データをクリア
+          console.log('[AuthProvider] Session is null, clearing all user data');
           setProfile(null);
           setSubscription(null);
           setUsageInfo(null);
           setFreeAccessInfo(null);
+          setUser(null); // 念のため明示的にnullに設定
         }
       }
     );
@@ -531,18 +536,35 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
   useEffect(() => {
     // セッションとユーザーの両方が存在する場合のみ利用情報を取得
+    // ただし、セッションがnullの場合は、userもnullにすべき（整合性を保つ）
+    if (!session) {
+      console.log('[AuthProvider] useEffect: session is null, clearing usageInfo and ensuring user is null');
+      setUsageInfo(null);
+      if (user) {
+        console.log('[AuthProvider] Warning: user exists but session is null, clearing user');
+        setUser(null);
+      }
+      return;
+    }
+    
     if (user && session) {
+      // userとsessionのIDが一致することを確認
+      if (user.id !== session.user?.id) {
+        console.log('[AuthProvider] Warning: user ID and session user ID do not match, clearing user');
+        setUser(null);
+        setUsageInfo(null);
+        return;
+      }
       console.log('[AuthProvider] useEffect: user and session exist, calling refreshUsageInfo');
       refreshUsageInfo();
     } else {
       console.log('[AuthProvider] useEffect: user or session is null, not calling refreshUsageInfo', {
         hasUser: !!user,
-        hasSession: !!session
+        hasSession: !!session,
+        userId: user?.id,
+        sessionUserId: session?.user?.id
       });
-      // セッションがない場合はusageInfoをクリア
-      if (!session) {
-        setUsageInfo(null);
-      }
+      setUsageInfo(null);
     }
   }, [user, session, refreshUsageInfo]);
 

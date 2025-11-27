@@ -620,13 +620,21 @@ export default function Home() {
 
     // セッションがない場合は何もしない（ログインしていない状態）
     if (!session) {
+      setError(null);
+      setRequirePlan(false);
       openAuthModal('signin');
+      return;
+    }
+
+    // usageInfoがまだ取得されていない場合は、エラーを表示しない
+    if (!usageInfo) {
+      console.log('[Page] usageInfo is not yet loaded, skipping plan check');
       return;
     }
 
     // 利用可否チェック（管理者アカウントは除く）
     const isAdmin = profile?.role === 'admin' || usageInfo?.accessType === 'admin';
-    if (!usageInfo?.canUse && !isAdmin) {
+    if (!usageInfo.canUse && !isAdmin) {
       setError('利用可能なプランがありません。プランを購入してください。');
       setRequirePlan(true);
       return;

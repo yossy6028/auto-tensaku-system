@@ -12,7 +12,7 @@ interface UsageInfo {
   usageLimit: number | null;
   remainingCount: number | null;
   planName: string | null;
-  accessType: 'subscription' | 'trial' | 'promo' | 'none';
+  accessType: 'subscription' | 'trial' | 'promo' | 'none' | 'admin';
 }
 
 interface FreeAccessInfo {
@@ -189,7 +189,12 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       }
 
       if (data) {
-        setProfile(data as UserProfile);
+        const userProfile = data as UserProfile;
+        setProfile(userProfile);
+        // プロファイルが取得されたら、利用可否情報を更新（管理者チェックのため）
+        if (userProfile.role === 'admin') {
+          console.log('[AuthProvider] Admin profile detected, will update usage info');
+        }
       } else {
         setProfile(null);
       }
@@ -279,6 +284,21 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       return;
     }
 
+    // 管理者アカウントの場合は常に無制限で利用可能
+    if (profile?.role === 'admin') {
+      console.log('[AuthProvider] Admin user detected, setting unlimited access');
+      setUsageInfo({
+        canUse: true,
+        message: '管理者アカウント: 無制限で利用可能です',
+        usageCount: null,
+        usageLimit: null,
+        remainingCount: null,
+        planName: '管理者プラン',
+        accessType: 'admin',
+      });
+      return;
+    }
+
     try {
       const rpcClient = supabaseClient as unknown as {
         rpc: (fn: string, args: Record<string, unknown>) => Promise<{ data: unknown; error: unknown }>;
@@ -339,7 +359,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         accessType: 'none',
       });
     }
-  }, [supabaseClient, user, fetchFreeAccessInfo]);
+  }, [supabaseClient, user, profile, fetchFreeAccessInfo]);
 
   // 初期化
   useEffect(() => {
@@ -460,7 +480,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     if (user) {
       refreshUsageInfo();
     }
-  }, [user, refreshUsageInfo]);
+  }, [user, profile, refreshUsageInfo]);
 
   const signInWithEmail = async (email: string) => {
     if (!supabase) return { error: new Error('Supabase is not configured') };

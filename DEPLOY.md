@@ -27,11 +27,13 @@
 Vercelのプロジェクト設定で以下の環境変数を設定：
 
 ```
-GEMINI_API_KEY=<YOUR_GEMINI_API_KEY>
+GEMINI_API_KEY=<あなたのGemini APIキー>
 MODEL_NAME=gemini-3-pro-image-preview
-NEXT_PUBLIC_SUPABASE_URL=<YOUR_SUPABASE_URL>
-NEXT_PUBLIC_SUPABASE_ANON_KEY=<YOUR_SUPABASE_ANON_KEY>
+NEXT_PUBLIC_SUPABASE_URL=<あなたのSupabase URL>
+NEXT_PUBLIC_SUPABASE_ANON_KEY=<あなたのSupabase Anon Key>
 ```
+
+⚠️ **重要**: 機密情報は絶対にGitリポジトリにコミットしないでください。環境変数は`.env.local`ファイルに保存し、`.gitignore`で除外されています。
 
 **設定方法:**
 1. Vercelプロジェクトの「Settings」→「Environment Variables」

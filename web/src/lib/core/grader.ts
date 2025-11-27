@@ -20,10 +20,38 @@ type CategorizedFiles = {
 
 type GenerativePart = { inlineData: { data: string; mimeType: string } };
 type ContentPart = { text: string } | GenerativePart;
+
+// 必須チェック項目の型定義
+type StyleCheckResult = {
+    detected_style: "常体" | "敬体" | "混在";
+    keigo_count: number;
+    jotai_count: number;
+    examples: string[];
+    is_mixed: boolean;
+    deduction: number;
+};
+
+type VocabularyCheckResult = {
+    repeated_words: Array<{ word: string; count: number }>;
+    deduction: number;
+};
+
+type MandatoryChecks = {
+    style_check: StyleCheckResult;
+    vocabulary_check: VocabularyCheckResult;
+    programmatic_validation: boolean;  // プログラムによる検証が行われたか
+};
+
+type DeductionDetail = {
+    reason: string;
+    deduction_percentage: number;
+};
+
 type GradingResult = Record<string, unknown> & { 
     score?: number; 
     recognized_text?: string;
-    deduction_details?: Array<{ deduction_percentage?: number }>;
+    deduction_details?: DeductionDetail[];
+    mandatory_checks?: MandatoryChecks;
 };
 
 // ファイル分類用の正規表現パターン
@@ -82,6 +110,210 @@ export class EduShiftGrader {
         if (typeof raw !== "number" || Number.isNaN(raw)) return null;
         if (raw > 0 && raw <= 1) return Math.round(raw * 100);
         return Math.min(100, Math.max(0, Math.round(raw)));
+    }
+
+    // ========================================
+    // プログラムによる検証（AIの出力を補完・修正）
+    // ========================================
+
+    /**
+     * 文体チェック（常体/敬体の混在検出）
+     * プログラムで確実に検出する
+     */
+    private checkStyleProgrammatically(text: string): StyleCheckResult {
+        // 敬体（です・ます調）のパターン
+        const keigoPatterns = [
+            /です[。、]/g,
+            /ます[。、]/g,
+            /でした[。、]/g,
+            /ました[。、]/g,
+            /ですか[。、？]/g,
+            /ますか[。、？]/g,
+            /ません[。、]/g,
+            /ですが/g,
+            /ますが/g,
+        ];
+        
+        // 常体（だ・である調）のパターン
+        const jotaiPatterns = [
+            /だ[。、]/g,
+            /である[。、]/g,
+            /だった[。、]/g,
+            /だから/g,
+            /ないが/g,
+            /あるが/g,
+            /思う[。、]/g,
+            /考える[。、]/g,
+            /感じる[。、]/g,
+        ];
+
+        let keigoCount = 0;
+        let jotaiCount = 0;
+        const keigoExamples: string[] = [];
+        const jotaiExamples: string[] = [];
+
+        // 敬体のカウント
+        for (const pattern of keigoPatterns) {
+            const matches = text.match(pattern);
+            if (matches) {
+                keigoCount += matches.length;
+                matches.slice(0, 2).forEach(m => {
+                    if (!keigoExamples.includes(m)) keigoExamples.push(m);
+                });
+            }
+        }
+
+        // 常体のカウント
+        for (const pattern of jotaiPatterns) {
+            const matches = text.match(pattern);
+            if (matches) {
+                jotaiCount += matches.length;
+                matches.slice(0, 2).forEach(m => {
+                    if (!jotaiExamples.includes(m)) jotaiExamples.push(m);
+                });
+            }
+        }
+
+        const isMixed = keigoCount > 0 && jotaiCount > 0;
+        let detectedStyle: "常体" | "敬体" | "混在" = "常体";
+        
+        if (isMixed) {
+            detectedStyle = "混在";
+        } else if (keigoCount > jotaiCount) {
+            detectedStyle = "敬体";
+        } else {
+            detectedStyle = "常体";
+        }
+
+        const examples = [
+            ...keigoExamples.map(e => `${e}（敬体）`),
+            ...jotaiExamples.map(e => `${e}（常体）`)
+        ];
+
+        return {
+            detected_style: detectedStyle,
+            keigo_count: keigoCount,
+            jotai_count: jotaiCount,
+            examples: examples.slice(0, 4),
+            is_mixed: isMixed,
+            deduction: isMixed ? 10 : 0
+        };
+    }
+
+    /**
+     * 語彙チェック（同じ単語の繰り返し検出）
+     * プログラムで確実に検出する
+     */
+    private checkVocabularyProgrammatically(text: string): VocabularyCheckResult {
+        // 重複をチェックする単語パターン（2文字以上の形容詞・副詞・名詞）
+        const wordsToCheck = [
+            "あたたかい", "あたたか", "温かい", "暖かい",
+            "うれしい", "嬉しい", "楽しい", "たのしい",
+            "すばらしい", "素晴らしい", "素敵", "すてき",
+            "大切", "たいせつ", "大事", "だいじ",
+            "好き", "すき", "きれい", "綺麗",
+            "やさしい", "優しい", "親切", "しんせつ",
+            "安心", "あんしん", "幸せ", "しあわせ",
+            "特別", "とくべつ", "大好き", "だいすき",
+        ];
+
+        const repeatedWords: Array<{ word: string; count: number }> = [];
+
+        for (const word of wordsToCheck) {
+            const regex = new RegExp(word, 'g');
+            const matches = text.match(regex);
+            if (matches && matches.length >= 2) {
+                repeatedWords.push({ word, count: matches.length });
+            }
+        }
+
+        // 減点計算: 2回→5%, 3回以上→10%
+        let deduction = 0;
+        for (const item of repeatedWords) {
+            if (item.count >= 3) {
+                deduction = Math.max(deduction, 10);
+            } else if (item.count === 2) {
+                deduction = Math.max(deduction, 5);
+            }
+        }
+
+        return {
+            repeated_words: repeatedWords,
+            deduction
+        };
+    }
+
+    /**
+     * AIの出力を検証し、不足があればプログラムで補完する
+     */
+    private validateAndEnhanceGrading(parsed: Record<string, unknown>): Record<string, unknown> {
+        const gradingResult = parsed.grading_result as GradingResult | undefined;
+        if (!gradingResult) return parsed;
+
+        const recognizedText = gradingResult.recognized_text as string || "";
+        
+        // 既存のdeduction_detailsを取得
+        let deductionDetails: DeductionDetail[] = 
+            Array.isArray(gradingResult.deduction_details) 
+                ? [...gradingResult.deduction_details] 
+                : [];
+
+        // プログラムによる検証結果を格納
+        const programmaticChecks: MandatoryChecks = {
+            style_check: this.checkStyleProgrammatically(recognizedText),
+            vocabulary_check: this.checkVocabularyProgrammatically(recognizedText),
+            programmatic_validation: true
+        };
+
+        // ========================================
+        // AIの出力に不足があれば補完
+        // ========================================
+
+        // 1. 文体チェックの補完
+        const aiStyleCheck = (gradingResult.mandatory_checks as MandatoryChecks | undefined)?.style_check;
+        const styleDeductionExists = deductionDetails.some(d => 
+            d.reason?.includes("文体") || d.reason?.includes("敬体") || d.reason?.includes("常体") || d.reason?.includes("混在")
+        );
+
+        if (programmaticChecks.style_check.is_mixed && !styleDeductionExists) {
+            // AIが文体混在を見落としている場合、追加
+            console.log("[Grader] プログラム検証: 文体混在を検出、減点を追加");
+            deductionDetails.push({
+                reason: `文体の混在（${programmaticChecks.style_check.examples.join(", ")}）`,
+                deduction_percentage: 10
+            });
+        }
+
+        // 2. 語彙チェックの補完
+        const vocabDeductionExists = deductionDetails.some(d => 
+            d.reason?.includes("繰り返し") || d.reason?.includes("重複") || d.reason?.includes("語彙")
+        );
+
+        if (programmaticChecks.vocabulary_check.deduction > 0 && !vocabDeductionExists) {
+            // AIが語彙重複を見落としている場合、追加
+            const repeatedList = programmaticChecks.vocabulary_check.repeated_words
+                .map(w => `「${w.word}」${w.count}回`)
+                .join(", ");
+            console.log("[Grader] プログラム検証: 語彙重複を検出、減点を追加");
+            deductionDetails.push({
+                reason: `同じ表現の繰り返し（${repeatedList}）`,
+                deduction_percentage: programmaticChecks.vocabulary_check.deduction
+            });
+        }
+
+        // 更新したdeduction_detailsを設定
+        gradingResult.deduction_details = deductionDetails;
+
+        // mandatory_checksにプログラム検証結果を追加
+        gradingResult.mandatory_checks = programmaticChecks;
+
+        // スコアを再計算
+        const finalScore = this.computeFinalScore(gradingResult);
+        if (finalScore !== null) {
+            gradingResult.score = finalScore;
+        }
+
+        return parsed;
     }
 
     /**
@@ -318,14 +550,18 @@ System Instructionに定義された以下のルールを厳密に適用して�
 
         if (parsed) {
             delete parsed.debug_info;
-            const gradingResult = parsed.grading_result as GradingResult | undefined;
-            if (gradingResult) {
-                const finalScore = this.computeFinalScore(gradingResult);
-                if (finalScore !== null) {
-                    gradingResult.score = finalScore;
-                }
-            }
-            return parsed;
+            
+            // プログラムによる検証・補完を実行
+            // AIが見落とした文体チェック、語彙チェックを補完
+            const validated = this.validateAndEnhanceGrading(parsed);
+            
+            console.log("[Grader] プログラム検証完了", {
+                styleCheck: (validated.grading_result as GradingResult | undefined)?.mandatory_checks?.style_check,
+                vocabCheck: (validated.grading_result as GradingResult | undefined)?.mandatory_checks?.vocabulary_check,
+                finalScore: (validated.grading_result as GradingResult | undefined)?.score
+            });
+            
+            return validated;
         }
 
         return {

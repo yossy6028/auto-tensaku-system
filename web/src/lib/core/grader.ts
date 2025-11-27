@@ -451,16 +451,22 @@ Output the result strictly in JSON format.
             }
         }
 
-        // 低温度OCRで確定したテキストを作り、以降の採点で補完させない
+        // OCRステップをスキップして直接採点（タイムアウト対策）
+        // 本番環境でタイムアウトが解消されたら、OCRを再有効化可能
+        const SKIP_OCR_STEP = true;
         let recognizedText = "";
-        if (categorizedFiles) {
+        
+        if (!SKIP_OCR_STEP && categorizedFiles) {
             try {
+                console.log('[Grader] Starting OCR step...');
                 recognizedText = await this.runStrictOcr(categorizedFiles);
                 console.log('[Grader] OCR recognized_text length:', recognizedText.length);
             } catch (ocrError) {
                 console.warn('[Grader] OCR step failed, falling back to direct grading:', ocrError);
                 recognizedText = "";
             }
+        } else {
+            console.log('[Grader] OCR step skipped (SKIP_OCR_STEP=true)');
         }
 
         // シンプルなプロンプト - システムインストラクションに従わせる
@@ -507,11 +513,18 @@ ${recognizedText || "（OCRが利用できなかったため、モデルに画�
 - 結果はJSON形式で出力してください`;
 
         console.log('[Grader] Sending single request with System Instruction (OCR rules included)...');
+        console.log(`[Grader] Image parts count: ${imageParts.length}`);
+        console.log(`[Grader] Prompt length: ${prompt.length} chars`);
+        
+        const apiCallStart = Date.now();
+        console.log(`[Grader] API call starting at ${new Date().toISOString()}`);
         
         const result = await this.model.generateContent({
             contents: [{ role: "user", parts: [{ text: prompt }, ...imageParts] }],
             generationConfig: this.gradingGenerationConfig
         });
+        
+        console.log(`[Grader] API call completed in ${Date.now() - apiCallStart}ms`);
 
         const response = await result.response;
         const text = response.text();

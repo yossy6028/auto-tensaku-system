@@ -71,8 +71,8 @@ export async function POST(req: NextRequest) {
     
     // デバッグモード: Supabaseチェックをスキップしてテスト
     const DEBUG_SKIP_SUPABASE = true;
-    // デバッグモード: Gemini APIの最小テスト
-    const DEBUG_MINIMAL_TEST = true;
+    // デバッグモード: Gemini APIの最小テスト (false=実際の採点を実行)
+    const DEBUG_MINIMAL_TEST = false;
     
     try {
         log('Starting request processing...');

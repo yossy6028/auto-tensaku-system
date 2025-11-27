@@ -20,88 +20,24 @@ type UploadedFilePart = {
 
 type CanUseServiceResult = Database['public']['Functions']['can_use_service']['Returns'][number];
 
-// PDFを画像に変換する関数
-async function convertPdfToImages(
+// PDFを処理する関数
+// 注意: pdf-to-imgはVercelサーバーレス環境で動作しないため、
+// PDFは直接Geminiに送信する（Gemini 2.0はPDFを直接読める）
+async function processPdfFile(
     pdfBuffer: Buffer,
     fileName: string,
-    pageInfo?: { answerPage?: string; problemPage?: string; modelAnswerPage?: string } | null
+    _pageInfo?: { answerPage?: string; problemPage?: string; modelAnswerPage?: string } | null
 ): Promise<UploadedFilePart[]> {
-    try {
-        // Dynamic import for pdf-to-img (ESM module)
-        const { pdf } = await import('pdf-to-img');
-        
-        const images: UploadedFilePart[] = [];
-        
-        // ページ番号指定がある場合、対象ページを解析
-        const targetPages = new Set<number>();
-        if (pageInfo) {
-            const parsePageRange = (pageStr: string | undefined): number[] => {
-                if (!pageStr) return [];
-                const pages: number[] = [];
-                const parts = pageStr.split(/[,、]/);
-                for (const part of parts) {
-                    const trimmed = part.trim();
-                    if (trimmed.includes('-')) {
-                        const [start, end] = trimmed.split('-').map(s => parseInt(s.trim()));
-                        if (!isNaN(start) && !isNaN(end)) {
-                            for (let i = start; i <= end; i++) {
-                                pages.push(i);
-                            }
-                        }
-                    } else {
-                        const num = parseInt(trimmed);
-                        if (!isNaN(num)) {
-                            pages.push(num);
-                        }
-                    }
-                }
-                return pages;
-            };
-            
-            parsePageRange(pageInfo.answerPage).forEach(p => targetPages.add(p));
-            parsePageRange(pageInfo.problemPage).forEach(p => targetPages.add(p));
-            parsePageRange(pageInfo.modelAnswerPage).forEach(p => targetPages.add(p));
-        }
-        
-        console.log('[PDF Converter] Converting PDF to images...');
-        console.log('[PDF Converter] Target pages:', targetPages.size > 0 ? Array.from(targetPages) : 'all');
-        
-        let pageNum = 0;
-        // pdf-to-imgはasync iteratorを返す
-        for await (const image of await pdf(pdfBuffer, { scale: 2.0 })) {
-            pageNum++;
-            
-            // ページ指定がある場合、対象ページのみ変換
-            if (targetPages.size > 0 && !targetPages.has(pageNum)) {
-                console.log(`[PDF Converter] Skipping page ${pageNum}`);
-                continue;
-            }
-            
-            console.log(`[PDF Converter] Converting page ${pageNum}`);
-            
-            // imageはBufferとして返される
-            images.push({
-                buffer: Buffer.from(image),
-                mimeType: 'image/png',
-                name: `${fileName}_page${pageNum}.png`,
-                pageNumber: pageNum,
-                sourceFileName: fileName
-            });
-        }
-        
-        console.log(`[PDF Converter] Converted ${images.length} pages to images`);
-        return images;
-        
-    } catch (error) {
-        console.error('[PDF Converter] Error converting PDF:', error);
-        // 変換に失敗した場合は元のPDFをそのまま返す
-        return [{
-            buffer: pdfBuffer,
-            mimeType: 'application/pdf',
-            name: fileName,
-            sourceFileName: fileName
-        }];
-    }
+    console.log(`[PDF Processor] Processing PDF: ${fileName} (${Math.round(pdfBuffer.length / 1024)} KB)`);
+    console.log('[PDF Processor] Sending PDF directly to Gemini (no image conversion)');
+    
+    // Gemini 2.0はPDFを直接処理できるので、変換せずにそのまま送信
+    return [{
+        buffer: pdfBuffer,
+        mimeType: 'application/pdf',
+        name: fileName,
+        sourceFileName: fileName
+    }];
 }
 
 async function getSupabaseClient() {
@@ -251,7 +187,7 @@ export async function POST(req: NextRequest) {
                 // PDFの場合は画像に変換
                 if (file.type === 'application/pdf') {
                     console.log(`[API] Converting PDF to images: ${file.name}`);
-                    return await convertPdfToImages(buffer, file.name, pdfPageInfo);
+                    return await processPdfFile(buffer, file.name, pdfPageInfo);
                 }
                 
                 // 画像の場合はそのまま

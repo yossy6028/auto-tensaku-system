@@ -661,6 +661,11 @@ export default function Home() {
     setError(null);
     setRequirePlan(false);
     setResults(null);
+    
+    console.log('[Page] Starting grading process...');
+    console.log('[Page] Target labels:', targetLabels);
+    console.log('[Page] Files count:', uploadedFiles.length);
+    
     const formData = new FormData();
     formData.append('targetLabels', JSON.stringify(targetLabels));
 
@@ -668,20 +673,25 @@ export default function Home() {
     const hasPdfPageInfo = pdfPageInfo.answerPage || pdfPageInfo.problemPage || pdfPageInfo.modelAnswerPage;
     if (hasPdfPageInfo) {
       formData.append('pdfPageInfo', JSON.stringify(pdfPageInfo));
+      console.log('[Page] PDF page info:', pdfPageInfo);
     }
 
     // すべてのファイルを追加
-    uploadedFiles.forEach((file) => {
+    uploadedFiles.forEach((file, idx) => {
       formData.append(`files`, file);
+      console.log(`[Page] File ${idx}: ${file.name} (${(file.size / 1024).toFixed(1)} KB)`);
     });
 
     try {
+      console.log('[Page] Sending request to /api/grade...');
       const res = await fetch('/api/grade', {
         method: 'POST',
         body: formData,
         credentials: 'include',
       });
+      console.log('[Page] Response status:', res.status);
       const data = await res.json();
+      console.log('[Page] Response data:', data);
 
       if (data.status === 'error') {
         setError(data.message);

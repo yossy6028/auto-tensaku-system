@@ -147,16 +147,16 @@ export async function POST(req: NextRequest) {
             .from('user_profiles')
             .select('role')
             .eq('id', user.id)
-            .single();
+            .maybeSingle();
 
-        if (!profileError && profile?.role === 'admin') {
-            console.log('[Grade API] Admin user detected, allowing access');
-            // 管理者の場合は利用可能チェックをスキップ
-        } else {
-            const supabaseRpc = supabase as unknown as {
-                rpc: (fn: string, args: Record<string, unknown>) => Promise<{ data: unknown; error: { message?: string } | null }>;
-            };
+        const isAdmin = !profileError && profile && (profile as { role?: string }).role === 'admin';
 
+        const supabaseRpc = supabase as unknown as {
+            rpc: (fn: string, args: Record<string, unknown>) => Promise<{ data: unknown; error: { message?: string } | null }>;
+        };
+
+        // 管理者でない場合のみ利用可否チェック
+        if (!isAdmin) {
             // 利用可否チェック
             const { data: usageData, error: usageError } = await supabaseRpc
                 .rpc('can_use_service', { p_user_id: user.id });
@@ -180,6 +180,8 @@ export async function POST(req: NextRequest) {
                     { status: 403 }
                 );
             }
+        } else {
+            console.log('[Grade API] Admin user detected, allowing access');
         }
 
         const formData = await req.formData();

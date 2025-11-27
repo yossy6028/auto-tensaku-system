@@ -1404,7 +1404,7 @@ export default function Home() {
                 )}
               </div>
 
-              {error && session && (
+              {error && session && user && (
                 <div className="rounded-2xl bg-red-50 p-5 border border-red-100 animate-shake shadow-sm">
                   <div className="flex items-center mb-2">
                     <div className="bg-red-100 p-2 rounded-full mr-4">

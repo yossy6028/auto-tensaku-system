@@ -15,9 +15,9 @@ export default function Home() {
   const [results, setResults] = useState<any[] | null>(null);
   const [error, setError] = useState<string | null>(null);
 
-  const componentRefs = useRef<Map<number, React.RefObject<HTMLDivElement>>>(new Map());
+  const componentRefs = useRef<Map<number, React.RefObject<HTMLDivElement | null>>>(new Map());
   
-  const getComponentRef = (index: number): React.RefObject<HTMLDivElement> => {
+  const getComponentRef = (index: number): React.RefObject<HTMLDivElement | null> => {
     if (!componentRefs.current.has(index)) {
       componentRefs.current.set(index, React.createRef<HTMLDivElement>());
     }

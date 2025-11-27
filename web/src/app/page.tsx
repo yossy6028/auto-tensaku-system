@@ -38,7 +38,7 @@ type GradingResponseItem = {
 };
 
 export default function Home() {
-  const { user, usageInfo, refreshUsageInfo, isLoading: authLoading, profile } = useAuth();
+  const { user, usageInfo, refreshUsageInfo, isLoading: authLoading, profile, session } = useAuth();
   const [isAuthModalOpen, setIsAuthModalOpen] = useState(false);
   const [authMode, setAuthMode] = useState<'signin' | 'signup'>('signin');
 
@@ -606,6 +606,12 @@ export default function Home() {
 
     // ログインチェック（念のため）
     if (!user) {
+      openAuthModal('signin');
+      return;
+    }
+
+    // セッションがない場合は何もしない（ログインしていない状態）
+    if (!session) {
       openAuthModal('signin');
       return;
     }

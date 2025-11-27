@@ -66,11 +66,20 @@ async function getSupabaseClient() {
 }
 
 export async function POST(req: NextRequest) {
+    const startTime = Date.now();
+    const log = (msg: string) => console.log(`[Grade API] [${Date.now() - startTime}ms] ${msg}`);
+    
     try {
+        log('Starting request processing...');
+        
+        log('Getting Supabase client...');
         const supabase = await getSupabaseClient();
+        log('Supabase client obtained');
         
         // ユーザー認証チェック
+        log('Checking user authentication...');
         const { data: { user }, error: authError } = await supabase.auth.getUser();
+        log(`Auth check complete: ${user ? 'user found' : 'no user'}, error: ${authError?.message || 'none'}`);
         
         if (authError || !user) {
             return NextResponse.json(
@@ -84,8 +93,10 @@ export async function POST(req: NextRequest) {
         };
 
         // 利用可否チェック
+        log('Calling can_use_service RPC...');
         const { data: usageData, error: usageError } = await supabaseRpc
             .rpc('can_use_service', { p_user_id: user.id });
+        log(`RPC complete: error=${usageError?.message || 'none'}`);
         const usageRows = usageData as CanUseServiceResult[] | null;
         
         if (usageError) {
@@ -97,6 +108,7 @@ export async function POST(req: NextRequest) {
         }
 
         if (!usageRows || usageRows.length === 0 || !usageRows[0].can_use) {
+            log('User cannot use service');
             return NextResponse.json(
                 { 
                     status: 'error', 
@@ -106,8 +118,11 @@ export async function POST(req: NextRequest) {
                 { status: 403 }
             );
         }
+        log('User can use service');
 
+        log('Parsing form data...');
         const formData = await req.formData();
+        log('Form data parsed');
         const targetLabelsJson = formData.get('targetLabels') as string;
         const files = formData.getAll('files') as File[];
         const pdfPageInfoJson = formData.get('pdfPageInfo') as string | null;
@@ -204,23 +219,29 @@ export async function POST(req: NextRequest) {
         const fileBuffers = fileBuffersNested.flat();
         console.log(`[API] Total files to process: ${fileBuffers.length}`);
 
+        log('Creating EduShiftGrader instance...');
         const grader = new EduShiftGrader();
+        log('Grader created');
         const results: Array<{ label: string; result?: unknown; error?: string; status?: string }> = [];
 
         for (const label of sanitizedLabels) {
             try {
+                log(`Starting grading for: ${label}`);
                 const result = await grader.gradeAnswerFromMultipleFiles(
                     label,
                     fileBuffers,
                     pdfPageInfo  // PDFページ番号情報を渡す
                 );
+                log(`Grading complete for: ${label}`);
                 results.push({ label, result });
             } catch (error: unknown) {
                 const message = error instanceof Error ? error.message : 'Unknown error';
+                log(`Grading error for ${label}: ${message}`);
                 console.error(`Error grading ${label}:`, error);
                 results.push({ label, error: message, status: 'error' });
             }
         }
+        log('All grading complete');
 
         // 採点成功時に利用回数をインクリメント
         const successfulGradings = results.filter(r => r.result && !r.error);

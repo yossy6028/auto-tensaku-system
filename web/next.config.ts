@@ -9,7 +9,7 @@ const dirname =
 
 const nextConfig = {
   turbopack: {
-    root: dirname,
+    root: dirname, // Turbopackのroot誤検出を防ぐ
   },
 };
 

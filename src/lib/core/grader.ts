@@ -1,4 +1,5 @@
 import { GoogleGenerativeAI } from "@google/generative-ai";
+import { GoogleGenerativeAI } from "@google/generative-ai";
 import { CONFIG } from "../config";
 import { SYSTEM_INSTRUCTION } from "../prompts/eduShift";
 import { fileToGenerativePart, getMimeType } from "../utils/image";

@@ -77,7 +77,31 @@ Output the result strictly in JSON format.
         const jsonString = text.replace(/```json\n|\n```/g, "").trim();
 
         try {
-            return JSON.parse(jsonString);
+            const parsedResult = JSON.parse(jsonString);
+
+            // Enforce 5% step for deductions and recalculate score
+            if (parsedResult.grading_result && Array.isArray(parsedResult.grading_result.deduction_details)) {
+                let totalDeduction = 0;
+                parsedResult.grading_result.deduction_details = parsedResult.grading_result.deduction_details.map((detail: any) => {
+                    // Round up to nearest 5
+                    const originalDeduction = detail.deduction_percentage || 0;
+                    const roundedDeduction = Math.ceil(originalDeduction / 5) * 5;
+                    // Ensure at least 5% if there is a deduction reason but 0% was returned (edge case)
+                    const finalDeduction = (originalDeduction > 0 && roundedDeduction === 0) ? 5 : roundedDeduction;
+
+                    totalDeduction += finalDeduction;
+
+                    return {
+                        ...detail,
+                        deduction_percentage: finalDeduction
+                    };
+                });
+
+                // Recalculate score
+                parsedResult.grading_result.score = Math.max(0, 100 - totalDeduction);
+            }
+
+            return parsedResult;
         } catch (e) {
             console.error("Failed to parse JSON response:", text);
             return {

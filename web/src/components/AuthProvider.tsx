@@ -530,17 +530,29 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   }, [supabase, fetchProfile, fetchSubscription, fetchFreeAccessInfo]);
 
   useEffect(() => {
-    if (user) {
+    // セッションとユーザーの両方が存在する場合のみ利用情報を取得
+    if (user && session) {
+      console.log('[AuthProvider] useEffect: user and session exist, calling refreshUsageInfo');
       refreshUsageInfo();
+    } else {
+      console.log('[AuthProvider] useEffect: user or session is null, not calling refreshUsageInfo', {
+        hasUser: !!user,
+        hasSession: !!session
+      });
+      // セッションがない場合はusageInfoをクリア
+      if (!session) {
+        setUsageInfo(null);
+      }
     }
-  }, [user, refreshUsageInfo]);
+  }, [user, session, refreshUsageInfo]);
 
-  // プロファイルが変更されたときにも利用可否情報を更新
+  // プロファイルが変更されたときにも利用可否情報を更新（セッションがある場合のみ）
   useEffect(() => {
-    if (user && profile) {
+    if (user && session && profile) {
+      console.log('[AuthProvider] Profile updated, refreshing usage info.');
       refreshUsageInfo();
     }
-  }, [user, profile, refreshUsageInfo]);
+  }, [user, session, profile, refreshUsageInfo]);
 
   const signInWithEmail = async (email: string) => {
     if (!supabase) return { error: new Error('Supabase is not configured') };

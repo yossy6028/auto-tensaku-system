@@ -71,6 +71,8 @@ export async function POST(req: NextRequest) {
     
     // デバッグモード: Supabaseチェックをスキップしてテスト
     const DEBUG_SKIP_SUPABASE = true;
+    // デバッグモード: Gemini APIの最小テスト
+    const DEBUG_MINIMAL_TEST = true;
     
     try {
         log('Starting request processing...');
@@ -235,29 +237,76 @@ export async function POST(req: NextRequest) {
         const fileBuffers = fileBuffersNested.flat();
         console.log(`[API] Total files to process: ${fileBuffers.length}`);
 
-        log('Creating EduShiftGrader instance...');
-        const grader = new EduShiftGrader();
-        log('Grader created');
         const results: Array<{ label: string; result?: unknown; error?: string; status?: string }> = [];
 
-        for (const label of sanitizedLabels) {
+        if (DEBUG_MINIMAL_TEST) {
+            // 最小限のGemini APIテスト
+            log('DEBUG: Running minimal Gemini API test...');
             try {
-                log(`Starting grading for: ${label}`);
-                const result = await grader.gradeAnswerFromMultipleFiles(
-                    label,
-                    fileBuffers,
-                    pdfPageInfo  // PDFページ番号情報を渡す
-                );
-                log(`Grading complete for: ${label}`);
-                results.push({ label, result });
+                const { GoogleGenerativeAI } = await import('@google/generative-ai');
+                log('DEBUG: GoogleGenerativeAI imported');
+                
+                const apiKey = process.env.GEMINI_API_KEY;
+                const modelName = process.env.MODEL_NAME || 'gemini-2.0-flash';
+                log(`DEBUG: API Key exists: ${!!apiKey}, Model: ${modelName}`);
+                
+                if (!apiKey) {
+                    throw new Error('GEMINI_API_KEY is not set');
+                }
+                
+                const genAI = new GoogleGenerativeAI(apiKey);
+                log('DEBUG: GoogleGenerativeAI instance created');
+                
+                const model = genAI.getGenerativeModel({ model: modelName });
+                log('DEBUG: Model obtained');
+                
+                // 最小限のテキスト生成
+                log('DEBUG: Calling generateContent with simple text...');
+                const result = await model.generateContent('Say "Hello" in Japanese');
+                log('DEBUG: generateContent returned');
+                
+                const response = await result.response;
+                const text = response.text();
+                log(`DEBUG: Response text: ${text.substring(0, 100)}`);
+                
+                results.push({ 
+                    label: 'MINIMAL_TEST', 
+                    result: { 
+                        success: true, 
+                        message: 'Gemini API is working',
+                        response: text 
+                    } 
+                });
             } catch (error: unknown) {
                 const message = error instanceof Error ? error.message : 'Unknown error';
-                log(`Grading error for ${label}: ${message}`);
-                console.error(`Error grading ${label}:`, error);
-                results.push({ label, error: message, status: 'error' });
+                log(`DEBUG: Minimal test error: ${message}`);
+                console.error('DEBUG: Minimal test error:', error);
+                results.push({ label: 'MINIMAL_TEST', error: message, status: 'error' });
+            }
+        } else {
+            log('Creating EduShiftGrader instance...');
+            const grader = new EduShiftGrader();
+            log('Grader created');
+
+            for (const label of sanitizedLabels) {
+                try {
+                    log(`Starting grading for: ${label}`);
+                    const result = await grader.gradeAnswerFromMultipleFiles(
+                        label,
+                        fileBuffers,
+                        pdfPageInfo  // PDFページ番号情報を渡す
+                    );
+                    log(`Grading complete for: ${label}`);
+                    results.push({ label, result });
+                } catch (error: unknown) {
+                    const message = error instanceof Error ? error.message : 'Unknown error';
+                    log(`Grading error for ${label}: ${message}`);
+                    console.error(`Error grading ${label}:`, error);
+                    results.push({ label, error: message, status: 'error' });
+                }
             }
         }
-        log('All grading complete');
+        log('All processing complete');
 
         let usageInfo = null;
 

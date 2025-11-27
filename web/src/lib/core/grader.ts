@@ -285,40 +285,19 @@ export class EduShiftGrader {
             }
         }
 
-        // OCRステップは廃止（過去の修正記録より）
-        // 2段階処理（OCR→採点）はsystemInstructionの適用漏れで精度低下を招くため、
-        // 1回のAPI呼び出しで画像から直接読み取りながら採点する方式に統一
-        const recognizedText = "";
-
-        // 採点プロンプト
+        // シンプルなプロンプト - System Instructionに従わせる
+        // 過去の修正記録より: 複雑なプロンプトより、シンプルに「System Instructionに従って」と
+        // 指示する方が精度が高い
         const prompt = `Target Problem Label: ${sanitizedLabel}
 ${pdfPageHint}
-添付された画像から「${sanitizedLabel}」を見つけて、System Instructionに従って採点を行ってください。
+添付された画像（生徒の答案、問題文、模範解答）を分析し、「${sanitizedLabel}」の採点を行ってください。
 
-【OCR結果（推測や補完をせず、このテキストをそのまま採点に使う）】
-${recognizedText || "（OCRが利用できなかったため、モデルに画像から直接読ませてください）"}
+System Instructionに定義された以下のルールを厳密に適用してください：
+- OCR Rules: 画像の文字を「そのまま」正確に読み取る
+- Global Rules: 5大原則に基づく採点
+- 採点基準: 減点基準リファレンステーブルに従う
 
-【必須チェック項目 - 必ず実行してください】
-
-1. **OCR誤読の検出と修正（重要）:**
-   - OCR読み取り結果で意味が通じない箇所がある場合、以下を確認してください：
-     a. 文字形状が類似しているか（例：「数」と「教」、「し」と「心」、「ご」と「心」）
-     b. **文字数が同じか**（1文字→1文字のみ。文字数が異なる変換は不可）
-     c. 修正すると文脈が通るか
-     d. 画像を直接確認して形状類似性を確認できるか
-   - すべて満たす場合のみ修正してください
-
-2. **常体・敬体の統一チェック（必須）:**
-   - 常体（だ・である調）と敬体（です・ます調）の混在を厳しくチェックしてください
-   - 混在が1箇所でも見つかった場合は必ず-10%減点してください
-
-3. **自由作文（タイプB）の内容検討（必須）:**
-   - 誤字脱字の修正のみで高得点を与えないでください
-   - 内容面（テーマ応答、論理性、具体例、深さ、多角性）を厳しく評価してください
-
-【重要】
-- System Instruction の「OCR Rules」および「採点基準」を厳密に従ってください
-- 結果はJSON形式で出力してください`;
+結果はJSON形式で出力してください。`;
 
         const result = await this.model.generateContent({
             contents: [{ role: "user", parts: [{ text: prompt }, ...imageParts] }],
@@ -332,9 +311,6 @@ ${recognizedText || "（OCRが利用できなかったため、モデルに画�
             delete parsed.debug_info;
             const gradingResult = parsed.grading_result as GradingResult | undefined;
             if (gradingResult) {
-                if (!gradingResult.recognized_text && recognizedText) {
-                    gradingResult.recognized_text = recognizedText;
-                }
                 const finalScore = this.computeFinalScore(gradingResult);
                 if (finalScore !== null) {
                     gradingResult.score = finalScore;

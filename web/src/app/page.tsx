@@ -1,15 +1,16 @@
 /* eslint-disable @next/next/no-img-element */
 'use client';
 
-import React, { useState, useRef, useEffect } from 'react';
+import React, { useState, useRef, useEffect, useCallback } from 'react';
 import { GradingReport } from '@/components/GradingReport';
-import { Upload, FileText, CheckCircle, AlertCircle, Loader2, Sparkles, ArrowRight, BookOpen, PenTool, GraduationCap, Plus, Trash2, CreditCard, LogIn, UserPlus, Edit3, Save, X, User, UserCheck } from 'lucide-react';
+import { Upload, FileText, CheckCircle, AlertCircle, Loader2, Sparkles, ArrowRight, BookOpen, PenTool, GraduationCap, Plus, Trash2, CreditCard, LogIn, UserPlus, Edit3, Save, X, User, UserCheck, ImageIcon, Camera } from 'lucide-react';
 import { clsx } from 'clsx';
 import { useAuth } from '@/components/AuthProvider';
 import { UserMenu } from '@/components/UserMenu';
 import { AuthModal } from '@/components/AuthModal';
 import { UsageStatus } from '@/components/UsageStatus';
 import Link from 'next/link';
+import { compressMultipleImages, formatFileSize, isImageFile } from '@/lib/utils/imageCompressor';
 
 type DeductionDetail = {
   reason?: string;
@@ -63,6 +64,11 @@ export default function Home() {
   const [results, setResults] = useState<GradingResponseItem[] | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [requirePlan, setRequirePlan] = useState(false);
+  
+  // 画像圧縮中の状態
+  const [isCompressing, setIsCompressing] = useState(false);
+  const [compressionProgress, setCompressionProgress] = useState(0);
+  const [compressionFileName, setCompressionFileName] = useState('');
 
   // PDFページ番号指定（複数ページPDF対応）
   const [pdfPageInfo, setPdfPageInfo] = useState<{
@@ -548,17 +554,46 @@ export default function Home() {
     return foundIndex >= 0 ? foundIndex : 0;
   };
 
-  const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+  const handleFileChange = useCallback(async (e: React.ChangeEvent<HTMLInputElement>) => {
     if (e.target.files && e.target.files.length > 0) {
       const files = Array.from(e.target.files);
+      
+      // 画像ファイルがある場合は圧縮処理
+      const hasImages = files.some(f => isImageFile(f));
+      let processedFiles = files;
+      
+      if (hasImages) {
+        setIsCompressing(true);
+        setCompressionProgress(0);
+        setCompressionFileName('');
+        
+        try {
+          processedFiles = await compressMultipleImages(
+            files,
+            (progress, fileName) => {
+              setCompressionProgress(progress);
+              setCompressionFileName(fileName);
+            }
+          );
+        } catch (err) {
+          console.error('[Page] Compression error:', err);
+          // 圧縮に失敗しても元のファイルで続行
+          processedFiles = files;
+        } finally {
+          setIsCompressing(false);
+          setCompressionProgress(0);
+          setCompressionFileName('');
+        }
+      }
+      
       setUploadedFiles(prev => {
-        const next = [...prev, ...files];
+        const next = [...prev, ...processedFiles];
         setAnswerFileIndex(detectAnswerIndex(next, answerFileIndex));
         
         // 新しいファイルに対して役割を自動推定
         const newRoles: Record<number, FileRole> = { ...fileRoles };
         const startIndex = prev.length;
-        files.forEach((file, i) => {
+        processedFiles.forEach((file, i) => {
           const idx = startIndex + i;
           const name = file.name.toLowerCase();
           if (/(answer|ans|student|解答|答案|生徒)/.test(name)) {
@@ -579,7 +614,7 @@ export default function Home() {
         return next;
       });
     }
-  };
+  }, [answerFileIndex, fileRoles]);
 
   const removeFile = (index: number) => {
     // 役割情報も更新（インデックスをずらす）
@@ -1458,10 +1493,12 @@ export default function Home() {
 
                 <div className="group relative">
                   <div className={clsx(
-                    "relative min-h-72 border-2 border-dashed rounded-3xl transition-all duration-500 ease-out cursor-pointer overflow-hidden",
-                    uploadedFiles.length > 0
+                    "relative min-h-48 sm:min-h-72 border-2 border-dashed rounded-2xl sm:rounded-3xl transition-all duration-500 ease-out cursor-pointer overflow-hidden",
+                    isCompressing
+                      ? "border-amber-400 bg-amber-50/50 ring-4 ring-amber-400/20"
+                      : uploadedFiles.length > 0
                       ? "border-indigo-500 bg-indigo-50/30 ring-4 ring-indigo-500/10"
-                      : "border-slate-300 bg-slate-50/50 hover:border-indigo-400 hover:bg-white hover:shadow-xl hover:shadow-indigo-100/40"
+                      : "border-slate-300 bg-slate-50/50 hover:border-indigo-400 hover:bg-white hover:shadow-xl hover:shadow-indigo-100/40 active:bg-indigo-50"
                   )}>
                     <div className="absolute inset-0 bg-gradient-to-br from-indigo-500/5 to-violet-500/5 opacity-0 group-hover:opacity-100 transition-opacity duration-500"></div>
 
@@ -1469,32 +1506,63 @@ export default function Home() {
                       type="file"
                       accept="image/*,.pdf"
                       multiple
+                      capture="environment"
                       onChange={handleFileChange}
                       className="hidden"
                       id="file-upload"
+                      disabled={isCompressing}
                     />
-                    <label htmlFor="file-upload" className="absolute inset-0 flex flex-col items-center justify-center p-8 cursor-pointer z-10">
-                      {uploadedFiles.length > 0 ? (
-                        <div className="animate-scale-in text-center w-full">
-                          <div className="w-20 h-20 bg-white rounded-3xl shadow-xl shadow-indigo-100 flex items-center justify-center mx-auto mb-4 text-indigo-600 transform group-hover:scale-110 transition-transform duration-500 ring-1 ring-indigo-50">
-                            <CheckCircle className="w-10 h-10" />
+                    <label htmlFor="file-upload" className={clsx(
+                      "absolute inset-0 flex flex-col items-center justify-center p-4 sm:p-8 z-10",
+                      isCompressing ? "cursor-wait" : "cursor-pointer"
+                    )}>
+                      {isCompressing ? (
+                        <div className="animate-pulse text-center w-full">
+                          <div className="w-16 h-16 sm:w-20 sm:h-20 bg-amber-100 rounded-2xl sm:rounded-3xl flex items-center justify-center mx-auto mb-4 text-amber-600">
+                            <Loader2 className="w-8 h-8 sm:w-10 sm:h-10 animate-spin" />
                           </div>
-                          <span className="text-lg text-indigo-900 font-bold block mb-2">
+                          <span className="text-base sm:text-lg text-amber-800 font-bold block mb-2">
+                            画像を最適化中... {compressionProgress}%
+                          </span>
+                          <span className="text-xs sm:text-sm text-amber-600 block">
+                            {compressionFileName}
+                          </span>
+                          <div className="w-48 sm:w-64 h-2 bg-amber-200 rounded-full mx-auto mt-3 overflow-hidden">
+                            <div 
+                              className="h-full bg-amber-500 rounded-full transition-all duration-300"
+                              style={{ width: `${compressionProgress}%` }}
+                            />
+                          </div>
+                        </div>
+                      ) : uploadedFiles.length > 0 ? (
+                        <div className="animate-scale-in text-center w-full">
+                          <div className="w-16 h-16 sm:w-20 sm:h-20 bg-white rounded-2xl sm:rounded-3xl shadow-xl shadow-indigo-100 flex items-center justify-center mx-auto mb-3 sm:mb-4 text-indigo-600 transform group-hover:scale-110 transition-transform duration-500 ring-1 ring-indigo-50">
+                            <CheckCircle className="w-8 h-8 sm:w-10 sm:h-10" />
+                          </div>
+                          <span className="text-base sm:text-lg text-indigo-900 font-bold block mb-1 sm:mb-2">
                             {uploadedFiles.length}個のファイルを選択中
                           </span>
-                          <span className="inline-flex items-center px-4 py-2 bg-white text-indigo-600 text-sm font-bold rounded-full shadow-sm border border-indigo-100 group-hover:bg-indigo-50 transition-colors">
-                            <Plus className="w-4 h-4 mr-1" />
-                            追加・変更する
+                          <span className="text-xs sm:text-sm text-indigo-600 block mb-2 sm:mb-3">
+                            合計: {formatFileSize(uploadedFiles.reduce((sum, f) => sum + f.size, 0))}
+                          </span>
+                          <span className="inline-flex items-center px-3 sm:px-4 py-2 bg-white text-indigo-600 text-xs sm:text-sm font-bold rounded-full shadow-sm border border-indigo-100 group-hover:bg-indigo-50 transition-colors">
+                            <Plus className="w-3 h-3 sm:w-4 sm:h-4 mr-1" />
+                            追加する
                           </span>
                         </div>
                       ) : (
-                        <div className="text-center group-hover:scale-105 transition-transform duration-500">
-                          <div className="w-20 h-20 bg-white rounded-3xl shadow-lg shadow-slate-200/50 flex items-center justify-center mx-auto mb-6 text-slate-400 group-hover:text-indigo-500 group-hover:shadow-2xl group-hover:shadow-indigo-200/50 transition-all duration-500 ring-1 ring-slate-100">
-                            <Upload className="w-10 h-10" />
+                        <div className="text-center group-hover:scale-105 active:scale-95 transition-transform duration-500">
+                          <div className="w-16 h-16 sm:w-20 sm:h-20 bg-white rounded-2xl sm:rounded-3xl shadow-lg shadow-slate-200/50 flex items-center justify-center mx-auto mb-4 sm:mb-6 text-slate-400 group-hover:text-indigo-500 group-hover:shadow-2xl group-hover:shadow-indigo-200/50 transition-all duration-500 ring-1 ring-slate-100">
+                            <Camera className="w-8 h-8 sm:w-10 sm:h-10" />
                           </div>
-                          <span className="text-lg text-slate-700 font-bold block mb-2">画像・PDFをアップロード</span>
-                          <span className="text-sm text-slate-500 block bg-slate-100/50 px-4 py-1 rounded-full">
-                            ドラッグ＆ドロップ または クリック
+                          <span className="text-base sm:text-lg text-slate-700 font-bold block mb-2">
+                            📸 写真をアップロード
+                          </span>
+                          <span className="text-xs sm:text-sm text-slate-500 block bg-slate-100/50 px-3 sm:px-4 py-1 rounded-full mb-2">
+                            タップして撮影 or 選択
+                          </span>
+                          <span className="text-xs text-slate-400 block">
+                            複数枚OK・自動で圧縮されます
                           </span>
                         </div>
                       )}
@@ -1502,82 +1570,153 @@ export default function Home() {
                   </div>
                 </div>
 
-                {/* File List */}
+                {/* File List - スマホ対応 */}
                 {uploadedFiles.length > 0 && (
-                  <div className="bg-white/60 rounded-3xl p-6 border border-slate-200 shadow-sm">
-                    <h3 className="text-sm font-bold text-slate-700 mb-4 flex items-center">
-                      <FileText className="w-4 h-4 mr-2 text-indigo-500" />
-                      アップロード済みファイル
-                    </h3>
-                    <p className="text-xs text-indigo-700 font-bold bg-indigo-50 px-4 py-3 rounded-xl mb-4 flex items-center border border-indigo-100">
-                      <span className="mr-2 text-lg">👆</span>
-                      各ファイルの役割を選択してください（答案・問題・模範解答）
+                  <div className="bg-white/60 rounded-2xl sm:rounded-3xl p-4 sm:p-6 border border-slate-200 shadow-sm">
+                    <div className="flex items-center justify-between mb-3 sm:mb-4">
+                      <h3 className="text-sm font-bold text-slate-700 flex items-center">
+                        <ImageIcon className="w-4 h-4 mr-2 text-indigo-500" />
+                        ファイル一覧 ({uploadedFiles.length}件)
+                      </h3>
+                      <span className="text-xs text-slate-500 bg-slate-100 px-2 py-1 rounded-full">
+                        合計: {formatFileSize(uploadedFiles.reduce((sum, f) => sum + f.size, 0))}
+                      </span>
+                    </div>
+                    
+                    {/* クイック役割設定ボタン（スマホ向け） */}
+                    <div className="flex flex-wrap gap-2 mb-3 sm:mb-4">
+                      <button
+                        type="button"
+                        onClick={() => {
+                          // 最初のファイルを答案、残りを問題+模範解答に設定
+                          const newRoles: Record<number, FileRole> = {};
+                          uploadedFiles.forEach((_, i) => {
+                            newRoles[i] = i === 0 ? 'answer' : 'problem_model';
+                          });
+                          setFileRoles(newRoles);
+                        }}
+                        className="px-3 py-1.5 text-xs font-bold bg-indigo-100 text-indigo-700 rounded-lg border border-indigo-200 hover:bg-indigo-200 transition-colors"
+                      >
+                        📝 1枚目=答案 / 残り=問題
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => {
+                          // 全てを「全部入り」に設定
+                          const newRoles: Record<number, FileRole> = {};
+                          uploadedFiles.forEach((_, i) => {
+                            newRoles[i] = 'all';
+                          });
+                          setFileRoles(newRoles);
+                        }}
+                        className="px-3 py-1.5 text-xs font-bold bg-rose-100 text-rose-700 rounded-lg border border-rose-200 hover:bg-rose-200 transition-colors"
+                      >
+                        📦 全て一括設定
+                      </button>
+                    </div>
+                    
+                    <p className="text-xs text-indigo-700 font-medium bg-indigo-50 px-3 py-2 rounded-xl mb-3 sm:mb-4 border border-indigo-100">
+                      💡 各ファイルの内容を選択してください
                     </p>
-                    <div className="space-y-3">
+                    
+                    {/* ファイルグリッド - スマホ対応 */}
+                    <div className="grid grid-cols-1 gap-2 sm:gap-3">
                       {uploadedFiles.map((file, index) => (
                         <div
                           key={index}
                           className={clsx(
-                            "flex items-center justify-between rounded-2xl p-4 border transition-all duration-300",
-                            answerFileIndex === index
-                              ? "bg-indigo-50/50 border-indigo-200 shadow-sm ring-1 ring-indigo-200"
-                              : "bg-white border-slate-100 hover:border-indigo-100 hover:shadow-md"
+                            "rounded-xl sm:rounded-2xl p-3 sm:p-4 border transition-all duration-300",
+                            fileRoles[index] === 'answer' ? "bg-indigo-50/50 border-indigo-200" :
+                            fileRoles[index] === 'problem' ? "bg-amber-50/50 border-amber-200" :
+                            fileRoles[index] === 'model' ? "bg-emerald-50/50 border-emerald-200" :
+                            fileRoles[index] === 'problem_model' ? "bg-cyan-50/50 border-cyan-200" :
+                            fileRoles[index] === 'answer_problem' ? "bg-violet-50/50 border-violet-200" :
+                            fileRoles[index] === 'all' ? "bg-rose-50/50 border-rose-200" :
+                            "bg-white border-slate-100"
                           )}
                         >
-                          <div className="flex items-center flex-1 min-w-0 cursor-pointer" onClick={() => setAnswerFileIndex(index)}>
+                          {/* ファイル情報行 */}
+                          <div className="flex items-center gap-2 sm:gap-3 mb-2">
                             <div className={clsx(
-                              "w-5 h-5 rounded-full border-2 flex items-center justify-center mr-3 transition-colors",
-                              answerFileIndex === index ? "border-indigo-600 bg-indigo-600" : "border-slate-300"
+                              "w-10 h-10 sm:w-12 sm:h-12 rounded-lg flex items-center justify-center flex-shrink-0",
+                              file.type === 'application/pdf' ? "bg-orange-100 text-orange-600" : "bg-blue-100 text-blue-600"
                             )}>
-                              {answerFileIndex === index && <div className="w-2 h-2 bg-white rounded-full" />}
+                              {file.type === 'application/pdf' ? (
+                                <FileText className="w-5 h-5 sm:w-6 sm:h-6" />
+                              ) : (
+                                <ImageIcon className="w-5 h-5 sm:w-6 sm:h-6" />
+                              )}
                             </div>
-                            <div className="p-2 bg-slate-100 rounded-lg mr-3 text-slate-500">
-                              {file.type === 'application/pdf' ? <FileText className="w-5 h-5" /> : <FileText className="w-5 h-5" />}
-                            </div>
-                            <div className="min-w-0">
-                              <p className="text-sm font-bold text-slate-700 truncate">{file.name}</p>
+                            <div className="flex-1 min-w-0">
+                              <p className="text-xs sm:text-sm font-bold text-slate-700 truncate">{file.name}</p>
                               <p className="text-xs text-slate-500">
-                                {(file.size / 1024).toFixed(1)} KB
+                                {formatFileSize(file.size)}
                                 {file.type === 'application/pdf' && (
-                                  <span className="ml-2 text-orange-600 bg-orange-50 px-1.5 py-0.5 rounded text-[10px] font-bold">PDF</span>
+                                  <span className="ml-2 text-orange-600 bg-orange-100 px-1.5 py-0.5 rounded text-[10px] font-bold">PDF</span>
                                 )}
                               </p>
                             </div>
+                            <button
+                              type="button"
+                              onClick={() => removeFile(index)}
+                              className="p-2 text-slate-400 hover:text-red-500 hover:bg-red-50 rounded-lg transition-all flex-shrink-0"
+                              title="削除"
+                            >
+                              <Trash2 className="w-4 h-4" />
+                            </button>
                           </div>
-                          {/* ファイルの役割選択 */}
-                          <select
-                            value={fileRoles[index] || 'other'}
-                            onChange={(e) => setFileRoles(prev => ({ ...prev, [index]: e.target.value as FileRole }))}
-                            className={clsx(
-                              "ml-3 px-3 py-1.5 text-xs font-bold rounded-lg border transition-all cursor-pointer",
-                              fileRoles[index] === 'answer' ? "bg-indigo-100 border-indigo-300 text-indigo-700" :
-                              fileRoles[index] === 'problem' ? "bg-amber-100 border-amber-300 text-amber-700" :
-                              fileRoles[index] === 'model' ? "bg-emerald-100 border-emerald-300 text-emerald-700" :
-                              fileRoles[index] === 'problem_model' ? "bg-cyan-100 border-cyan-300 text-cyan-700" :
-                              fileRoles[index] === 'answer_problem' ? "bg-violet-100 border-violet-300 text-violet-700" :
-                              fileRoles[index] === 'all' ? "bg-rose-100 border-rose-300 text-rose-700" :
-                              "bg-slate-100 border-slate-300 text-slate-600"
-                            )}
-                          >
-                            <option value="answer">📝 答案</option>
-                            <option value="problem">📋 問題のみ</option>
-                            <option value="model">✅ 模範解答のみ</option>
-                            <option value="problem_model">📋✅ 問題+模範解答</option>
-                            <option value="answer_problem">📝📋 答案+問題</option>
-                            <option value="all">📦 全部入り</option>
-                            <option value="other">📎 その他</option>
-                          </select>
-                          <button
-                            type="button"
-                            onClick={() => removeFile(index)}
-                            className="ml-2 p-2 text-slate-400 hover:text-red-500 hover:bg-red-50 rounded-lg transition-all"
-                            title="削除"
-                          >
-                            <Trash2 className="w-4 h-4" />
-                          </button>
+                          
+                          {/* 役割選択ボタン（スマホ向けタップしやすい） */}
+                          <div className="flex flex-wrap gap-1.5 sm:gap-2">
+                            {[
+                              { value: 'answer', label: '📝 答案', color: 'indigo' },
+                              { value: 'problem', label: '📋 問題', color: 'amber' },
+                              { value: 'model', label: '✅ 模範', color: 'emerald' },
+                              { value: 'problem_model', label: '📋✅ 問題+模範', color: 'cyan' },
+                              { value: 'all', label: '📦 全部', color: 'rose' },
+                            ].map(({ value, label, color }) => (
+                              <button
+                                key={value}
+                                type="button"
+                                onClick={() => setFileRoles(prev => ({ ...prev, [index]: value as FileRole }))}
+                                className={clsx(
+                                  "px-2 sm:px-3 py-1 sm:py-1.5 text-[10px] sm:text-xs font-bold rounded-lg border transition-all",
+                                  fileRoles[index] === value
+                                    ? `bg-${color}-200 border-${color}-400 text-${color}-800 ring-2 ring-${color}-400/30`
+                                    : `bg-white border-slate-200 text-slate-600 hover:border-${color}-300 hover:bg-${color}-50`
+                                )}
+                                style={{
+                                  backgroundColor: fileRoles[index] === value 
+                                    ? color === 'indigo' ? '#c7d2fe' : color === 'amber' ? '#fde68a' : color === 'emerald' ? '#a7f3d0' : color === 'cyan' ? '#a5f3fc' : '#fecdd3'
+                                    : undefined,
+                                  borderColor: fileRoles[index] === value
+                                    ? color === 'indigo' ? '#818cf8' : color === 'amber' ? '#fbbf24' : color === 'emerald' ? '#34d399' : color === 'cyan' ? '#22d3ee' : '#fb7185'
+                                    : undefined,
+                                }}
+                              >
+                                {label}
+                              </button>
+                            ))}
+                          </div>
                         </div>
                       ))}
                     </div>
+                    
+                    {/* 全削除ボタン */}
+                    {uploadedFiles.length > 1 && (
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setUploadedFiles([]);
+                          setFileRoles({});
+                          setAnswerFileIndex(null);
+                        }}
+                        className="mt-3 sm:mt-4 w-full py-2 text-xs sm:text-sm font-bold text-red-600 bg-red-50 border border-red-200 rounded-xl hover:bg-red-100 transition-colors"
+                      >
+                        <Trash2 className="w-4 h-4 inline mr-1" />
+                        すべて削除
+                      </button>
+                    )}
                   </div>
                 )}
 

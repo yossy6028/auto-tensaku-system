@@ -69,24 +69,50 @@ export class EduShiftGrader {
     private genAI: GoogleGenerativeAI;
     private model: ReturnType<GoogleGenerativeAI["getGenerativeModel"]>;
     
-    // 採点用の設定（systemInstructionと組み合わせて使用）
-    // temperature=0, topP=0.1: OCR精度を最大化するため、創造性を排除
-    // 開発初期の高精度設定に戻す
+    // OCR用の設定（JSON強制なし - Web版Geminiと同等の条件）
+    // JSON出力を強制すると、モデルは「正しいJSON」を優先し、OCR精度が落ちる
+    private readonly ocrConfig = {
+        temperature: 0,
+        topP: 0.1,
+        topK: 16
+        // responseMimeType なし - 自由形式でOCRに集中させる
+    };
+    
+    // 採点用の設定（JSON出力を強制）
     private readonly gradingConfig = {
         temperature: 0,
-        topP: 0.1,  // 0.6→0.1: 上位10%の確率の単語のみ選択（補完・置換を防ぐ）
-        topK: 16,   // 32→16: さらに選択肢を絞る
+        topP: 0.1,
+        topK: 16,
         responseMimeType: "application/json" as const
     };
+
+    // OCR専用モデル（systemInstructionを最小化してOCRに集中）
+    private ocrModel: ReturnType<GoogleGenerativeAI["getGenerativeModel"]>;
 
     constructor() {
         if (!CONFIG.GEMINI_API_KEY) {
             throw new Error("GEMINI_API_KEY is not set in environment variables.");
         }
         this.genAI = new GoogleGenerativeAI(CONFIG.GEMINI_API_KEY);
+        
+        // 採点用モデル（フルのsystemInstruction）
         this.model = this.genAI.getGenerativeModel({
             model: CONFIG.MODEL_NAME,
             systemInstruction: SYSTEM_INSTRUCTION
+        });
+        
+        // OCR専用モデル（最小限のsystemInstruction - Web版Geminiに近い条件）
+        this.ocrModel = this.genAI.getGenerativeModel({
+            model: CONFIG.MODEL_NAME,
+            systemInstruction: `あなたは高精度OCRエンジンです。
+画像内のテキストを一字一句正確に読み取ってください。
+
+【絶対ルール】
+1. 画像に書かれている文字を「そのまま」出力する
+2. 意味が通らなくても、文法的に変でも、そのまま出力する
+3. 読めない文字は「〓」で出力する
+4. 推測や補完は絶対にしない
+5. 縦書きの場合は右から左、上から下の順で読む`
         });
     }
 
@@ -110,10 +136,53 @@ export class EduShiftGrader {
             }
             const categorizedFiles = this.categorizeFiles(files, pdfPageInfo);
             const imageParts = this.buildContentSequence(categorizedFiles);
-            return await this.executeGrading(targetLabel, imageParts, pdfPageInfo, categorizedFiles);
+            return await this.executeTwoStageGrading(targetLabel, imageParts, pdfPageInfo, categorizedFiles);
         } catch (error: unknown) {
             return this.handleError(error);
         }
+    }
+
+    /**
+     * Stage 1: OCR専用（JSON強制なし - Web版Geminiと同等の条件）
+     * 画像からテキストを高精度で読み取ることだけに集中
+     */
+    private async performOcr(imageParts: ContentPart[]): Promise<string> {
+        console.log("[Grader] Stage 1: OCR開始（JSON強制なし）");
+        
+        // 答案画像のみを抽出
+        const answerParts = imageParts.filter((part, idx) => {
+            // 「生徒の答案画像」ラベルの後の画像を抽出
+            if (idx > 0) {
+                const prevPart = imageParts[idx - 1];
+                if ('text' in prevPart && prevPart.text?.includes('答案')) {
+                    return true;
+                }
+            }
+            return false;
+        });
+
+        // 答案画像がない場合は全画像を使用
+        const targetParts = answerParts.length > 0 ? answerParts : imageParts.filter(p => 'inlineData' in p);
+
+        const ocrPrompt = `この画像に書かれているテキストを読み取ってください。
+
+【重要】
+- 一字一句正確に、そのまま出力してください
+- 意味が通らなくても、文法的に変でも、書いてある通りに出力してください
+- 縦書きの場合は右から左、上から下の順で読んでください
+- 読めない文字は「〓」で出力してください
+- 推測や補完は絶対にしないでください
+
+読み取ったテキストのみを出力してください（説明は不要です）。`;
+
+        const result = await this.ocrModel.generateContent({
+            contents: [{ role: "user", parts: [{ text: ocrPrompt }, ...targetParts] }],
+            generationConfig: this.ocrConfig
+        });
+
+        const ocrText = result.response.text().trim();
+        console.log("[Grader] Stage 1 完了: OCR結果 =", ocrText.substring(0, 100) + "...");
+        return ocrText;
     }
 
     /**
@@ -600,15 +669,28 @@ export class EduShiftGrader {
     }
 
     /**
-     * 採点を実行
+     * 2段階採点を実行
+     * Stage 1: OCR（JSON強制なし - Web版Geminiと同等の高精度）
+     * Stage 2: 採点（OCR結果を使用してJSON出力）
      */
-    private async executeGrading(
+    private async executeTwoStageGrading(
         targetLabel: string, 
         imageParts: ContentPart[],
         pdfPageInfo?: { answerPage?: string; problemPage?: string; modelAnswerPage?: string } | null,
         categorizedFiles?: CategorizedFiles
     ) {
         const sanitizedLabel = targetLabel.replace(/[<>\\\"'`]/g, '').trim();
+
+        // ========================================
+        // Stage 1: OCR（JSON強制なし）
+        // Web版Geminiと同等の条件で高精度読み取り
+        // ========================================
+        const ocrText = await this.performOcr(imageParts);
+        
+        // ========================================
+        // Stage 2: 採点（OCR結果を使用）
+        // ========================================
+        console.log("[Grader] Stage 2: 採点開始（JSON出力）");
 
         // PDFページ指定ヒントを構築
         let pdfPageHint = '';
@@ -627,17 +709,24 @@ export class EduShiftGrader {
             }
         }
 
-        // シンプルなプロンプト - System Instructionに従わせる
-        // 過去の修正記録より: 複雑なプロンプトより、シンプルに「System Instructionに従って」と
-        // 指示する方が精度が高い
+        // Stage 2用プロンプト（OCR結果を明示的に渡す）
         const prompt = `Target Problem Label: ${sanitizedLabel}
 ${pdfPageHint}
-添付された画像（生徒の答案、問題文、模範解答）を分析し、「${sanitizedLabel}」の採点を行ってください。
+
+【Stage 1で読み取った生徒の答案テキスト】
+以下のテキストは、事前にOCRで正確に読み取った生徒の答案です。
+このテキストを「そのまま」使用して採点してください（再度の読み取りは不要です）。
+
+---
+${ocrText}
+---
+
+上記のテキストと、添付された画像（問題文、模範解答）を参照し、「${sanitizedLabel}」の採点を行ってください。
 
 System Instructionに定義された以下のルールを厳密に適用してください：
-- OCR Rules: 画像の文字を「そのまま」正確に読み取る
 - Global Rules: 5大原則に基づく採点
 - 採点基準: 減点基準リファレンステーブルに従う
+- recognized_text には上記のOCR結果をそのまま使用すること
 
 結果はJSON形式で出力してください。`;
 
@@ -652,11 +741,16 @@ System Instructionに定義された以下のルールを厳密に適用して�
         if (parsed) {
             delete parsed.debug_info;
             
+            // OCR結果を強制的に設定（AIが変更しないように）
+            if (parsed.grading_result && typeof parsed.grading_result === 'object') {
+                (parsed.grading_result as Record<string, unknown>).recognized_text = ocrText;
+            }
+            
             // プログラムによる検証・補完を実行
-            // AIが見落とした文体チェック、語彙チェックを補完
             const validated = this.validateAndEnhanceGrading(parsed);
             
-            console.log("[Grader] プログラム検証完了", {
+            console.log("[Grader] Stage 2 完了: プログラム検証完了", {
+                ocrLength: ocrText.length,
                 styleCheck: (validated.grading_result as GradingResult | undefined)?.mandatory_checks?.style_check,
                 vocabCheck: (validated.grading_result as GradingResult | undefined)?.mandatory_checks?.vocabulary_check,
                 finalScore: (validated.grading_result as GradingResult | undefined)?.score

@@ -165,6 +165,18 @@ export default function Home() {
     return editedFeedbacks[index]?.[field] ?? results?.[index]?.result?.grading_result?.feedback_content?.[field] ?? '';
   };
 
+  // HTMLエスケープ関数（XSS対策）
+  const escapeHtml = (text: string): string => {
+    const htmlEscapes: Record<string, string> = {
+      '&': '&amp;',
+      '<': '&lt;',
+      '>': '&gt;',
+      '"': '&quot;',
+      "'": '&#39;',
+    };
+    return text.replace(/[&<>"']/g, (char) => htmlEscapes[char] || char);
+  };
+
   const handlePrint = async (index: number) => {
     const componentRef = getComponentRef(index);
     if (!componentRef.current) return;
@@ -201,10 +213,15 @@ export default function Home() {
 
     const score = normalizeScore(gradingResult.score);
     const deductionDetails = gradingResult.deduction_details ?? [];
+    // ユーザー入力をエスケープ（XSS対策）
+    const safeStudentName = studentName ? escapeHtml(studentName) : '';
+    const safeTeacherName = teacherName ? escapeHtml(teacherName) : '';
+    const safeLabel = escapeHtml(res.label);
+    
     const feedback = {
-      good_point: editedFeedbacks[index]?.good_point ?? gradingResult.feedback_content.good_point,
-      improvement_advice: editedFeedbacks[index]?.improvement_advice ?? gradingResult.feedback_content.improvement_advice,
-      rewrite_example: editedFeedbacks[index]?.rewrite_example ?? gradingResult.feedback_content.rewrite_example,
+      good_point: escapeHtml(editedFeedbacks[index]?.good_point ?? gradingResult.feedback_content.good_point ?? ''),
+      improvement_advice: escapeHtml(editedFeedbacks[index]?.improvement_advice ?? gradingResult.feedback_content.improvement_advice ?? ''),
+      rewrite_example: escapeHtml(editedFeedbacks[index]?.rewrite_example ?? gradingResult.feedback_content.rewrite_example ?? ''),
     };
 
     const printStyles = `
@@ -425,32 +442,34 @@ export default function Home() {
     `;
 
     const deductionTableRows = deductionDetails.map((item: DeductionDetail) =>
-      `<tr><td>${item.reason}</td><td class="amount">-${item.deduction_percentage}%</td></tr>`
+      `<tr><td>${escapeHtml(item.reason ?? '')}</td><td class="amount">-${item.deduction_percentage}%</td></tr>`
     ).join('');
 
     const deductionListItems = deductionDetails.map((item: DeductionDetail) =>
-      `<li>・${item.reason} で -${item.deduction_percentage}%</li>`
+      `<li>・${escapeHtml(item.reason ?? '')} で -${item.deduction_percentage}%</li>`
     ).join('');
+
+    const safeRecognizedText = gradingResult.recognized_text ? escapeHtml(gradingResult.recognized_text) : '';
 
     const htmlContent = `<!DOCTYPE html>
 <html lang="ja">
 <head>
   <meta charset="utf-8">
-  <title>採点レポート - ${res.label}</title>
+  <title>採点レポート - ${safeLabel}</title>
   <style>${printStyles}</style>
 </head>
 <body>
   <div class="report-container">
-    <div class="header-label">${res.label}</div>
+    <div class="header-label">${safeLabel}</div>
     
     <div class="header-section">
       <div>
         <h1 class="header-title">採点レポート</h1>
-        ${studentName ? `<div class="header-info">生徒名: ${studentName}</div>` : ''}
+        ${safeStudentName ? `<div class="header-info">生徒名: ${safeStudentName}</div>` : ''}
       </div>
       <div style="text-align: right;">
         <div class="header-info">実施日: ${today}</div>
-        ${teacherName ? `<div class="header-info">添削担当: ${teacherName}</div>` : ''}
+        ${safeTeacherName ? `<div class="header-info">添削担当: ${safeTeacherName}</div>` : ''}
       </div>
     </div>
 
@@ -472,11 +491,11 @@ export default function Home() {
       </div>
     </div>
 
-    ${gradingResult.recognized_text ? `
+    ${safeRecognizedText ? `
     <div class="section section-ai">
       <div class="section-title">AI読み取り結果（確認用）</div>
       <div class="section-content">
-        <p class="mono-text">${gradingResult.recognized_text}</p>
+        <p class="mono-text">${safeRecognizedText}</p>
         <p class="note-text">※文字数判定の基準となります。誤読がある場合は撮影し直してください。</p>
       </div>
     </div>
@@ -683,19 +702,19 @@ export default function Home() {
       return;
     }
 
-    // ファイルサイズチェック（Vercelの制限: 4.5MB、Base64変換で1.33倍になるため実質3MB）
-    const MAX_TOTAL_SIZE = 3 * 1024 * 1024; // 3MB
-    const MAX_SINGLE_FILE_SIZE = 2 * 1024 * 1024; // 2MB
+    // ファイルサイズチェック（Vercel Proプラン: 最大100MBまで対応、Gemini API: 約20MBまで）
+    const MAX_TOTAL_SIZE = 20 * 1024 * 1024; // 20MB（10ページ以上のPDFに対応）
+    const MAX_SINGLE_FILE_SIZE = 10 * 1024 * 1024; // 10MB
     const totalSize = uploadedFiles.reduce((sum, file) => sum + file.size, 0);
     
     const oversizedFile = uploadedFiles.find(file => file.size > MAX_SINGLE_FILE_SIZE);
     if (oversizedFile) {
-      setError(`ファイル「${oversizedFile.name}」が大きすぎます（${(oversizedFile.size / 1024 / 1024).toFixed(1)}MB）。2MB以下のファイルをアップロードしてください。画像を圧縮するか、解像度を下げてください。`);
+      setError(`ファイル「${oversizedFile.name}」が大きすぎます（${(oversizedFile.size / 1024 / 1024).toFixed(1)}MB）。10MB以下のファイルをアップロードしてください。`);
       return;
     }
     
     if (totalSize > MAX_TOTAL_SIZE) {
-      setError(`ファイルの合計サイズが大きすぎます（${(totalSize / 1024 / 1024).toFixed(1)}MB）。合計3MB以下になるようにしてください。`);
+      setError(`ファイルの合計サイズが大きすぎます（${(totalSize / 1024 / 1024).toFixed(1)}MB）。合計20MB以下になるようにしてください。`);
       return;
     }
 

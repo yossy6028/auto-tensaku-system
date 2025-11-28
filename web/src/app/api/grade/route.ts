@@ -3,12 +3,17 @@ import { createServerClient } from '@supabase/ssr';
 import { cookies } from 'next/headers';
 import { EduShiftGrader, type FileRole } from '@/lib/core/grader';
 import type { Database } from '@/lib/supabase/types';
+import { checkRateLimit, GRADING_RATE_LIMIT } from '@/lib/security/rateLimit';
+import { logger } from '@/lib/security/logger';
 
 // Force dynamic to prevent caching
 export const dynamic = 'force-dynamic';
 
 // Vercel Proプラン + Fluid Compute: 最大300秒のタイムアウト
 export const maxDuration = 300;
+
+// Note: Vercel Proプランではデフォルトで最大100MBのボディサイズに対応
+// 本システムでは20MBまでのファイルをサポート（コード内で検証）
 
 // 型定義
 type UploadedFilePart = {
@@ -65,6 +70,83 @@ function processPdfFile(pdfBuffer: Buffer, fileName: string): UploadedFilePart[]
         name: fileName,
         sourceFileName: fileName
     }];
+}
+
+/**
+ * 許可されるMIMEタイプ
+ */
+const ALLOWED_MIME_TYPES = [
+    'image/jpeg',
+    'image/png',
+    'image/gif',
+    'image/webp',
+    'image/heic',
+    'image/heif',
+    'application/pdf',
+];
+
+/**
+ * ファイルサイズ制限
+ * Vercel Proプラン: 最大100MBまで対応可能
+ * Gemini API: インライン送信で約20MBまで対応
+ */
+const MAX_SINGLE_FILE_SIZE = 10 * 1024 * 1024; // 10MB（10ページ以上のPDFに対応）
+const MAX_TOTAL_SIZE = 20 * 1024 * 1024; // 20MB（複数ファイル合計）
+const MAX_FILES_COUNT = 15; // 最大ファイル数
+
+/**
+ * ファイルのセキュリティ検証
+ */
+function validateFile(file: File): void {
+    // MIMEタイプ検証
+    if (!ALLOWED_MIME_TYPES.includes(file.type)) {
+        throw new Error(`許可されていないファイル形式です: ${file.type}。画像（JPEG、PNG、GIF、WebP、HEIC）またはPDFをアップロードしてください。`);
+    }
+    
+    // ファイルサイズ検証
+    if (file.size > MAX_SINGLE_FILE_SIZE) {
+        throw new Error(`ファイル「${file.name}」が大きすぎます（${(file.size / 1024 / 1024).toFixed(1)}MB）。10MB以下のファイルをアップロードしてください。`);
+    }
+    
+    // ファイル名検証（パストラバーサル防止）
+    const dangerousNamePatterns = [
+        /\.\./,           // 親ディレクトリ参照
+        /[\/\\]/,         // パス区切り文字
+        /[\x00-\x1f]/,    // 制御文字
+        /^\.+$/,          // ドットのみ
+    ];
+    
+    for (const pattern of dangerousNamePatterns) {
+        if (pattern.test(file.name)) {
+            throw new Error('不正なファイル名です。');
+        }
+    }
+    
+    // ファイル名の長さ制限
+    if (file.name.length > 255) {
+        throw new Error('ファイル名が長すぎます。255文字以下にしてください。');
+    }
+}
+
+/**
+ * 複数ファイルの一括検証
+ */
+function validateFiles(files: File[]): void {
+    // ファイル数の制限
+    if (files.length > MAX_FILES_COUNT) {
+        throw new Error(`アップロードできるファイルは最大${MAX_FILES_COUNT}個までです。`);
+    }
+    
+    // 合計サイズの検証
+    const totalSize = files.reduce((sum, file) => sum + file.size, 0);
+    if (totalSize > MAX_TOTAL_SIZE) {
+        throw new Error(`ファイルの合計サイズが大きすぎます（${(totalSize / 1024 / 1024).toFixed(1)}MB）。合計20MB以下になるようにしてください。`);
+    }
+    
+    // 各ファイルの検証
+    for (const file of files) {
+        validateFile(file);
+    }
 }
 
 /**
@@ -151,13 +233,34 @@ export async function POST(req: NextRequest) {
             );
         }
 
+        // レートリミットチェック
+        const rateLimitResult = checkRateLimit(user.id, GRADING_RATE_LIMIT);
+        if (!rateLimitResult.success) {
+            return NextResponse.json(
+                { 
+                    status: 'error', 
+                    message: `リクエストが多すぎます。${rateLimitResult.retryAfter}秒後に再試行してください。`,
+                    retryAfter: rateLimitResult.retryAfter
+                },
+                { 
+                    status: 429,
+                    headers: {
+                        'Retry-After': String(rateLimitResult.retryAfter),
+                        'X-RateLimit-Limit': String(GRADING_RATE_LIMIT.maxRequests),
+                        'X-RateLimit-Remaining': '0',
+                        'X-RateLimit-Reset': String(Math.ceil(rateLimitResult.resetTime / 1000)),
+                    }
+                }
+            );
+        }
+
         // 利用可否チェック
         const { data: usageData, error: usageError } = await supabaseRpc
             .rpc('can_use_service', { p_user_id: user.id });
         const usageRows = usageData as CanUseServiceResult[] | null;
         
         if (usageError) {
-            console.error('Usage check error:', usageError);
+            logger.error('Usage check error:', usageError);
             return NextResponse.json(
                 { status: 'error', message: '利用状況の確認中にエラーが発生しました。' },
                 { status: 500 }
@@ -189,6 +292,17 @@ export async function POST(req: NextRequest) {
             );
         }
 
+        // ファイルのセキュリティ検証
+        try {
+            validateFiles(files);
+        } catch (validationError) {
+            const message = validationError instanceof Error ? validationError.message : '不正なファイルです。';
+            return NextResponse.json(
+                { status: 'error', message },
+                { status: 400 }
+            );
+        }
+
         const targetLabels = JSON.parse(targetLabelsJson) as string[];
         
         // PDFページ番号情報を解析
@@ -206,7 +320,7 @@ export async function POST(req: NextRequest) {
         if (fileRolesJson) {
             try {
                 fileRoles = JSON.parse(fileRolesJson);
-                console.log('[API] File roles:', fileRoles);
+                logger.debug('[API] File roles:', fileRoles);
             } catch {
                 // パース失敗時は無視
             }
@@ -235,7 +349,7 @@ export async function POST(req: NextRequest) {
                 results.push({ label, result });
             } catch (error: unknown) {
                 const message = error instanceof Error ? error.message : 'Unknown error';
-                console.error(`Error grading ${label}:`, error);
+                logger.error(`Error grading ${label}:`, error);
                 results.push({ label, error: message, status: 'error' });
             }
         }
@@ -254,7 +368,7 @@ export async function POST(req: NextRequest) {
                 });
             
             if (incrementError) {
-                console.error('Failed to increment usage:', incrementError);
+                logger.error('Failed to increment usage:', incrementError);
             }
         }
 
@@ -277,8 +391,12 @@ export async function POST(req: NextRequest) {
         });
 
     } catch (error: unknown) {
-        const message = error instanceof Error ? error.message : 'Unknown error';
-        console.error('API Error:', error);
+        logger.error('API Error:', error);
+        // 本番環境ではエラー詳細を隠す
+        const isDev = process.env.NODE_ENV === 'development';
+        const message = isDev 
+            ? (error instanceof Error ? error.message : 'Unknown error')
+            : 'システムエラーが発生しました。しばらく時間をおいてから再度お試しください。';
         return NextResponse.json(
             { status: 'error', message },
             { status: 500 }

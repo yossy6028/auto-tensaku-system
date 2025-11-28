@@ -87,12 +87,12 @@ const ALLOWED_MIME_TYPES = [
 
 /**
  * ファイルサイズ制限
- * Vercel Proプラン: 最大100MBまで対応可能
- * Gemini API: インライン送信で約20MBまで対応
+ * Vercel Serverless Functions: 4.5MBペイロード上限（プランに関係なく）
+ * 安全マージンを考慮して4MBに設定
  */
-const MAX_SINGLE_FILE_SIZE = 10 * 1024 * 1024; // 10MB（10ページ以上のPDFに対応）
-const MAX_TOTAL_SIZE = 20 * 1024 * 1024; // 20MB（複数ファイル合計）
-const MAX_FILES_COUNT = 15; // 最大ファイル数
+const MAX_SINGLE_FILE_SIZE = 4 * 1024 * 1024; // 4MB
+const MAX_TOTAL_SIZE = 4 * 1024 * 1024; // 4MB（Vercelペイロード上限対応）
+const MAX_FILES_COUNT = 10; // 最大ファイル数
 
 /**
  * ファイルのセキュリティ検証
@@ -105,7 +105,7 @@ function validateFile(file: File): void {
     
     // ファイルサイズ検証
     if (file.size > MAX_SINGLE_FILE_SIZE) {
-        throw new Error(`ファイル「${file.name}」が大きすぎます（${(file.size / 1024 / 1024).toFixed(1)}MB）。10MB以下のファイルをアップロードしてください。`);
+        throw new Error(`ファイル「${file.name}」が大きすぎます（${(file.size / 1024 / 1024).toFixed(1)}MB）。4MB以下のファイルをアップロードしてください。`);
     }
     
     // ファイル名検証（パストラバーサル防止）
@@ -140,7 +140,7 @@ function validateFiles(files: File[]): void {
     // 合計サイズの検証
     const totalSize = files.reduce((sum, file) => sum + file.size, 0);
     if (totalSize > MAX_TOTAL_SIZE) {
-        throw new Error(`ファイルの合計サイズが大きすぎます（${(totalSize / 1024 / 1024).toFixed(1)}MB）。合計20MB以下になるようにしてください。`);
+        throw new Error(`ファイルの合計サイズが大きすぎます（${(totalSize / 1024 / 1024).toFixed(1)}MB）。合計4MB以下になるようにしてください。`);
     }
     
     // 各ファイルの検証

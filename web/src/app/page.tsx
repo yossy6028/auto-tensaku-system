@@ -702,19 +702,19 @@ export default function Home() {
       return;
     }
 
-    // ファイルサイズチェック（Vercel Proプラン: 最大100MBまで対応、Gemini API: 約20MBまで）
-    const MAX_TOTAL_SIZE = 20 * 1024 * 1024; // 20MB（10ページ以上のPDFに対応）
-    const MAX_SINGLE_FILE_SIZE = 10 * 1024 * 1024; // 10MB
+    // ファイルサイズチェック（Vercel Serverless Functions: 4.5MBペイロード上限）
+    const MAX_TOTAL_SIZE = 4 * 1024 * 1024; // 4MB（Vercelペイロード上限対応）
+    const MAX_SINGLE_FILE_SIZE = 4 * 1024 * 1024; // 4MB
     const totalSize = uploadedFiles.reduce((sum, file) => sum + file.size, 0);
     
     const oversizedFile = uploadedFiles.find(file => file.size > MAX_SINGLE_FILE_SIZE);
     if (oversizedFile) {
-      setError(`ファイル「${oversizedFile.name}」が大きすぎます（${(oversizedFile.size / 1024 / 1024).toFixed(1)}MB）。10MB以下のファイルをアップロードしてください。`);
+      setError(`ファイル「${oversizedFile.name}」が大きすぎます（${(oversizedFile.size / 1024 / 1024).toFixed(1)}MB）。4MB以下のファイルをアップロードしてください。PDFを圧縮するか、ページを分割してください。`);
       return;
     }
     
     if (totalSize > MAX_TOTAL_SIZE) {
-      setError(`ファイルの合計サイズが大きすぎます（${(totalSize / 1024 / 1024).toFixed(1)}MB）。合計20MB以下になるようにしてください。`);
+      setError(`ファイルの合計サイズが大きすぎます（${(totalSize / 1024 / 1024).toFixed(1)}MB）。合計4MB以下になるようにしてください。`);
       return;
     }
 

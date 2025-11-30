@@ -228,7 +228,15 @@ export class EduShiftGrader {
 
         const rawText = result.response.text().trim();
         const narrowed = this.extractTargetAnswerSection(rawText, sanitizedLabel);
-        const finalText = (narrowed.text || rawText).trim();
+
+        let finalText = (narrowed.text || rawText || "").trim();
+        if (!finalText && rawText) {
+            // AIが「該当なし」で空文字を返した場合は全文にフォールバック
+            finalText = rawText.trim();
+        }
+        if (!finalText) {
+            finalText = "（回答を読み取れませんでした）";
+        }
 
         console.log("[Grader] Stage 1 完了:", {
             mode: narrowed.matched ? "target-only" : "fallback-full",
@@ -944,14 +952,16 @@ System Instructionに定義された以下のルールを厳密に適用して�
         if (parsed) {
             delete parsed.debug_info;
             
-            // OCR結果を強制的に設定（AIが変更しないように）
-            if (parsed.grading_result && typeof parsed.grading_result === 'object') {
-                (parsed.grading_result as Record<string, unknown>).recognized_text = ocrText;
-                (parsed.grading_result as Record<string, unknown>).recognized_text_source = {
-                    matched_target: ocrResult.matchedTarget,
-                    full_length: ocrResult.fullText.length
-                };
-            }
+            // grading_resultを確実に持たせ、OCR結果を強制セット
+            const gradingResultObj = (parsed.grading_result && typeof parsed.grading_result === 'object')
+                ? parsed.grading_result as Record<string, unknown>
+                : (parsed.grading_result = {} as Record<string, unknown>);
+
+            gradingResultObj.recognized_text = ocrText;
+            gradingResultObj.recognized_text_source = {
+                matched_target: ocrResult.matchedTarget,
+                full_length: ocrResult.fullText?.length ?? 0
+            };
             
             // プログラムによる検証・補完を実行
             const validated = this.validateAndEnhanceGrading(parsed);
@@ -968,7 +978,14 @@ System Instructionに定義された以下のルールを厳密に適用して�
 
         return {
             status: "error",
-            message: "System Error: Failed to parse AI response."
+            message: "System Error: Failed to parse AI response.",
+            grading_result: {
+                recognized_text: ocrText,
+                recognized_text_source: {
+                    matched_target: ocrResult.matchedTarget,
+                    full_length: ocrResult.fullText?.length ?? 0
+                }
+            }
         };
     }
 

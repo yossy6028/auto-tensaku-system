@@ -577,6 +577,18 @@ export class EduShiftGrader {
         const gradingResult = parsed.grading_result as GradingResult | undefined;
         if (!gradingResult) return parsed;
 
+        // recognized_text が空だが ocr_debug に列読取がある場合は復元を試みる
+        if ((!gradingResult.recognized_text || !String(gradingResult.recognized_text).trim()) && parsed.ocr_debug) {
+            const ocrDebug = parsed.ocr_debug as { column_readings?: string[] } | undefined;
+            if (ocrDebug?.column_readings && Array.isArray(ocrDebug.column_readings)) {
+                const rebuilt = ocrDebug.column_readings.join("");
+                if (rebuilt.trim()) {
+                    console.log("[Grader] OCR復元: column_readings から recognized_text を補完");
+                    gradingResult.recognized_text = rebuilt;
+                }
+            }
+        }
+
         const recognizedText = gradingResult.recognized_text as string || "";
         
         // 既存のdeduction_detailsを取得

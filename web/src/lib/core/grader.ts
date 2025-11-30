@@ -884,22 +884,36 @@ export class EduShiftGrader {
     private extractJsonFromText(text: string): Record<string, unknown> | null {
         const cleaned = text.replace(/```json\n?|\n?```/g, "").trim();
         
+        console.log("[Grader] extractJsonFromText: cleaned length =", cleaned.length);
+        
         try {
-            return JSON.parse(cleaned);
-        } catch {
-            // パース失敗時は { } で囲まれた部分を抽出
+            const result = JSON.parse(cleaned);
+            console.log("[Grader] ✅ JSON parse success (first try)");
+            return result;
+        } catch (e) {
+            console.log("[Grader] ⚠️ JSON parse failed (first try), trying to extract {...}");
         }
         
         const firstBrace = cleaned.indexOf('{');
         const lastBrace = cleaned.lastIndexOf('}');
         
+        console.log("[Grader] Brace positions:", { firstBrace, lastBrace });
+        
         if (firstBrace === -1 || lastBrace === -1 || firstBrace >= lastBrace) {
+            console.error("[Grader] ❌ No valid JSON braces found");
             return null;
         }
         
+        const extracted = cleaned.substring(firstBrace, lastBrace + 1);
+        console.log("[Grader] Extracted JSON length:", extracted.length);
+        console.log("[Grader] Extracted JSON preview:", extracted.substring(0, 200));
+        
         try {
-            return JSON.parse(cleaned.substring(firstBrace, lastBrace + 1));
-        } catch {
+            const result = JSON.parse(extracted);
+            console.log("[Grader] ✅ JSON parse success (second try)");
+            return result;
+        } catch (e) {
+            console.error("[Grader] ❌ JSON parse failed (second try):", e);
             return null;
         }
     }
@@ -977,7 +991,15 @@ System Instructionに定義された以下のルールを厳密に適用して�
         );
 
         const text = result.response.text();
+        console.log("[Grader] Stage 2 AIレスポンス長:", text.length);
+        console.log("[Grader] Stage 2 AIレスポンスプレビュー:", text.substring(0, 500));
+        
         const parsed = this.extractJsonFromText(text);
+        
+        if (!parsed) {
+            console.error("[Grader] ❌ JSONパース失敗");
+            console.error("[Grader] レスポンス全文:", text);
+        }
 
         if (parsed) {
             delete parsed.debug_info;
@@ -998,14 +1020,24 @@ System Instructionに定義された以下のルールを厳密に適用して�
             
             console.log("[Grader] Stage 2 完了: プログラム検証完了", {
                 ocrLength: ocrText.length,
+                hasGradingResult: !!validated.grading_result,
+                hasScore: !!(validated.grading_result as GradingResult | undefined)?.score,
+                hasFeedback: !!(validated.grading_result as GradingResult | undefined)?.feedback_content,
                 styleCheck: (validated.grading_result as GradingResult | undefined)?.mandatory_checks?.style_check,
                 vocabCheck: (validated.grading_result as GradingResult | undefined)?.mandatory_checks?.vocabulary_check,
                 finalScore: (validated.grading_result as GradingResult | undefined)?.score
             });
             
+            // 検証結果の構造をログ出力
+            console.log("[Grader] validated keys:", Object.keys(validated));
+            if (validated.grading_result) {
+                console.log("[Grader] grading_result keys:", Object.keys(validated.grading_result as object));
+            }
+            
             return validated;
         }
 
+        console.error("[Grader] ❌ JSONパース失敗後のフォールバック");
         return {
             status: "error",
             message: "System Error: Failed to parse AI response.",

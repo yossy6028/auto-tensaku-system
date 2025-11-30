@@ -3,8 +3,8 @@ import { CONFIG } from "../config";
 import { SYSTEM_INSTRUCTION } from "../prompts/eduShift";
 
 // API呼び出しのタイムアウト設定（ミリ秒）
-// Vercel Proプラン: 60秒上限のため、各API呼び出しは25秒に設定
-const API_TIMEOUT_MS = 25000;
+// Vercel Proプラン + maxDuration=300秒対応: 各API呼び出しは90秒に設定
+const API_TIMEOUT_MS = 90000;
 
 /**
  * タイムアウト付きでPromiseを実行

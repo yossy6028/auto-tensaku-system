@@ -9,8 +9,8 @@ import { logger } from '@/lib/security/logger';
 // Force dynamic to prevent caching
 export const dynamic = 'force-dynamic';
 
-// Vercel Proプラン: 最大60秒
-export const maxDuration = 60;
+// Vercel Proプラン + Fluid Compute: 最大300秒のタイムアウト
+export const maxDuration = 300;
 
 // Note: Vercel Proプランではデフォルトで最大100MBのボディサイズに対応
 // 本システムでは20MBまでのファイルをサポート（コード内で検証）

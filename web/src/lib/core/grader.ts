@@ -66,9 +66,18 @@ type VocabularyCheckResult = {
     deduction: number;
 };
 
+type GridCheckResult = {
+    expected_cells: number;
+    recognized_length: number;
+    columns_used?: number;
+    consistent: boolean;
+    message?: string;
+};
+
 type MandatoryChecks = {
     style_check: StyleCheckResult;
     vocabulary_check: VocabularyCheckResult;
+    grid_check?: GridCheckResult;
     programmatic_validation: boolean;  // プログラムによる検証が行われたか
 };
 
@@ -80,6 +89,7 @@ type DeductionDetail = {
 type GradingResult = Record<string, unknown> & { 
     score?: number; 
     recognized_text?: string;
+    recognized_text_full?: string;
     deduction_details?: DeductionDetail[];
     mandatory_checks?: MandatoryChecks;
 };
@@ -101,7 +111,7 @@ export class EduShiftGrader {
         temperature: 0,
         topP: 0.1,
         topK: 16,
-        maxOutputTokens: 2048
+        maxOutputTokens: 4096
         // responseMimeType なし - 自由形式でOCRに集中させる
     };
     
@@ -206,23 +216,12 @@ export class EduShiftGrader {
 
         const sanitizedLabel = targetLabel.replace(/[<>\\\"'`]/g, '').trim();
 
-        const ocrPrompt = `この画像に書かれているテキストを読み取ってください。
-
-【重要】
-- 一字一句正確に、そのまま出力してください
-- 意味が通らなくても、文法的に変でも、書いてある通りに出力してください
-- 縦書きの場合は右から左、上から下の順で読んでください
-- 読めない文字は「〓」で出力してください
-- 推測や補完は絶対にしないでください
-
-【対象問題のみを抽出】
-- 採点対象の設問ラベル: 「${sanitizedLabel}」
-- 「${sanitizedLabel}」に該当する解答欄だけを抜き出してください
-- 他の設問の解答や設問文は出力しないでください
-- 解答が複数行にまたがる場合は順番を保ったまま改行も含めて出力してください
-- もし「${sanitizedLabel}」が画像内で確認できない場合でも、画像に写っている答案テキストをすべて出力してください（絶対に空で返さない）
-
-読み取ったテキストのみを出力してください（説明は不要です）。`;
+        // 設問ラベルに依存せず、常に全文を読み取らせる（ターゲット抽出は後段で実施）
+        const ocrPrompt = `この画像に書かれている文字を「そのまま」出力してください。
+- 置き換え・要約・補完は禁止
+- 読めない文字は「〓」
+- 縦書きの場合は右→左、上→下の順
+- 説明や推測は不要。文字だけ出力`;
 
         let result;
         try {
@@ -249,6 +248,7 @@ export class EduShiftGrader {
         
         // デバッグログ: OCRの生の結果を確認
         console.log("[Grader] OCR raw output length:", rawText.length);
+        console.log("[Grader] OCR raw preview:", rawText.substring(0, 160));
         
         const narrowed = this.extractTargetAnswerSection(rawText, sanitizedLabel);
 
@@ -270,7 +270,8 @@ export class EduShiftGrader {
         console.log("[Grader] Stage 1 完了:", {
             mode: narrowed.matched ? "target-only" : "fallback-full",
             textLength: finalText.length,
-            preview: finalText.substring(0, 100)
+            preview: finalText.substring(0, 120),
+            rawPreview: rawText.substring(0, 120)
         });
 
         return { text: finalText, fullText: rawText, matchedTarget: narrowed.matched };
@@ -338,11 +339,19 @@ export class EduShiftGrader {
             return String.fromCharCode(0x245F + n); // 0x2460 is ①
         };
 
+        const roman = (n: number): string | null => {
+            const romans = ["I","II","III","IV","V","VI","VII","VIII","IX","X","XI","XII","XIII","XIV","XV","XVI","XVII","XVIII","XIX","XX"];
+            if (n < 1 || n > romans.length) return null;
+            return romans[n - 1];
+        };
+
         return [
             num.toString(),
             fullWidth,
             toKanji(num),
-            circled(num)
+            circled(num),
+            roman(num),
+            roman(num)?.toLowerCase()
         ].filter((v): v is string => Boolean(v));
     }
 
@@ -354,7 +363,7 @@ export class EduShiftGrader {
         const cleaned = targetLabel.replace(/\s+/g, "");
 
         const patterns: RegExp[] = [
-            new RegExp(`^\\s*${escape(cleaned)}[\\s:：．\\.、)）】】]*`, "i")
+            new RegExp(`^\\s*${escape(cleaned)}[\\s:：．\\.、)）】】\\]\\}]?`, "i")
         ];
 
         if (parsedNumber !== null) {
@@ -363,12 +372,12 @@ export class EduShiftGrader {
                 .join("|");
 
             patterns.push(new RegExp(
-                `^\\s*(?:第\\s*)?(?:問|設問|問題|大問|Q)\\s*[\\(（【\\[]?\\s*(?:${variants})\\s*[\\)）】\\]]?`,
+                `^\\s*(?:第\\s*)?(?:問|設問|問題|大問|Q)\\s*[\\(（【\\[\\{□■\\<]?\\s*(?:${variants})\\s*[\\)）】\\]\\}□■\\>]?(?:[\\.．、:：】】])?`,
                 "i"
             ));
 
             patterns.push(new RegExp(
-                `^\\s*[\\(（【\\[]?\\s*(?:${variants})\\s*[\\)）】\\]]\\s*[\\.．、)）】】]*`,
+                `^\\s*[\\(（【\\[\\{<〈［｛〔〖【]??\\s*(?:${variants})\\s*[\\)）】\\]\\}>〉］｝〕〗】]??\\s*[\\.．、)）】】]*`,
                 "i"
             ));
         }
@@ -385,8 +394,8 @@ export class EduShiftGrader {
 
         const boundaryPatterns = [
             /^(?:問|設問|問題|大問|Q)[\s　]*[（(【\[]?\s*[0-9０-９一二三四五六七八九十百千]/i,
-            /^[（(]?\s*[0-9０-９]{1,2}\s*[)）][\s．.、：:]?/,
-            /^[①-⑳]/
+            /^[（(【\[<〈［｛〔〖【]?\s*[0-9０-９]{1,2}\s*[)）】\]>〉］｝〕〗】][\s．.、：:]?/,
+            /^[①-⑳ⅠⅡⅢⅣⅤⅥⅦⅧⅨⅩ]/
         ];
 
         return boundaryPatterns.some(r => r.test(trimmed));
@@ -621,7 +630,17 @@ export class EduShiftGrader {
 
         // 3. OCR列ごと読み取りの検証（エラーが発生しても採点は続行）
         try {
-            this.validateOcrDebug(parsed);
+            const gridCheck = this.validateOcrDebug(parsed);
+            if (gridCheck) {
+                programmaticChecks.grid_check = gridCheck;
+                // OCRズレをdeduction_detailsに反映（減点しないが情報として保持）
+                if (!gridCheck.consistent) {
+                    deductionDetails.push({
+                        reason: `マス数と文字数の不一致（期待${gridCheck.expected_cells}文字/読み取り${gridCheck.recognized_length}文字）`,
+                        deduction_percentage: 0
+                    });
+                }
+            }
         } catch (e) {
             console.warn("[Grader] OCR検証中にエラー:", e);
         }
@@ -645,7 +664,7 @@ export class EduShiftGrader {
      * OCRの列ごと読み取り結果を検証
      * AIがocr_debugを正しく出力しているか、列ごとの文字数が一致しているかを確認
      */
-    private validateOcrDebug(parsed: Record<string, unknown>): void {
+    private validateOcrDebug(parsed: Record<string, unknown>): GridCheckResult | undefined {
         const ocrDebug = parsed.ocr_debug as {
             chars_per_column?: number;
             columns_used?: number;
@@ -692,6 +711,40 @@ export class EduShiftGrader {
             console.error("[Grader] ❌ 列ごと文字数不一致（読み飛ばしの可能性）:", errors);
         } else {
             console.log("[Grader] ✅ 列ごと文字数検証OK");
+        }
+
+        // 文字数整合チェック
+        try {
+            const expectedCells = column_readings.reduce((sum, col, idx) => {
+                if (col === undefined || col === null) return sum;
+                const isLast = idx === column_readings.length - 1;
+                if (chars_per_column && !isLast) {
+                    return sum + chars_per_column; // 基準マス数
+                }
+                return sum + col.length;
+            }, 0);
+            const recognizedText = (parsed.grading_result as GradingResult | undefined)?.recognized_text;
+            const recognizedLength = recognizedText ? String(recognizedText).replace(/\s+/g, "").length : 0;
+            const consistent = expectedCells === recognizedLength;
+
+            const gridCheck: GridCheckResult = {
+                expected_cells: expectedCells,
+                recognized_length: recognizedLength,
+                columns_used,
+                consistent,
+                message: consistent ? "マス数と文字数が一致" : "マス数と文字数が不一致"
+            };
+
+            if (!consistent) {
+                console.error("[Grader] ❌ マス数とOCR文字数が一致しません", {
+                    expectedCells,
+                    recognizedLength
+                });
+            }
+
+            return gridCheck;
+        } catch (err) {
+            console.warn("[Grader] グリッド整合チェックでエラー:", err);
         }
     }
 
@@ -978,6 +1031,7 @@ System Instructionに定義された以下のルールを厳密に適用して�
 - Global Rules: 5大原則に基づく採点
 - 採点基準: 減点基準リファレンステーブルに従う
 - recognized_text には上記のOCR結果をそのまま使用すること
+- 可能な場合、マス目の列ごとの読み取りを ocr_debug として出力すること（例: chars_per_column, columns_used, column_readings[], verification）
 
 結果はJSON形式で出力してください。`;
 
@@ -1010,6 +1064,7 @@ System Instructionに定義された以下のルールを厳密に適用して�
                 : (parsed.grading_result = {} as Record<string, unknown>);
 
             gradingResultObj.recognized_text = ocrText;
+            gradingResultObj.recognized_text_full = ocrResult.fullText || ocrText;
             gradingResultObj.recognized_text_source = {
                 matched_target: ocrResult.matchedTarget,
                 full_length: ocrResult.fullText?.length ?? 0
@@ -1043,6 +1098,7 @@ System Instructionに定義された以下のルールを厳密に適用して�
             message: "System Error: Failed to parse AI response.",
             grading_result: {
                 recognized_text: ocrText,
+                recognized_text_full: ocrResult.fullText || ocrText,
                 recognized_text_source: {
                     matched_target: ocrResult.matchedTarget,
                     full_length: ocrResult.fullText?.length ?? 0

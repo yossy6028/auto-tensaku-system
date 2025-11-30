@@ -3,8 +3,9 @@ import { CONFIG } from "../config";
 import { SYSTEM_INSTRUCTION } from "../prompts/eduShift";
 
 // API呼び出しのタイムアウト設定（ミリ秒）
-// Vercel Proプラン + maxDuration=300秒対応: 各API呼び出しは90秒に設定
-const API_TIMEOUT_MS = 90000;
+// Vercel Proプラン + maxDuration=300秒対応: 各API呼び出しは140秒に設定
+// 2回のAPI呼び出し（OCR + 採点）で合計280秒以内を目標
+const API_TIMEOUT_MS = 140000;
 
 /**
  * タイムアウト付きでPromiseを実行
@@ -169,25 +170,32 @@ export class EduShiftGrader {
 
     /**
      * Stage 1: OCR専用（JSON強制なし - Web版Geminiと同等の条件）
-     * 画像からテキストを高精度で読み取ることだけに集中
+     * 答案ファイルのみからテキストを高精度で読み取る
      */
-    private async performOcr(imageParts: ContentPart[]): Promise<string> {
-        console.log("[Grader] Stage 1: OCR開始（JSON強制なし）");
+    private async performOcr(imageParts: ContentPart[], categorizedFiles?: CategorizedFiles): Promise<string> {
+        console.log("[Grader] Stage 1: OCR開始（答案ファイルのみ）");
         
-        // 答案画像のみを抽出
-        const answerParts = imageParts.filter((part, idx) => {
-            // 「生徒の答案画像」ラベルの後の画像を抽出
-            if (idx > 0) {
-                const prevPart = imageParts[idx - 1];
-                if ('text' in prevPart && prevPart.text?.includes('答案')) {
-                    return true;
+        // categorizedFilesがある場合は、答案ファイルのみをOCRに使用（処理時間短縮）
+        let targetParts: ContentPart[];
+        
+        if (categorizedFiles && categorizedFiles.studentFiles.length > 0) {
+            console.log(`[Grader] 答案ファイル数: ${categorizedFiles.studentFiles.length}`);
+            targetParts = categorizedFiles.studentFiles.map(file => this.toGenerativePart(file));
+        } else {
+            // フォールバック: 従来のロジック
+            const answerParts = imageParts.filter((part, idx) => {
+                if (idx > 0) {
+                    const prevPart = imageParts[idx - 1];
+                    if ('text' in prevPart && prevPart.text?.includes('答案')) {
+                        return true;
+                    }
                 }
-            }
-            return false;
-        });
+                return false;
+            });
+            targetParts = answerParts.length > 0 ? answerParts : imageParts.filter(p => 'inlineData' in p);
+        }
 
-        // 答案画像がない場合は全画像を使用
-        const targetParts = answerParts.length > 0 ? answerParts : imageParts.filter(p => 'inlineData' in p);
+        console.log(`[Grader] OCR対象パーツ数: ${targetParts.length}`);
 
         const ocrPrompt = `この画像に書かれているテキストを読み取ってください。
 
@@ -712,9 +720,9 @@ export class EduShiftGrader {
 
         // ========================================
         // Stage 1: OCR（JSON強制なし）
-        // Web版Geminiと同等の条件で高精度読み取り
+        // 答案ファイルのみを使用して高精度読み取り
         // ========================================
-        const ocrText = await this.performOcr(imageParts);
+        const ocrText = await this.performOcr(imageParts, categorizedFiles);
         
         // ========================================
         // Stage 2: 採点（OCR結果を使用）

@@ -197,6 +197,12 @@ export class EduShiftGrader {
         }
 
         console.log(`[Grader] OCR対象パーツ数: ${targetParts.length}`);
+        
+        // 画像パーツが0の場合はエラー
+        if (targetParts.length === 0) {
+            console.error("[Grader] ❌ OCR対象の画像がありません");
+            throw new Error("答案画像が見つかりません。ファイルを正しくアップロードしてください。");
+        }
 
         const sanitizedLabel = targetLabel.replace(/[<>\\\"'`]/g, '').trim();
 
@@ -214,32 +220,56 @@ export class EduShiftGrader {
 - 「${sanitizedLabel}」に該当する解答欄だけを抜き出してください
 - 他の設問の解答や設問文は出力しないでください
 - 解答が複数行にまたがる場合は順番を保ったまま改行も含めて出力してください
+- もし「${sanitizedLabel}」が画像内で確認できない場合でも、画像に写っている答案テキストをすべて出力してください（絶対に空で返さない）
 
 読み取ったテキストのみを出力してください（説明は不要です）。`;
 
-        const result = await withTimeout(
-            this.ocrModel.generateContent({
-                contents: [{ role: "user", parts: [{ text: ocrPrompt }, ...targetParts] }],
-                generationConfig: this.ocrConfig
-            }),
-            API_TIMEOUT_MS,
-            "OCR処理"
-        );
+        let result;
+        try {
+            result = await withTimeout(
+                this.ocrModel.generateContent({
+                    contents: [{ role: "user", parts: [{ text: ocrPrompt }, ...targetParts] }],
+                    generationConfig: this.ocrConfig
+                }),
+                API_TIMEOUT_MS,
+                "OCR処理"
+            );
+        } catch (error) {
+            console.error("[Grader] OCR API呼び出しエラー:", error);
+            throw new Error(`OCR処理に失敗しました: ${error instanceof Error ? error.message : String(error)}`);
+        }
 
-        const rawText = result.response.text().trim();
+        let rawText = "";
+        try {
+            rawText = result.response.text().trim();
+        } catch (error) {
+            console.error("[Grader] OCRレスポンスの読み取りエラー:", error);
+            throw new Error("OCR結果の取得に失敗しました。画像が破損している可能性があります。");
+        }
+        
+        // デバッグログ: OCRの生の結果を確認
+        console.log("[Grader] OCR raw output length:", rawText.length);
+        
         const narrowed = this.extractTargetAnswerSection(rawText, sanitizedLabel);
 
-        let finalText = (narrowed.text || rawText || "").trim();
-        if (!finalText && rawText) {
-            // AIが「該当なし」で空文字を返した場合は全文にフォールバック
-            finalText = rawText.trim();
+        // ターゲット抽出結果を優先、失敗時は全文フォールバック
+        let finalText = "";
+        if (narrowed.text && narrowed.text.trim()) {
+            finalText = narrowed.text.trim();
+        } else if (rawText) {
+            finalText = rawText;
+            console.log("[Grader] ⚠️ ターゲット抽出失敗、全文を使用");
         }
-        if (!finalText) {
-            finalText = "（回答を読み取れませんでした）";
+        
+        // 最終チェック: 本当に空の場合のみエラーメッセージ
+        if (!finalText || finalText.length === 0) {
+            console.error("[Grader] ❌ OCRが空の結果を返しました");
+            finalText = "（回答を読み取れませんでした。画像が不鮮明か、指定された問題が見つかりません）";
         }
 
         console.log("[Grader] Stage 1 完了:", {
             mode: narrowed.matched ? "target-only" : "fallback-full",
+            textLength: finalText.length,
             preview: finalText.substring(0, 100)
         });
 

@@ -100,7 +100,8 @@ export class EduShiftGrader {
     private readonly ocrConfig = {
         temperature: 0,
         topP: 0.1,
-        topK: 16
+        topK: 16,
+        maxOutputTokens: 2048
         // responseMimeType なし - 自由形式でOCRに集中させる
     };
     
@@ -172,7 +173,7 @@ export class EduShiftGrader {
      * Stage 1: OCR専用（JSON強制なし - Web版Geminiと同等の条件）
      * 答案ファイルのみからテキストを高精度で読み取る
      */
-    private async performOcr(imageParts: ContentPart[], categorizedFiles?: CategorizedFiles): Promise<string> {
+    private async performOcr(targetLabel: string, imageParts: ContentPart[], categorizedFiles?: CategorizedFiles): Promise<{ text: string; fullText: string; matchedTarget: boolean }> {
         console.log("[Grader] Stage 1: OCR開始（答案ファイルのみ）");
         
         // categorizedFilesがある場合は、答案ファイルのみをOCRに使用（処理時間短縮）
@@ -197,6 +198,8 @@ export class EduShiftGrader {
 
         console.log(`[Grader] OCR対象パーツ数: ${targetParts.length}`);
 
+        const sanitizedLabel = targetLabel.replace(/[<>\\\"'`]/g, '').trim();
+
         const ocrPrompt = `この画像に書かれているテキストを読み取ってください。
 
 【重要】
@@ -205,6 +208,12 @@ export class EduShiftGrader {
 - 縦書きの場合は右から左、上から下の順で読んでください
 - 読めない文字は「〓」で出力してください
 - 推測や補完は絶対にしないでください
+
+【対象問題のみを抽出】
+- 採点対象の設問ラベル: 「${sanitizedLabel}」
+- 「${sanitizedLabel}」に該当する解答欄だけを抜き出してください
+- 他の設問の解答や設問文は出力しないでください
+- 解答が複数行にまたがる場合は順番を保ったまま改行も含めて出力してください
 
 読み取ったテキストのみを出力してください（説明は不要です）。`;
 
@@ -217,9 +226,16 @@ export class EduShiftGrader {
             "OCR処理"
         );
 
-        const ocrText = result.response.text().trim();
-        console.log("[Grader] Stage 1 完了: OCR結果 =", ocrText.substring(0, 100) + "...");
-        return ocrText;
+        const rawText = result.response.text().trim();
+        const narrowed = this.extractTargetAnswerSection(rawText, sanitizedLabel);
+        const finalText = (narrowed.text || rawText).trim();
+
+        console.log("[Grader] Stage 1 完了:", {
+            mode: narrowed.matched ? "target-only" : "fallback-full",
+            preview: finalText.substring(0, 100)
+        });
+
+        return { text: finalText, fullText: rawText, matchedTarget: narrowed.matched };
     }
 
     /**
@@ -229,6 +245,151 @@ export class EduShiftGrader {
         if (typeof raw !== "number" || Number.isNaN(raw)) return null;
         if (raw > 0 && raw <= 1) return Math.round(raw * 100);
         return Math.min(100, Math.max(0, Math.round(raw)));
+    }
+
+    /**
+     * ラベル文字列から数値を抽出（例: "問9" -> 9, "問九" -> 9）
+     */
+    private parseLabelNumber(label: string): number | null {
+        const digitMatch = label.match(/[0-9０-９]+/);
+        if (digitMatch) {
+            const halfWidth = digitMatch[0].replace(/[０-９]/g, d => String.fromCharCode(d.charCodeAt(0) - 0xFEE0));
+            const parsed = parseInt(halfWidth, 10);
+            return Number.isFinite(parsed) ? parsed : null;
+        }
+
+        const kanjiMatch = label.match(/[一二三四五六七八九十百千]+/);
+        if (kanjiMatch) {
+            const kanji = kanjiMatch[0];
+            const map: Record<string, number> = {
+                "零": 0, "一": 1, "二": 2, "三": 3, "四": 4,
+                "五": 5, "六": 6, "七": 7, "八": 8, "九": 9, "十": 10
+            };
+            if (kanji === "十") return 10;
+            if (kanji.length === 1 && map[kanji] !== undefined) return map[kanji];
+            if (kanji.includes("十")) {
+                const [tens, ones] = kanji.split("十");
+                const tensValue = tens ? map[tens] ?? 1 : 1;
+                const onesValue = ones ? map[ones] ?? 0 : 0;
+                const total = tensValue * 10 + onesValue;
+                return Number.isFinite(total) ? total : null;
+            }
+        }
+
+        return null;
+    }
+
+    /**
+     * 数値の表記ゆれをバリエーション生成
+     */
+    private numberVariants(num: number | null): string[] {
+        if (num === null) return [];
+        const fullWidth = num.toString().replace(/[0-9]/g, d => String.fromCharCode(d.charCodeAt(0) + 0xFEE0));
+
+        const map = ["零", "一", "二", "三", "四", "五", "六", "七", "八", "九"];
+        const toKanji = (n: number): string | null => {
+            if (n < 0 || n > 20) return null;
+            if (n <= 10) return map[n] ?? null;
+            if (n < 20) return "十" + (map[n - 10] ?? "");
+            if (n === 20) return "二十";
+            return null;
+        };
+
+        const circled = (n: number): string | null => {
+            if (n < 1 || n > 20) return null;
+            return String.fromCharCode(0x245F + n); // 0x2460 is ①
+        };
+
+        return [
+            num.toString(),
+            fullWidth,
+            toKanji(num),
+            circled(num)
+        ].filter((v): v is string => Boolean(v));
+    }
+
+    /**
+     * ターゲット設問の開始行を検出する正規表現を構築
+     */
+    private buildTargetLabelPatterns(targetLabel: string, parsedNumber: number | null): RegExp[] {
+        const escape = (value: string) => value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+        const cleaned = targetLabel.replace(/\s+/g, "");
+
+        const patterns: RegExp[] = [
+            new RegExp(`^\\s*${escape(cleaned)}[\\s:：．\\.、)）】】]*`, "i")
+        ];
+
+        if (parsedNumber !== null) {
+            const variants = this.numberVariants(parsedNumber)
+                .map(v => escape(v))
+                .join("|");
+
+            patterns.push(new RegExp(
+                `^\\s*(?:第\\s*)?(?:問|設問|問題|大問|Q)\\s*[\\(（【\\[]?\\s*(?:${variants})\\s*[\\)）】\\]]?`,
+                "i"
+            ));
+
+            patterns.push(new RegExp(
+                `^\\s*[\\(（【\\[]?\\s*(?:${variants})\\s*[\\)）】\\]]\\s*[\\.．、)）】】]*`,
+                "i"
+            ));
+        }
+
+        return patterns;
+    }
+
+    /**
+     * 次の設問境界らしい行かどうかを判定
+     */
+    private isLikelyQuestionBoundary(line: string): boolean {
+        const trimmed = line.trim();
+        if (!trimmed) return false;
+
+        const boundaryPatterns = [
+            /^(?:問|設問|問題|大問|Q)[\s　]*[（(【\[]?\s*[0-9０-９一二三四五六七八九十百千]/i,
+            /^[（(]?\s*[0-9０-９]{1,2}\s*[)）][\s．.、：:]?/,
+            /^[①-⑳]/
+        ];
+
+        return boundaryPatterns.some(r => r.test(trimmed));
+    }
+
+    /**
+     * OCR結果からターゲット設問部分のみを抽出
+     */
+    private extractTargetAnswerSection(ocrText: string, targetLabel: string): { text: string; matched: boolean } {
+        const lines = ocrText.split(/\r?\n/);
+        const parsedNumber = this.parseLabelNumber(targetLabel);
+        const patterns = this.buildTargetLabelPatterns(targetLabel, parsedNumber);
+
+        let startIndex = -1;
+        for (let i = 0; i < lines.length; i++) {
+            const line = lines[i]?.trim() ?? "";
+            if (!line) continue;
+            if (patterns.some(r => r.test(line))) {
+                startIndex = i;
+                break;
+            }
+        }
+
+        if (startIndex === -1) {
+            return { text: ocrText.trim(), matched: false };
+        }
+
+        let endIndex = lines.length;
+        for (let i = startIndex + 1; i < lines.length; i++) {
+            if (this.isLikelyQuestionBoundary(lines[i])) {
+                endIndex = i;
+                break;
+            }
+        }
+
+        const extracted = lines.slice(startIndex, endIndex).join("\n").trim();
+        if (!extracted) {
+            return { text: ocrText.trim(), matched: false };
+        }
+
+        return { text: extracted, matched: true };
     }
 
     // ========================================
@@ -722,7 +883,8 @@ export class EduShiftGrader {
         // Stage 1: OCR（JSON強制なし）
         // 答案ファイルのみを使用して高精度読み取り
         // ========================================
-        const ocrText = await this.performOcr(imageParts, categorizedFiles);
+        const ocrResult = await this.performOcr(sanitizedLabel, imageParts, categorizedFiles);
+        const ocrText = (ocrResult.text || ocrResult.fullText).trim();
         
         // ========================================
         // Stage 2: 採点（OCR結果を使用）
@@ -785,6 +947,10 @@ System Instructionに定義された以下のルールを厳密に適用して�
             // OCR結果を強制的に設定（AIが変更しないように）
             if (parsed.grading_result && typeof parsed.grading_result === 'object') {
                 (parsed.grading_result as Record<string, unknown>).recognized_text = ocrText;
+                (parsed.grading_result as Record<string, unknown>).recognized_text_source = {
+                    matched_target: ocrResult.matchedTarget,
+                    full_length: ocrResult.fullText.length
+                };
             }
             
             // プログラムによる検証・補完を実行

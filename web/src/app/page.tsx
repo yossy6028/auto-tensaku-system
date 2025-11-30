@@ -1964,7 +1964,7 @@ export default function Home() {
                     </div>
 
                     {/* Recognized Text Section */}
-                    {gradingResult.recognized_text && (
+                    { (gradingResult.recognized_text || (gradingResult as any).recognized_text_full) && (
                       <div className="mb-16">
                         <h3 className="text-xl font-bold text-slate-800 mb-6 flex items-center">
                           <span className="bg-blue-100 text-blue-600 rounded-lg w-8 h-8 flex items-center justify-center mr-3">👁️</span>
@@ -1972,7 +1972,7 @@ export default function Home() {
                         </h3>
                         <div className="bg-blue-50 rounded-2xl p-6 border border-blue-100">
                           <p className="text-slate-700 whitespace-pre-wrap font-mono leading-relaxed">
-                            {gradingResult.recognized_text}
+                            {gradingResult.recognized_text || (gradingResult as any).recognized_text_full}
                           </p>
                           <p className="text-sm text-slate-500 mt-4 text-right">
                             ※文字数判定の基準となります。誤読がある場合は撮影し直してください。

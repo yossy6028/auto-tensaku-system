@@ -249,6 +249,29 @@ export class EduShiftGrader {
         // デバッグログ: OCRの生の結果を確認
         console.log("[Grader] OCR raw output length:", rawText.length);
         console.log("[Grader] OCR raw preview:", rawText.substring(0, 160));
+
+        // 極端に短い場合はリトライ（プロンプトをさらに簡素にして1回だけ再実行）
+        if (rawText.replace(/\s+/g, "").length < 5) {
+            console.warn("[Grader] ⚠️ OCR結果が極端に短いため再試行します");
+            const retryPrompt = `画像に書かれている文字をそのまま出力してください。推測・要約禁止。読めない文字は「〓」。文字のみ出力。`;
+            try {
+                const retryResult = await withTimeout(
+                    this.ocrModel.generateContent({
+                        contents: [{ role: "user", parts: [{ text: retryPrompt }, ...targetParts] }],
+                        generationConfig: this.ocrConfig
+                    }),
+                    API_TIMEOUT_MS,
+                    "OCR再試行"
+                );
+                const retryRaw = retryResult.response.text().trim();
+                console.log("[Grader] OCR retry raw length:", retryRaw.length);
+                if (retryRaw.replace(/\s+/g, "").length >= rawText.replace(/\s+/g, "").length) {
+                    rawText = retryRaw;
+                }
+            } catch (err) {
+                console.warn("[Grader] OCR再試行でエラー:", err);
+            }
+        }
         
         const narrowed = this.extractTargetAnswerSection(rawText, sanitizedLabel);
 
@@ -267,6 +290,9 @@ export class EduShiftGrader {
             finalText = "（回答を読み取れませんでした。画像が不鮮明か、指定された問題が見つかりません）";
         }
 
+        // OCR再試行や全文がある場合は recognized_text_full として保持
+        const recognizedFull = rawText || finalText;
+
         console.log("[Grader] Stage 1 完了:", {
             mode: narrowed.matched ? "target-only" : "fallback-full",
             textLength: finalText.length,
@@ -274,7 +300,7 @@ export class EduShiftGrader {
             rawPreview: rawText.substring(0, 120)
         });
 
-        return { text: finalText, fullText: rawText, matchedTarget: narrowed.matched };
+        return { text: finalText, fullText: recognizedFull, matchedTarget: narrowed.matched };
     }
 
     /**
@@ -1075,8 +1101,21 @@ System Instructionに定義された以下のルールを厳密に適用して�
                 ? parsed.grading_result as Record<string, unknown>
                 : (parsed.grading_result = {} as Record<string, unknown>);
 
-            gradingResultObj.recognized_text = ocrText;
-            gradingResultObj.recognized_text_full = ocrResult.fullText || ocrText;
+            // recognized_text が空やプレースホルダーの場合は recognized_text_full を優先
+            const placeholderPattern = /読み取れませんでした|画像が不鮮明|見つかりません/;
+            const normalizedText = (ocrText || "").trim();
+            const normalizedFull = (ocrResult.fullText || ocrText || "").trim();
+
+            let finalRecognized = normalizedText;
+            if (!finalRecognized || placeholderPattern.test(finalRecognized)) {
+                if (normalizedFull && normalizedFull.length > finalRecognized.length) {
+                    finalRecognized = normalizedFull;
+                    console.log("[Grader] recognized_text を fullText で補完");
+                }
+            }
+
+            gradingResultObj.recognized_text = finalRecognized;
+            gradingResultObj.recognized_text_full = normalizedFull || finalRecognized;
             gradingResultObj.recognized_text_source = {
                 matched_target: ocrResult.matchedTarget,
                 full_length: ocrResult.fullText?.length ?? 0

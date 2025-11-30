@@ -2,6 +2,31 @@ import { GoogleGenerativeAI } from "@google/generative-ai";
 import { CONFIG } from "../config";
 import { SYSTEM_INSTRUCTION } from "../prompts/eduShift";
 
+// API呼び出しのタイムアウト設定（ミリ秒）
+// Vercel Proプラン: 60秒上限のため、各API呼び出しは25秒に設定
+const API_TIMEOUT_MS = 25000;
+
+/**
+ * タイムアウト付きでPromiseを実行
+ */
+async function withTimeout<T>(promise: Promise<T>, timeoutMs: number, operation: string): Promise<T> {
+    let timeoutId: NodeJS.Timeout;
+    const timeoutPromise = new Promise<never>((_, reject) => {
+        timeoutId = setTimeout(() => {
+            reject(new Error(`${operation}がタイムアウトしました（${timeoutMs / 1000}秒）。再度お試しください。`));
+        }, timeoutMs);
+    });
+    
+    try {
+        const result = await Promise.race([promise, timeoutPromise]);
+        clearTimeout(timeoutId!);
+        return result;
+    } catch (error) {
+        clearTimeout(timeoutId!);
+        throw error;
+    }
+}
+
 // 型定義
 // ファイルの役割タイプ（エクスポート）
 export type FileRole = 'answer' | 'problem' | 'model' | 'problem_model' | 'answer_problem' | 'all' | 'other';
@@ -175,10 +200,14 @@ export class EduShiftGrader {
 
 読み取ったテキストのみを出力してください（説明は不要です）。`;
 
-        const result = await this.ocrModel.generateContent({
-            contents: [{ role: "user", parts: [{ text: ocrPrompt }, ...targetParts] }],
-            generationConfig: this.ocrConfig
-        });
+        const result = await withTimeout(
+            this.ocrModel.generateContent({
+                contents: [{ role: "user", parts: [{ text: ocrPrompt }, ...targetParts] }],
+                generationConfig: this.ocrConfig
+            }),
+            API_TIMEOUT_MS,
+            "OCR処理"
+        );
 
         const ocrText = result.response.text().trim();
         console.log("[Grader] Stage 1 完了: OCR結果 =", ocrText.substring(0, 100) + "...");
@@ -730,10 +759,14 @@ System Instructionに定義された以下のルールを厳密に適用して�
 
 結果はJSON形式で出力してください。`;
 
-        const result = await this.model.generateContent({
-            contents: [{ role: "user", parts: [{ text: prompt }, ...imageParts] }],
-            generationConfig: this.gradingConfig
-        });
+        const result = await withTimeout(
+            this.model.generateContent({
+                contents: [{ role: "user", parts: [{ text: prompt }, ...imageParts] }],
+                generationConfig: this.gradingConfig
+            }),
+            API_TIMEOUT_MS,
+            "採点処理"
+        );
 
         const text = result.response.text();
         const parsed = this.extractJsonFromText(text);

@@ -4,6 +4,12 @@
 - プロジェクト: auto-tensaku-system（国語記述答案の自動採点）。複数PDF/画像のアップロードでは答案・問題文・模範解答を区別して処理する設計。
 - 編集時は既存のTypeScript/Next.js構成とプロンプト仕様を尊重し、破壊的変更を避けること。
 
+## 環境情報（確認済み）
+
+- **Vercel**: Proプラン使用（毎回確認不要）
+- **リージョン**: hnd1（東京）
+- **タイムアウト**: 60秒（Fluid Compute有効時は900秒）
+
 ## デプロイ関連の問題と解消法
 
 ### 問題1: Vercelデプロイ時のモジュール解決エラー
@@ -187,6 +193,56 @@ git log --all --full-history -p -S "AIzaSy" -- DEPLOY.md
 - [ ] プレビュー版/ベータ版のモデルは名称が変更されていないか
 - [ ] AIの回答が最新情報と矛盾していないか（カットオフ日の問題）
 
+## デバイス制限機能（2台制限）
+
+塾などで複数教室でのアカウント共有を防ぐため、1アカウントあたり最大2台のデバイスに制限する機能。
+
+### 機能概要
+
+- **最大デバイス数**: 2台（`system_settings.max_devices_per_user`で変更可能）
+- **デバイス識別**: ブラウザフィンガープリント（SHA-256ハッシュ）
+- **管理者除外**: 管理者（role='admin'）はデバイス制限なし
+- **自動クリーンアップ**: 30日以上アクセスのないデバイスは自動削除可能
+
+### 関連ファイル
+
+- `supabase_migration_device_limit.sql` - DBマイグレーション
+- `web/src/lib/utils/deviceFingerprint.ts` - フィンガープリント生成
+- `web/src/components/DeviceLimitModal.tsx` - 上限エラー表示モーダル
+- `web/src/components/AuthProvider.tsx` - デバイス登録・検証ロジック
+- `web/src/lib/supabase/types.ts` - 型定義
+
+### マイグレーション適用手順
+
+1. Supabaseダッシュボードにログイン
+2. SQL Editorを開く
+3. `supabase_migration_device_limit.sql`の内容をコピー＆実行
+4. テーブル`user_devices`とRPC関数が作成されることを確認
+
+### システム設定
+
+| キー | デフォルト値 | 説明 |
+|------|-------------|------|
+| `max_devices_per_user` | 2 | ユーザーあたりの最大デバイス数 |
+
+### RPC関数
+
+| 関数名 | 説明 |
+|--------|------|
+| `register_device` | デバイスを登録（上限チェック付き） |
+| `get_user_devices` | ユーザーのデバイス一覧取得 |
+| `remove_device` | デバイスを削除 |
+| `check_device_access` | デバイスアクセス権チェック |
+| `cleanup_inactive_devices` | 古いデバイスの自動削除 |
+
+### 動作フロー
+
+1. ログイン成功時にデバイスフィンガープリントを生成
+2. `register_device`でデバイスを登録
+3. 登録済みデバイスの場合は最終アクセス日時を更新
+4. 新規デバイスで上限（2台）に達している場合はエラー
+5. `DeviceLimitModal`で既存デバイスの削除を促す
+
 ## 技術的な注意事項
 
 ### Vercelサーバーレス環境の制限
@@ -218,3 +274,37 @@ export const dynamic = 'force-dynamic';
 - `vercel.json`の`functions`設定はApp Routerでは効かない
 - ルートファイル内で`export const maxDuration`を設定する必要がある
 - Hobbyプランは最大10秒、Proプランは最大60秒
+
+### FUNCTION_INVOCATION_TIMEOUTエラーの対処
+
+**症状:**
+- `FUNCTION_INVOCATION_TIMEOUT hnd1::xxxxx` エラー
+- 採点処理が完了せずタイムアウト
+
+**原因:**
+1. Vercelプランのタイムアウト上限を超過
+2. Gemini API呼び出しが遅延
+
+**解消法:**
+
+#### 1. Vercelプランとタイムアウト上限の確認
+
+| プラン | タイムアウト上限 | 推奨設定 |
+|--------|-----------------|---------|
+| Hobby | 10秒（変更不可） | maxDuration = 10 |
+| Pro | 60秒 | maxDuration = 60 |
+| Pro + Fluid Compute | 900秒 | maxDuration = 300 |
+
+#### 2. Fluid Computeの有効化（Proプランの場合）
+1. Vercelダッシュボード → Settings → Functions
+2. "Enable Fluid Compute" をONに
+3. 再デプロイ
+
+#### 3. コード側の最適化
+- `grader.ts`でAPI呼び出しにタイムアウト（25秒）を設定済み
+- 2回のAPI呼び出し（OCR + 採点）で合計50秒以内を目標
+- タイムアウト時はユーザーフレンドリーなエラーメッセージを表示
+
+**リージョンコード:**
+- `hnd1`: 東京（推奨）
+- `iad1`: ワシントンDC（デフォルト）

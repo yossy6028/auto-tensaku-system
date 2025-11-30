@@ -3,7 +3,11 @@
 import React, { createContext, useContext, useEffect, useState, useCallback } from 'react';
 import type { SupabaseClient, User, Session } from '@supabase/supabase-js';
 import { createClient } from '@/lib/supabase/client';
-import type { UserProfile, Subscription, PricingPlan, Database } from '@/lib/supabase/types';
+import type { UserProfile, Subscription, PricingPlan, Database, DeviceInfo, DeviceRegistrationResult } from '@/lib/supabase/types';
+import { getDeviceInfo, markDeviceAsRegistered, clearDeviceRegistration } from '@/lib/utils/deviceFingerprint';
+
+// デバイス情報の型（RPC関数の戻り値）
+type UserDeviceInfo = Database['public']['Functions']['get_user_devices']['Returns'][0];
 
 interface UsageInfo {
   canUse: boolean;
@@ -34,6 +38,15 @@ interface SystemSettings {
 
 type SystemSettingRow = Database['public']['Tables']['system_settings']['Row'];
 
+// デバイス制限関連
+interface DeviceLimitInfo {
+  isLimited: boolean;
+  message: string;
+  currentDeviceCount: number;
+  maxDevices: number;
+  devices: UserDeviceInfo[];
+}
+
 interface AuthContextType {
   user: User | null;
   session: Session | null;
@@ -47,6 +60,14 @@ interface AuthContextType {
   isConfigured: boolean;
   showTrialEndedModal: boolean;
   setShowTrialEndedModal: (show: boolean) => void;
+  // デバイス制限関連
+  deviceInfo: DeviceInfo | null;
+  deviceLimitInfo: DeviceLimitInfo | null;
+  showDeviceLimitModal: boolean;
+  setShowDeviceLimitModal: (show: boolean) => void;
+  removeDevice: (deviceId: string) => Promise<boolean>;
+  retryDeviceRegistration: () => Promise<void>;
+  // 認証関数
   signInWithEmail: (email: string) => Promise<{ error: Error | null }>;
   signInWithPassword: (email: string, password: string) => Promise<{ error: Error | null }>;
   signUp: (email: string, password: string) => Promise<{ error: Error | null }>;
@@ -74,6 +95,11 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [plans, setPlans] = useState<PricingPlan[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [showTrialEndedModal, setShowTrialEndedModal] = useState(false);
+  
+  // デバイス制限関連の状態
+  const [deviceInfo, setDeviceInfo] = useState<DeviceInfo | null>(null);
+  const [deviceLimitInfo, setDeviceLimitInfo] = useState<DeviceLimitInfo | null>(null);
+  const [showDeviceLimitModal, setShowDeviceLimitModal] = useState(false);
 
   // システム設定を取得
   const fetchSystemSettings = useCallback(async () => {
@@ -285,6 +311,153 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     }
   }, [supabaseClient]);
 
+  // デバイス一覧を取得
+  const fetchUserDevices = useCallback(async (userId: string): Promise<UserDeviceInfo[]> => {
+    if (!supabaseClient) return [];
+
+    try {
+      const rpcClient = supabaseClient as unknown as {
+        rpc: (fn: string, args: Record<string, unknown>) => Promise<{ data: unknown; error: unknown }>;
+      };
+      const { data, error } = await rpcClient.rpc('get_user_devices', { p_user_id: userId });
+
+      if (error) {
+        console.warn('[AuthProvider] Failed to fetch user devices:', error);
+        return [];
+      }
+
+      if (data && Array.isArray(data)) {
+        return data as UserDeviceInfo[];
+      }
+      return [];
+    } catch (error) {
+      console.warn('[AuthProvider] fetchUserDevices error:', error);
+      return [];
+    }
+  }, [supabaseClient]);
+
+  // デバイスを登録
+  const registerDevice = useCallback(async (userId: string, deviceInfoParam: DeviceInfo): Promise<DeviceRegistrationResult | null> => {
+    if (!supabaseClient) return null;
+
+    try {
+      console.log('[AuthProvider] Registering device for user:', userId);
+      const rpcClient = supabaseClient as unknown as {
+        rpc: (fn: string, args: Record<string, unknown>) => Promise<{ data: unknown; error: unknown }>;
+      };
+      const { data, error } = await rpcClient.rpc('register_device', {
+        p_user_id: userId,
+        p_device_fingerprint: deviceInfoParam.fingerprint,
+        p_device_name: deviceInfoParam.deviceName,
+        p_user_agent: deviceInfoParam.userAgent,
+      });
+
+      if (error) {
+        console.warn('[AuthProvider] Failed to register device:', error);
+        return null;
+      }
+
+      if (data && Array.isArray(data) && data.length > 0) {
+        const result = data[0] as {
+          success: boolean;
+          message: string;
+          device_id: string | null;
+          is_new_device: boolean;
+          current_device_count: number;
+          max_devices: number | null;
+        };
+        
+        const registrationResult: DeviceRegistrationResult = {
+          success: result.success,
+          message: result.message,
+          deviceId: result.device_id,
+          isNewDevice: result.is_new_device,
+          currentDeviceCount: result.current_device_count,
+          maxDevices: result.max_devices,
+        };
+        
+        console.log('[AuthProvider] Device registration result:', registrationResult);
+        return registrationResult;
+      }
+      return null;
+    } catch (error) {
+      console.warn('[AuthProvider] registerDevice error:', error);
+      return null;
+    }
+  }, [supabaseClient]);
+
+  // デバイス登録処理（ログイン後に呼ばれる）
+  const handleDeviceRegistration = useCallback(async (userId: string) => {
+    // デバイス情報を取得
+    const info = await getDeviceInfo();
+    setDeviceInfo(info);
+
+    // デバイスを登録
+    const result = await registerDevice(userId, info);
+    
+    if (result) {
+      if (result.success) {
+        // 登録成功
+        markDeviceAsRegistered();
+        setDeviceLimitInfo(null);
+        setShowDeviceLimitModal(false);
+        console.log('[AuthProvider] ✅ Device registered successfully:', result.message);
+      } else {
+        // デバイス上限に達している
+        console.log('[AuthProvider] ⚠️ Device limit reached:', result.message);
+        
+        // デバイス一覧を取得
+        const devices = await fetchUserDevices(userId);
+        
+        setDeviceLimitInfo({
+          isLimited: true,
+          message: result.message,
+          currentDeviceCount: result.currentDeviceCount,
+          maxDevices: result.maxDevices || 2,
+          devices,
+        });
+        setShowDeviceLimitModal(true);
+      }
+    }
+  }, [registerDevice, fetchUserDevices]);
+
+  // デバイスを削除
+  const removeDevice = useCallback(async (deviceId: string): Promise<boolean> => {
+    if (!supabaseClient || !user) return false;
+
+    try {
+      console.log('[AuthProvider] Removing device:', deviceId);
+      const rpcClient = supabaseClient as unknown as {
+        rpc: (fn: string, args: Record<string, unknown>) => Promise<{ data: unknown; error: unknown }>;
+      };
+      const { data, error } = await rpcClient.rpc('remove_device', {
+        p_user_id: user.id,
+        p_device_id: deviceId,
+      });
+
+      if (error) {
+        console.warn('[AuthProvider] Failed to remove device:', error);
+        return false;
+      }
+
+      if (data && Array.isArray(data) && data.length > 0) {
+        const result = data[0] as { success: boolean; message: string };
+        console.log('[AuthProvider] Device removal result:', result);
+        return result.success;
+      }
+      return false;
+    } catch (error) {
+      console.warn('[AuthProvider] removeDevice error:', error);
+      return false;
+    }
+  }, [supabaseClient, user]);
+
+  // デバイス登録を再試行
+  const retryDeviceRegistration = useCallback(async () => {
+    if (!user || !deviceInfo) return;
+    await handleDeviceRegistration(user.id);
+  }, [user, deviceInfo, handleDeviceRegistration]);
+
   // 利用可否情報を取得
   const refreshUsageInfo = useCallback(async () => {
     if (!supabaseClient) {
@@ -491,7 +664,8 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
           Promise.all([
             fetchProfile(session.user.id).catch(() => {}),
             fetchSubscription(session.user.id).catch(() => {}),
-            fetchFreeAccessInfo(session.user.id).catch(() => {})
+            fetchFreeAccessInfo(session.user.id).catch(() => {}),
+            handleDeviceRegistration(session.user.id).catch(() => {})
           ]).catch(() => {});
         }
       } catch (error) {
@@ -509,7 +683,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     return () => {
       isMounted = false;
     };
-  }, [supabase, fetchSystemSettings, fetchPlans, fetchProfile, fetchSubscription, fetchFreeAccessInfo]);
+  }, [supabase, fetchSystemSettings, fetchPlans, fetchProfile, fetchSubscription, fetchFreeAccessInfo, handleDeviceRegistration]);
 
   // 認証状態の変更を監視
   useEffect(() => {
@@ -527,6 +701,8 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
           await fetchProfile(session.user.id).catch(() => {});
           await fetchSubscription(session.user.id).catch(() => {});
           await fetchFreeAccessInfo(session.user.id).catch(() => {});
+          // デバイス登録処理
+          handleDeviceRegistration(session.user.id).catch(() => {});
         } else {
           // セッションがない場合は、すべてのユーザー関連データをクリア
           console.log('[AuthProvider] Session is null, clearing all user data');
@@ -535,6 +711,9 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
           setUsageInfo(null);
           setFreeAccessInfo(null);
           setUser(null); // 念のため明示的にnullに設定
+          // デバイス関連の状態もクリア
+          setDeviceLimitInfo(null);
+          setShowDeviceLimitModal(false);
         }
       }
     );
@@ -542,7 +721,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     return () => {
       authSubscription.unsubscribe();
     };
-  }, [supabase, fetchProfile, fetchSubscription, fetchFreeAccessInfo]);
+  }, [supabase, fetchProfile, fetchSubscription, fetchFreeAccessInfo, handleDeviceRegistration]);
 
   useEffect(() => {
     // セッションとユーザーの両方が存在する場合のみ利用情報を取得
@@ -607,6 +786,11 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       
       // プロファイルとその他の情報を取得（非同期で実行）
       if (data.session.user) {
+        // デバイス登録処理を追加
+        handleDeviceRegistration(data.session.user.id).catch((e) => {
+          console.warn('[AuthProvider] Device registration failed:', e);
+        });
+        
         Promise.all([
           fetchProfile(data.session.user.id).catch(() => {}),
           fetchSubscription(data.session.user.id).catch(() => {}),
@@ -637,6 +821,10 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     setSubscription(null);
     setUsageInfo(null);
     setFreeAccessInfo(null);
+    // デバイス関連の状態もクリア
+    setDeviceLimitInfo(null);
+    setShowDeviceLimitModal(false);
+    clearDeviceRegistration();
   };
 
   return (
@@ -654,6 +842,14 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         isConfigured: isSupabaseConfigured,
         showTrialEndedModal,
         setShowTrialEndedModal,
+        // デバイス制限関連
+        deviceInfo,
+        deviceLimitInfo,
+        showDeviceLimitModal,
+        setShowDeviceLimitModal,
+        removeDevice,
+        retryDeviceRegistration,
+        // 認証関数
         signInWithEmail,
         signInWithPassword,
         signUp,

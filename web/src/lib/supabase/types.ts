@@ -157,6 +157,38 @@ export interface Database {
           updated_at?: string | null;
         };
       };
+      user_devices: {
+        Row: {
+          id: string;
+          user_id: string;
+          device_fingerprint: string;
+          device_name: string | null;
+          user_agent: string | null;
+          ip_address: string | null;
+          last_active_at: string;
+          created_at: string;
+        };
+        Insert: {
+          id?: string;
+          user_id: string;
+          device_fingerprint: string;
+          device_name?: string | null;
+          user_agent?: string | null;
+          ip_address?: string | null;
+          last_active_at?: string;
+          created_at?: string;
+        };
+        Update: {
+          id?: string;
+          user_id?: string;
+          device_fingerprint?: string;
+          device_name?: string | null;
+          user_agent?: string | null;
+          ip_address?: string | null;
+          last_active_at?: string;
+          created_at?: string;
+        };
+      };
     };
     Functions: {
       can_use_service: {
@@ -202,6 +234,51 @@ export interface Database {
           remaining_count: number | null;
         }[];
       };
+      register_device: {
+        Args: {
+          p_user_id: string;
+          p_device_fingerprint: string;
+          p_device_name?: string | null;
+          p_user_agent?: string | null;
+          p_ip_address?: string | null;
+        };
+        Returns: {
+          success: boolean;
+          message: string;
+          device_id: string | null;
+          is_new_device: boolean;
+          current_device_count: number;
+          max_devices: number | null;
+        }[];
+      };
+      get_user_devices: {
+        Args: { p_user_id: string };
+        Returns: {
+          device_id: string;
+          device_fingerprint: string;
+          device_name: string | null;
+          user_agent: string | null;
+          last_active_at: string;
+          created_at: string;
+          is_current: boolean;
+        }[];
+      };
+      remove_device: {
+        Args: { p_user_id: string; p_device_id: string };
+        Returns: {
+          success: boolean;
+          message: string;
+        }[];
+      };
+      check_device_access: {
+        Args: { p_user_id: string; p_device_fingerprint: string };
+        Returns: {
+          has_access: boolean;
+          message: string;
+          device_count: number;
+          max_devices: number | null;
+        }[];
+      };
     };
   };
 }
@@ -211,4 +288,28 @@ export type PricingPlan = Database['public']['Tables']['pricing_plans']['Row'];
 export type UserProfile = Database['public']['Tables']['user_profiles']['Row'];
 export type Subscription = Database['public']['Tables']['subscriptions']['Row'];
 export type UsageLog = Database['public']['Tables']['usage_logs']['Row'];
+export type UserDevice = Database['public']['Tables']['user_devices']['Row'];
+
+// デバイス関連の型
+export interface DeviceInfo {
+  fingerprint: string;
+  deviceName: string;
+  userAgent: string;
+}
+
+export interface DeviceRegistrationResult {
+  success: boolean;
+  message: string;
+  deviceId: string | null;
+  isNewDevice: boolean;
+  currentDeviceCount: number;
+  maxDevices: number | null;
+}
+
+export interface DeviceAccessResult {
+  hasAccess: boolean;
+  message: string;
+  deviceCount: number;
+  maxDevices: number | null;
+}
 

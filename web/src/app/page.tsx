@@ -9,6 +9,7 @@ import { useAuth } from '@/components/AuthProvider';
 import { UserMenu } from '@/components/UserMenu';
 import { AuthModal } from '@/components/AuthModal';
 import { UsageStatus } from '@/components/UsageStatus';
+import { DeviceLimitModal } from '@/components/DeviceLimitModal';
 import Link from 'next/link';
 import { compressMultipleImages, formatFileSize, isImageFile } from '@/lib/utils/imageCompressor';
 
@@ -39,7 +40,21 @@ type GradingResponseItem = {
 };
 
 export default function Home() {
-  const { user, usageInfo, refreshUsageInfo, isLoading: authLoading, profile, session } = useAuth();
+  const { 
+    user, 
+    usageInfo, 
+    refreshUsageInfo, 
+    isLoading: authLoading, 
+    profile, 
+    session,
+    // デバイス制限関連
+    deviceInfo,
+    deviceLimitInfo,
+    showDeviceLimitModal,
+    setShowDeviceLimitModal,
+    removeDevice,
+    retryDeviceRegistration,
+  } = useAuth();
   const [isAuthModalOpen, setIsAuthModalOpen] = useState(false);
   const [authMode, setAuthMode] = useState<'signin' | 'signup'>('signin');
 
@@ -2212,6 +2227,19 @@ export default function Home() {
         onClose={() => setIsAuthModalOpen(false)}
         initialMode={authMode}
       />
+
+      {/* Device Limit Modal */}
+      {deviceLimitInfo && deviceInfo && (
+        <DeviceLimitModal
+          isOpen={showDeviceLimitModal}
+          onClose={() => setShowDeviceLimitModal(false)}
+          devices={deviceLimitInfo.devices}
+          currentFingerprint={deviceInfo.fingerprint}
+          maxDevices={deviceLimitInfo.maxDevices}
+          onRemoveDevice={removeDevice}
+          onRetryRegistration={retryDeviceRegistration}
+        />
+      )}
     </main>
   );
 }

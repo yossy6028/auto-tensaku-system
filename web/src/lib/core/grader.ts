@@ -216,12 +216,30 @@ export class EduShiftGrader {
 
         const sanitizedLabel = targetLabel.replace(/[<>\\\"'`]/g, '').trim();
 
-        // 設問ラベルに依存せず、常に全文を読み取らせる（ターゲット抽出は後段で実施）
-        const ocrPrompt = `この画像に書かれている文字を「そのまま」出力してください。
-- 置き換え・要約・補完は禁止
-- 読めない文字は「〓」
-- 縦書きの場合は右→左、上→下の順
-- 説明や推測は不要。文字だけ出力`;
+        // マス目（原稿用紙形式）対応の高精度OCRプロンプト
+        const ocrPrompt = `【手書き答案の文字読み取り】
+
+この画像は生徒の手書き答案です。書かれている文字を**一文字も漏らさず、正確に**読み取ってください。
+
+## 読み取りルール
+
+### マス目（原稿用紙形式）の場合：
+1. **縦書き**の場合：右の列から左の列へ、各列は上から下へ読む
+2. **横書き**の場合：上の行から下の行へ、各行は左から右へ読む
+3. **1マス1文字**として、すべてのマスの文字を読み取る
+4. 空白マスは読み飛ばさず、文の区切りとして認識する
+5. 句読点（。、）も1マス分として数える
+
+### 読み取り精度の確保：
+- 書いてある文字を**そのまま**出力（意味が通らなくても修正しない）
+- 似た文字の区別を慎重に：「め」と「ぬ」、「わ」と「れ」、「は」と「ほ」など
+- 読めない・判別できない文字は「〓」で出力
+- 推測・補完・要約は**絶対に禁止**
+
+### 出力形式：
+読み取った文字列のみを出力してください。説明や注釈は不要です。
+
+【重要】文字数が少なすぎる場合は読み落としの可能性があります。マス目があれば全マスを確認してください。`;
 
         let result;
         try {
@@ -250,10 +268,78 @@ export class EduShiftGrader {
         console.log("[Grader] OCR raw output length:", rawText.length);
         console.log("[Grader] OCR raw preview:", rawText.substring(0, 160));
 
-        // 極端に短い場合はリトライ（プロンプトをさらに簡素にして1回だけ再実行）
-        if (rawText.replace(/\s+/g, "").length < 5) {
-            console.warn("[Grader] ⚠️ OCR結果が極端に短いため再試行します");
-            const retryPrompt = `画像に書かれている文字をそのまま出力してください。推測・要約禁止。読めない文字は「〓」。文字のみ出力。`;
+        // マス目形式の精密OCR（列ごとの読み取り）
+        const gridOcrPrompt = `この画像はマス目（原稿用紙形式）の答案です。
+
+【列ごとの読み取り指示】
+1. 縦書きの場合、右端の列を「列1」として、左に向かって列2、列3...と番号付け
+2. 各列の文字を上から下へ順に読み取り、以下の形式で出力：
+
+列1: [文字列]
+列2: [文字列]
+列3: [文字列]
+...
+
+最後に、すべての列を連結した完全なテキストを出力：
+完全テキスト: [全文]
+
+【注意】
+- 1マス1文字として読む
+- 空白マスは無視して詰める
+- 句読点も1文字として数える
+- 読めない文字は「〓」`;
+
+        try {
+            const gridResult = await withTimeout(
+                this.ocrModel.generateContent({
+                    contents: [{ role: "user", parts: [{ text: gridOcrPrompt }, ...targetParts] }],
+                    generationConfig: this.ocrConfig
+                }),
+                API_TIMEOUT_MS,
+                "マス目OCR"
+            );
+            const gridRaw = gridResult.response.text().trim();
+            console.log("[Grader] Grid OCR raw length:", gridRaw.length);
+            console.log("[Grader] Grid OCR preview:", gridRaw.substring(0, 300));
+            
+            // 「完全テキスト:」の後のテキストを抽出
+            const fullTextMatch = gridRaw.match(/完全テキスト[:：]\s*([^\n]+)/);
+            if (fullTextMatch && fullTextMatch[1]) {
+                const gridText = fullTextMatch[1].trim();
+                console.log("[Grader] Grid OCR extracted text length:", gridText.length);
+                
+                // マス目OCRの結果がより長ければ採用
+                if (gridText.length > rawText.replace(/\s+/g, "").length) {
+                    console.log("[Grader] ✅ マス目OCR結果を採用（より長い）");
+                    rawText = gridText;
+                }
+            }
+            
+            // 列ごとの読み取り結果も保存（後でデバッグ用に使用可能）
+            const columnMatches = gridRaw.matchAll(/列(\d+)[:：]\s*(.+?)(?:\n|$)/g);
+            const columns: string[] = [];
+            for (const match of columnMatches) {
+                columns.push(match[2].trim());
+            }
+            if (columns.length > 0) {
+                console.log("[Grader] Grid columns detected:", columns.length);
+                // 列を連結して比較用テキストを作成
+                const columnsJoined = columns.join("");
+                if (columnsJoined.length > rawText.replace(/\s+/g, "").length) {
+                    console.log("[Grader] ✅ 列連結結果を採用（より長い）");
+                    rawText = columnsJoined;
+                }
+            }
+        } catch (err) {
+            console.warn("[Grader] マス目OCRでエラー（通常OCR結果を使用）:", err);
+        }
+
+        // 極端に短い場合は追加リトライ
+        if (rawText.replace(/\s+/g, "").length < 10) {
+            console.warn("[Grader] ⚠️ OCR結果が極端に短いため追加リトライ");
+            const retryPrompt = `画像に書かれている手書き文字をすべて読み取ってください。
+マス目がある場合は、1マスずつ丁寧に読んでください。
+文字のみ出力。説明不要。`;
             try {
                 const retryResult = await withTimeout(
                     this.ocrModel.generateContent({
@@ -261,15 +347,15 @@ export class EduShiftGrader {
                         generationConfig: this.ocrConfig
                     }),
                     API_TIMEOUT_MS,
-                    "OCR再試行"
+                    "OCR追加リトライ"
                 );
                 const retryRaw = retryResult.response.text().trim();
                 console.log("[Grader] OCR retry raw length:", retryRaw.length);
-                if (retryRaw.replace(/\s+/g, "").length >= rawText.replace(/\s+/g, "").length) {
+                if (retryRaw.replace(/\s+/g, "").length > rawText.replace(/\s+/g, "").length) {
                     rawText = retryRaw;
                 }
             } catch (err) {
-                console.warn("[Grader] OCR再試行でエラー:", err);
+                console.warn("[Grader] OCR追加リトライでエラー:", err);
             }
         }
         
@@ -603,18 +689,50 @@ export class EduShiftGrader {
         const gradingResult = parsed.grading_result as GradingResult | undefined;
         if (!gradingResult) return parsed;
 
-        // recognized_text が空またはプレースホルダーの場合、ocr_debug から復元を試みる
+        // recognized_text の検証と復元
         const placeholderPattern = /読み取れませんでした|画像が不鮮明|見つかりません|〓{3,}|取得できませんでした/;
         const currentText = String(gradingResult.recognized_text || "").trim();
+        const currentLength = currentText.replace(/\s+/g, "").length;
         const needsRecovery = !currentText || placeholderPattern.test(currentText);
         
-        if (needsRecovery && parsed.ocr_debug) {
-            const ocrDebug = parsed.ocr_debug as { column_readings?: string[] } | undefined;
+        // ocr_debug から最適なテキストを探す
+        if (parsed.ocr_debug) {
+            const ocrDebug = parsed.ocr_debug as { 
+                column_readings?: string[];
+                corrected_text?: string;
+                original_text?: string;
+                total_chars?: number;
+            } | undefined;
+            
+            const candidates: { source: string; text: string; length: number }[] = [];
+            
+            // 1. corrected_text（AIが修正したテキスト）
+            if (ocrDebug?.corrected_text && typeof ocrDebug.corrected_text === 'string') {
+                const text = ocrDebug.corrected_text.trim();
+                if (text && !placeholderPattern.test(text)) {
+                    candidates.push({ source: "corrected_text", text, length: text.replace(/\s+/g, "").length });
+                }
+            }
+            
+            // 2. column_readings の連結
             if (ocrDebug?.column_readings && Array.isArray(ocrDebug.column_readings)) {
                 const rebuilt = ocrDebug.column_readings.join("");
                 if (rebuilt.trim() && !placeholderPattern.test(rebuilt)) {
-                    console.log("[Grader] OCR復元: column_readings から recognized_text を補完 (validateAndEnhance)");
-                    gradingResult.recognized_text = rebuilt;
+                    candidates.push({ source: "column_readings", text: rebuilt.trim(), length: rebuilt.replace(/\s+/g, "").length });
+                }
+            }
+            
+            // 3. 現在のテキスト（プレースホルダーでない場合）
+            if (currentText && !placeholderPattern.test(currentText)) {
+                candidates.push({ source: "current", text: currentText, length: currentLength });
+            }
+            
+            // 最も長いテキストを選択
+            if (candidates.length > 0) {
+                const best = candidates.reduce((a, b) => a.length > b.length ? a : b);
+                if (best.length > currentLength || needsRecovery) {
+                    console.log(`[Grader] OCR復元: ${best.source} から recognized_text を更新 (${best.length}文字)`);
+                    gradingResult.recognized_text = best.text;
                 }
             }
         }
@@ -1057,19 +1175,45 @@ export class EduShiftGrader {
 
         // OCR結果がプレースホルダーかどうかを判定
         const ocrIsPlaceholder = /読み取れませんでした|画像が不鮮明|見つかりません/.test(ocrText);
+        const ocrCharCount = ocrText.replace(/\s+/g, "").length;
         
         // Stage 2用プロンプト（OCR結果の状態に応じて指示を変える）
         const ocrSection = ocrIsPlaceholder
             ? `【重要】事前のOCRで回答テキストを読み取れませんでした。
-添付画像から「${sanitizedLabel}」の生徒の回答を直接読み取り、recognized_text に出力してください。
-- 一字一句正確に読み取ること
+添付画像から「${sanitizedLabel}」の生徒の回答を**マス目を1つずつ確認して**読み取り、recognized_text に出力してください。
+
+マス目（原稿用紙形式）の場合：
+- 縦書き: 右の列から左へ、各列は上から下へ
+- 1マス1文字として、すべてのマスを読み取る
+- 句読点も1文字として数える
 - 読めない文字は「〓」で出力
-- 推測や補完は禁止`
-            : `【Stage 1で読み取った生徒の答案テキスト】
+- 推測や補完は禁止
+
+ocr_debug にマス目の詳細を出力：
+{
+  "chars_per_column": 1列あたりの文字数,
+  "columns_used": 使用した列数,
+  "column_readings": ["列1の文字", "列2の文字", ...],
+  "total_chars": 総文字数
+}`
+            : `【Stage 1で読み取った生徒の答案テキスト】（${ocrCharCount}文字）
 ---
 ${ocrText}
 ---
-上記のテキストを recognized_text として使用してください。`;
+
+上記のテキストを recognized_text として使用してください。
+ただし、**マス目の画像を確認し、文字の抜けや誤りがないか検証**してください。
+
+もし抜けや誤りを発見した場合は、正しいテキストに修正して recognized_text に出力してください。
+その場合、ocr_debug に修正内容を記録：
+{
+  "original_text": "事前OCRの結果",
+  "corrected_text": "修正後のテキスト",
+  "corrections": ["修正1の説明", "修正2の説明", ...],
+  "chars_per_column": 1列あたりの文字数,
+  "columns_used": 使用した列数,
+  "column_readings": ["列1の文字", "列2の文字", ...]
+}`;
 
         const prompt = `Target Problem Label: ${sanitizedLabel}
 ${pdfPageHint}

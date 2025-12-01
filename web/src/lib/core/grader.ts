@@ -111,12 +111,11 @@ export class EduShiftGrader {
     // OCR用の設定
     // 重要: OCRは「創造的」な出力が不要なので、中程度のtopP/topKが最適
     // topP: 0.1は低すぎ（読み飛ばし）、0.95は高すぎ（要約してしまう）
+    // OCR用設定 - Web版Geminiのデフォルトに近づける
     private readonly ocrConfig = {
-        temperature: 0,      // 決定論的（同じ入力で同じ出力）
-        topP: 0.4,           // 中程度（0.1は低すぎ、0.95は高すぎ）
-        topK: 32,            // 中程度
-        maxOutputTokens: 8192 // 長い答案に対応
-        // responseMimeType なし - 自由形式でOCRに集中させる
+        temperature: 0,
+        maxOutputTokens: 8192
+        // topP, topKは指定しない（デフォルト値を使用）
     };
     
     // 採点用の設定（JSON出力を強制）
@@ -142,13 +141,9 @@ export class EduShiftGrader {
             systemInstruction: SYSTEM_INSTRUCTION
         });
         
-        // OCR専用モデル
+        // OCR専用モデル（systemInstructionなし - Web版と同じ条件）
         this.ocrModel = this.genAI.getGenerativeModel({
-            model: CONFIG.MODEL_NAME,
-            systemInstruction: `あなたは高精度OCRです。画像の文字を一字一句そのまま読み取って出力してください。
-禁止：要約、補足（書いていない文字の追加）、省略、言い換え
-許可：似た文字（ぬ↔め、わ↔れ等）の文脈に基づく判断
-書いてある通りに出力してください。`
+            model: CONFIG.MODEL_NAME
         });
     }
 
@@ -215,35 +210,10 @@ export class EduShiftGrader {
 
         const sanitizedLabel = targetLabel.replace(/[<>\\\"'`]/g, '').trim();
 
-        // OCRプロンプト
-        const ocrPrompt = `【重要】この画像の手書き文字を「一字一句そのまま」読み取ってください。
-
-■ 禁止事項：
-- 要約しない
-- 補足しない（書いていない文字を追加しない）
-- 言い換えない
-- 省略しない
-
-■ 許可事項：
-- 似た文字の文脈判断による置き換えはOK
-  例：「ぬ」↔「め」、「わ」↔「れ」、「た」↔「だ」など
-
-■ マス目（原稿用紙）の読み取り方法：
-1. 右端の列から開始
-2. その列を上から下へ、1マスずつ読む
-3. 列の終わりまで読んだら、左隣の列へ移動
-4. 繰り返す
-
-■ 重要：小さい文字を見逃さない！
-- 文章途中に空マスはない（文末のみ空マスがある）
-- 空マスに見える場合、以下が小さく書かれている可能性大：
-  - 句読点：「、」「。」
-  - 拗音：「ゃ」「ゅ」「ょ」
-  - 促音：「っ」
-  - 小文字：「ぁ」「ぃ」「ぅ」「ぇ」「ぉ」
-- マスの中を注意深く確認してください
-
-書いてある文字を、書いてある順番で出力してください。`;
+        // OCRプロンプト - Web版Geminiと同等のシンプルさ
+        const ocrPrompt = `この画像に書かれている文字を全て書き出してください。
+縦書きなので右から左へ読んでください。
+一字一句省略せずに書き出してください。`;
 
         let result;
         try {

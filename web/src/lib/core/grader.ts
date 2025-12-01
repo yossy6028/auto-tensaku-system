@@ -131,10 +131,10 @@ export class EduShiftGrader {
     };
     
     // OCR用のsystemInstruction
-    private readonly ocrSystemInstruction = `あなたは高精度OCRです。画像の文字を一字一句そのまま読み取って出力してください。
-禁止：要約、補足（書いていない文字の追加）、省略、言い換え
-許可：似た文字（ぬ↔め、わ↔れ等）の文脈に基づく判断
-書いてある通りに出力してください。`;
+    private readonly ocrSystemInstruction = `あなたは機械的なOCRエンジンです。
+意味を理解せず、見たままの文字を転写してください。
+絶対に要約・言い換え・解釈をしないでください。
+文法的に変でも、意味が通らなくても、書いてある通りに出力してください。`;
 
     constructor() {
         if (!CONFIG.GEMINI_API_KEY) {
@@ -205,12 +205,21 @@ export class EduShiftGrader {
 
         const sanitizedLabel = targetLabel.replace(/[<>\\\"'`]/g, "").trim() || "target";
         const ocrPrompt = [
-            `「${sanitizedLabel}」の解答欄のみをそのまま転写してください。`,
-            "要約・補正・言い換えは禁止。句読点も含めて書いてある通りに。",
-            "読めない文字は \"〓\" に置き換える。",
-            "縦書き: 右列上から下へ、次に左の列へ移る（列順を入れ替えない）。",
-            "他の設問や欄外メモ、添削マークは無視する。",
-            "JSONで返してください: { \"text\": \"<verbatim answer>\", \"char_count\": <整数(空白・改行を除いた文字数)> }"
+            `「${sanitizedLabel}」の解答欄を一字一句そのまま転写してください。`,
+            "",
+            "【絶対禁止】",
+            "- 要約しない",
+            "- 言い換えない（「するものだと」→「する動物が」のような変換禁止）",
+            "- 意味を解釈しない",
+            "- 文法的におかしくても修正しない",
+            "",
+            "【ルール】",
+            "- 書いてある文字をそのまま写す",
+            "- 読めない文字は「〓」",
+            "- 縦書き: 右列→左列、上→下",
+            "- 他の設問は無視",
+            "",
+            "JSONで返す: { \"text\": \"<そのまま転写>\", \"char_count\": <文字数> }"
         ].join("\n");
 
         let result;

@@ -1182,12 +1182,20 @@ System Instructionに定義された以下のルールを厳密に適用して�
                 candidates.push({ source: "ocr_text", text: normalizedText });
             }
             
-            // 最も長い有効なテキストを選択
+            // 優先順位ベースで選択し、極端に短い場合のみより長い候補に差し替える
+            // （少し長いだけの誤読で文字数超過にならないようにする）
             let finalRecognized = "";
             let selectedSource = "none";
-            
+
             for (const candidate of candidates) {
-                if (candidate.text.length > finalRecognized.length) {
+                if (!finalRecognized) {
+                    finalRecognized = candidate.text;
+                    selectedSource = candidate.source;
+                    continue;
+                }
+
+                const isSignificantlyLonger = candidate.text.length > finalRecognized.length * 1.2;
+                if (isSignificantlyLonger) {
                     finalRecognized = candidate.text;
                     selectedSource = candidate.source;
                 }

@@ -108,12 +108,13 @@ export class EduShiftGrader {
     private genAI: GoogleGenerativeAI;
     private model: ReturnType<GoogleGenerativeAI["getGenerativeModel"]>;
     
-    // OCR用の設定（Web版Geminiと同等の条件を目指す）
-    // 重要: topP/topKを高くしないと、モデルが「安全な」出力を選び読み飛ばしが発生する
+    // OCR用の設定
+    // 重要: OCRは「創造的」な出力が不要なので、中程度のtopP/topKが最適
+    // topP: 0.1は低すぎ（読み飛ばし）、0.95は高すぎ（要約してしまう）
     private readonly ocrConfig = {
         temperature: 0,      // 決定論的（同じ入力で同じ出力）
-        topP: 0.95,          // Web版に近い設定（0.1は低すぎて読み飛ばしの原因）
-        topK: 40,            // Web版に近い設定（16は低すぎる）
+        topP: 0.4,           // 中程度（0.1は低すぎ、0.95は高すぎ）
+        topK: 32,            // 中程度
         maxOutputTokens: 8192 // 長い答案に対応
         // responseMimeType なし - 自由形式でOCRに集中させる
     };
@@ -141,11 +142,12 @@ export class EduShiftGrader {
             systemInstruction: SYSTEM_INSTRUCTION
         });
         
-        // OCR専用モデル（systemInstructionを最小化 - Web版Geminiに近い条件）
-        // 複雑な指示は逆効果なので、最小限に抑える
+        // OCR専用モデル
         this.ocrModel = this.genAI.getGenerativeModel({
             model: CONFIG.MODEL_NAME,
-            systemInstruction: `画像の文字を正確に読み取って出力してください。`
+            systemInstruction: `あなたは高精度OCRです。画像の文字を一字一句そのまま読み取って出力してください。
+絶対に要約・省略・言い換えをしないでください。
+意味が通らなくても、文法的に変でも、書いてある通りに出力してください。`
         });
     }
 
@@ -212,13 +214,21 @@ export class EduShiftGrader {
 
         const sanitizedLabel = targetLabel.replace(/[<>\\\"'`]/g, '').trim();
 
-        // シンプルなOCRプロンプト（Web版Geminiに近い条件）
-        // 複雑な指示は逆効果 - モデルが「指示に従う」ことに集中して読み取り精度が落ちる
-        const ocrPrompt = `この画像に書かれている手書きの文字をすべて読み取って、そのまま出力してください。
+        // OCRプロンプト - 「要約禁止」を明確に
+        const ocrPrompt = `【重要】この画像の手書き文字を「一字一句そのまま」読み取ってください。
 
-縦書きの場合は右から左へ、上から下へ読んでください。
-マス目がある場合は1マスずつ丁寧に読んでください。
-読めない文字は「〓」で出力してください。`;
+禁止事項：
+- 要約しない
+- 言い換えない
+- 省略しない
+- 意味を解釈しない
+
+読み取り方法：
+- 縦書きの場合：右の列から左へ、各列は上から下へ
+- マス目がある場合：1マス1文字として全て読む
+- 読めない文字は「〓」で出力
+
+書いてある文字を、書いてある順番で、そのまま出力してください。`;
 
         let result;
         try {

@@ -6,9 +6,9 @@ import { SYSTEM_INSTRUCTION } from "../prompts/eduShift";
 // Vercel Proプラン + maxDuration=300秒対応
 // OCR: シンプルなプロンプトなので短め
 // 採点: 複雑な処理＋大きなPDFに対応するため長め
-const OCR_TIMEOUT_MS = 90000;      // 90秒
+const OCR_TIMEOUT_MS = 120000;     // 120秒（タイムアウト緩和）
 const GRADING_TIMEOUT_MS = 180000; // 180秒
-// 合計270秒以内（300秒制限に余裕を持たせる）
+// 合計300秒以内（maxDuration=300秒制限に合わせる）
 
 /**
  * タイムアウト付きでPromiseを実行

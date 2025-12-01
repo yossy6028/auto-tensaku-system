@@ -110,11 +110,13 @@ export class EduShiftGrader {
     
     // OCR用の設定
     // topP: 0.4は行ごとの読み取りが良好だった（13b2a1c時点）
+    // responseMimeType: JSON強制で出力ブレを抑える
     private readonly ocrConfig = {
         temperature: 0,
         topP: 0.4,
         topK: 32,
-        maxOutputTokens: 4096
+        maxOutputTokens: 4096,
+        responseMimeType: "application/json" as const
     };
     
     // 採点用の設定（JSON出力を強制）

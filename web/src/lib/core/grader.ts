@@ -1,13 +1,14 @@
-import { GoogleGenerativeAI } from "@google/generative-ai";
+import { GoogleGenAI, ThinkingLevel, MediaResolution } from "@google/genai";
+import type { GenerateContentConfig } from "@google/genai";
 import { CONFIG } from "../config";
 import { SYSTEM_INSTRUCTION } from "../prompts/eduShift";
 
 // API呼び出しのタイムアウト設定（ミリ秒）
 // Vercel Proプラン + maxDuration=300秒対応
-// OCR: シンプルなプロンプトなので短め
-// 採点: 複雑な処理＋大きなPDFに対応するため長め
-const OCR_TIMEOUT_MS = 120000;     // 120秒（タイムアウト緩和）
-const GRADING_TIMEOUT_MS = 180000; // 180秒
+// OCR: thinkingConfig + mediaResolutionで高精度化のため長め
+// 採点: OCRが長いので短め
+const OCR_TIMEOUT_MS = 180000;     // 180秒（高精度OCRのため延長）
+const GRADING_TIMEOUT_MS = 110000; // 110秒（合計290秒に収める）
 // 合計300秒以内（maxDuration=300秒制限に合わせる）
 
 /**
@@ -105,25 +106,29 @@ const FILE_PATTERNS = {
 };
 
 export class EduShiftGrader {
-    private genAI: GoogleGenerativeAI;
-    private model: ReturnType<GoogleGenerativeAI["getGenerativeModel"]>;
-    private ocrModel: ReturnType<GoogleGenerativeAI["getGenerativeModel"]>;
+    private ai: GoogleGenAI;
     
-    // OCR用の設定
-    private readonly ocrConfig = {
+    // OCR用の設定（Gemini 3対応 + v1alpha API）
+    // thinkingConfig: 要約/補完を抑える（重要！）
+    // mediaResolution: マス目の細かい文字を拾う（重要！）
+    // responseMimeType: JSON強制で出力ブレを抑える
+    // temperature: 0でOCRは決定的に
+    private readonly ocrConfig: GenerateContentConfig = {
         temperature: 0,
         topP: 0.4,
         topK: 32,
         maxOutputTokens: 4096,
-        responseMimeType: "application/json" as const
+        responseMimeType: "application/json",
+        thinkingConfig: { thinkingLevel: ThinkingLevel.LOW },
+        mediaResolution: MediaResolution.MEDIA_RESOLUTION_HIGH
     };
     
     // 採点用の設定（JSON出力を強制）
-    private readonly gradingConfig = {
+    private readonly gradingConfig: GenerateContentConfig = {
         temperature: 0,
         topP: 0.1,
         topK: 16,
-        responseMimeType: "application/json" as const
+        responseMimeType: "application/json"
     };
     
     // OCR用のsystemInstruction
@@ -136,18 +141,10 @@ export class EduShiftGrader {
         if (!CONFIG.GEMINI_API_KEY) {
             throw new Error("GEMINI_API_KEY is not set in environment variables.");
         }
-        this.genAI = new GoogleGenerativeAI(CONFIG.GEMINI_API_KEY);
-        
-        // 採点用モデル
-        this.model = this.genAI.getGenerativeModel({
-            model: CONFIG.MODEL_NAME,
-            systemInstruction: SYSTEM_INSTRUCTION
-        });
-        
-        // OCR専用モデル
-        this.ocrModel = this.genAI.getGenerativeModel({
-            model: CONFIG.MODEL_NAME,
-            systemInstruction: this.ocrSystemInstruction
+        // 新SDK: v1alpha APIを使用（mediaResolution等の新機能を有効化）
+        this.ai = new GoogleGenAI({
+            apiKey: CONFIG.GEMINI_API_KEY,
+            httpOptions: { apiVersion: 'v1alpha' }
         });
     }
 
@@ -228,11 +225,15 @@ export class EduShiftGrader {
 
         let result;
         try {
-            // 旧SDK: ocrModel.generateContent()を使用
+            // 新SDK: ai.models.generateContent()を使用
             result = await withTimeout(
-                this.ocrModel.generateContent({
+                this.ai.models.generateContent({
+                    model: CONFIG.MODEL_NAME,
                     contents: [{ role: "user", parts: [{ text: ocrPrompt }, ...targetParts] }],
-                    generationConfig: this.ocrConfig
+                    config: {
+                        ...this.ocrConfig,
+                        systemInstruction: this.ocrSystemInstruction
+                    }
                 }),
                 OCR_TIMEOUT_MS,
                 "OCR処理"
@@ -244,7 +245,7 @@ export class EduShiftGrader {
 
         let raw = "";
         try {
-            raw = result.response.text().trim();
+            raw = result.text?.trim() ?? "";
         } catch (error) {
             console.error("[Grader] OCRレスポンスの読み取りエラー:", error);
             throw new Error("OCR結果の取得に失敗しました。画像が破損している可能性があります。");
@@ -1118,15 +1119,19 @@ System Instructionに定義された以下のルールを厳密に適用して�
 結果はJSON形式で出力してください。`;
 
         const result = await withTimeout(
-            this.model.generateContent({
+            this.ai.models.generateContent({
+                model: CONFIG.MODEL_NAME,
                 contents: [{ role: "user", parts: [{ text: prompt }, ...imageParts] }],
-                generationConfig: this.gradingConfig
+                config: {
+                    ...this.gradingConfig,
+                    systemInstruction: SYSTEM_INSTRUCTION
+                }
             }),
             GRADING_TIMEOUT_MS,
             "採点処理"
         );
 
-        const text = result.response.text();
+        const text = result.text ?? "";
         console.log("[Grader] Stage 2 AIレスポンス長:", text.length);
         console.log("[Grader] Stage 2 AIレスポンスプレビュー:", text.substring(0, 500));
         

@@ -4,10 +4,9 @@ import { SYSTEM_INSTRUCTION } from "../prompts/eduShift";
 
 // API呼び出しのタイムアウト設定（ミリ秒）
 // Vercel Proプラン + maxDuration=300秒対応
-// OCR: シンプルなプロンプトなので短め
-// 採点: 複雑な処理＋大きなPDFに対応するため長め
-const OCR_TIMEOUT_MS = 90000;      // 90秒
-const GRADING_TIMEOUT_MS = 180000; // 180秒
+// Gemini APIが遅いため、タイムアウトを延長
+const OCR_TIMEOUT_MS = 150000;     // 150秒
+const GRADING_TIMEOUT_MS = 140000; // 140秒（合計290秒以内）
 // 合計270秒以内（300秒制限に余裕を持たせる）
 
 /**

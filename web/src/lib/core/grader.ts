@@ -1,4 +1,4 @@
-import { GoogleGenAI, MediaResolution, ThinkingLevel } from "@google/genai";
+import { GoogleGenAI } from "@google/genai";
 import { CONFIG } from "../config";
 import { SYSTEM_INSTRUCTION } from "../prompts/eduShift";
 
@@ -107,9 +107,7 @@ const FILE_PATTERNS = {
 export class EduShiftGrader {
     private ai: GoogleGenAI;
     
-    // OCR用の設定（Gemini 3対応 + v1alpha API）
-    // thinkingConfig: 要約/補完を抑える
-    // mediaResolution: マス目の細かい文字を拾う
+    // OCR用の設定
     // responseMimeType: JSON強制で出力ブレを抑える
     // temperature: 0でOCRは決定的に
     private readonly ocrConfig = {
@@ -117,9 +115,7 @@ export class EduShiftGrader {
         topP: 0.4,
         topK: 32,
         maxOutputTokens: 4096,
-        responseMimeType: "application/json" as const,
-        thinkingConfig: { thinkingLevel: ThinkingLevel.LOW },
-        mediaResolution: MediaResolution.MEDIA_RESOLUTION_HIGH
+        responseMimeType: "application/json" as const
     };
     
     // 採点用の設定（JSON出力を強制）
@@ -140,10 +136,9 @@ export class EduShiftGrader {
         if (!CONFIG.GEMINI_API_KEY) {
             throw new Error("GEMINI_API_KEY is not set in environment variables.");
         }
-        // 新SDK: v1alpha APIを使用（mediaResolution等の新機能を有効化）
+        // 新SDK: 通常のAPIを使用（v1alphaはVercelで不安定なため無効化）
         this.ai = new GoogleGenAI({
-            apiKey: CONFIG.GEMINI_API_KEY,
-            httpOptions: { apiVersion: 'v1alpha' }
+            apiKey: CONFIG.GEMINI_API_KEY
         });
     }
 

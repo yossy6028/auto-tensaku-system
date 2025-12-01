@@ -3,9 +3,12 @@ import { CONFIG } from "../config";
 import { SYSTEM_INSTRUCTION } from "../prompts/eduShift";
 
 // API呼び出しのタイムアウト設定（ミリ秒）
-// Vercel Proプラン + maxDuration=300秒対応: 各API呼び出しは140秒に設定
-// 2回のAPI呼び出し（OCR + 採点）で合計280秒以内を目標
-const API_TIMEOUT_MS = 140000;
+// Vercel Proプラン + maxDuration=300秒対応
+// OCR: シンプルなプロンプトなので短め
+// 採点: 複雑な処理＋大きなPDFに対応するため長め
+const OCR_TIMEOUT_MS = 90000;      // 90秒
+const GRADING_TIMEOUT_MS = 180000; // 180秒
+// 合計270秒以内（300秒制限に余裕を持たせる）
 
 /**
  * タイムアウト付きでPromiseを実行
@@ -224,7 +227,7 @@ export class EduShiftGrader {
                     contents: [{ role: "user", parts: [{ text: ocrPrompt }, ...targetParts] }],
                     generationConfig: this.ocrConfig
                 }),
-                API_TIMEOUT_MS,
+                OCR_TIMEOUT_MS,
                 "OCR処理"
             );
         } catch (error) {
@@ -1123,7 +1126,7 @@ System Instructionに定義された以下のルールを厳密に適用して�
                 contents: [{ role: "user", parts: [{ text: prompt }, ...imageParts] }],
                 generationConfig: this.gradingConfig
             }),
-            API_TIMEOUT_MS,
+            GRADING_TIMEOUT_MS,
             "採点処理"
         );
 

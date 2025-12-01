@@ -215,35 +215,23 @@ export class EduShiftGrader {
 
         const sanitizedLabel = targetLabel.replace(/[<>\\\"'`]/g, '').trim();
 
-        // OCRプロンプト（13b2a1c時点で行ごと読み取りが良好だった）
-        const ocrPrompt = `【重要】この画像の手書き文字を「一字一句そのまま」読み取ってください。
+        // OCRプロンプト - 1文字ずつ出力させて要約を防ぐ
+        const ocrPrompt = `この画像の手書き文字を1文字ずつ読み取り、JSON配列として出力してください。
 
-■ 禁止事項：
-- 要約しない
-- 補足しない（書いていない文字を追加しない）
-- 言い換えない
-- 省略しない
+【出力形式】
+["文", "字", "1", "文", "字", "2", ...]
 
-■ 許可事項：
-- 似た文字の文脈判断による置き換えはOK
-  例：「ぬ」↔「め」、「わ」↔「れ」、「た」↔「だ」など
+【読み取りルール】
+- 縦書き: 右の列から左へ、各列は上から下
+- 1マスに1文字（句読点「、」「。」も1文字）
+- 小さい文字（っ、ゃ、ゅ、ょ等）も1文字として出力
+- 読めない文字は "?" で出力
 
-■ マス目（原稿用紙）の読み取り方法：
-1. 右端の列から開始
-2. その列を上から下へ、1マスずつ読む
-3. 列の終わりまで読んだら、左隣の列へ移動
-4. 繰り返す
+【禁止】
+- 要約、省略、言い換え
+- 文字の追加や削除
 
-■ 重要：小さい文字を見逃さない！
-- 文章途中に空マスはない（文末のみ空マスがある）
-- 空マスに見える場合、以下が小さく書かれている可能性大：
-  - 句読点：「、」「。」
-  - 拗音：「ゃ」「ゅ」「ょ」
-  - 促音：「っ」
-  - 小文字：「ぁ」「ぃ」「ぅ」「ぇ」「ぉ」
-- マスの中を注意深く確認してください
-
-書いてある文字を、書いてある順番で出力してください。`;
+JSON配列のみを出力してください。`;
 
         let result;
         try {
@@ -262,15 +250,34 @@ export class EduShiftGrader {
 
         let rawText = "";
         try {
-            rawText = result.response.text().trim();
+            const responseText = result.response.text().trim();
+            console.log("[Grader] OCR raw response:", responseText.substring(0, 200));
+            
+            // JSON配列をパースしてテキストに変換
+            try {
+                // ```json ... ``` を除去
+                const jsonStr = responseText.replace(/```json\n?|\n?```/g, "").trim();
+                const charArray = JSON.parse(jsonStr);
+                if (Array.isArray(charArray)) {
+                    rawText = charArray.join("");
+                    console.log("[Grader] ✅ JSON配列からテキスト変換成功:", rawText.length, "文字");
+                } else {
+                    rawText = responseText;
+                    console.log("[Grader] ⚠️ JSONが配列ではない、生テキストを使用");
+                }
+            } catch {
+                // JSONパース失敗時は生テキストをそのまま使用
+                rawText = responseText;
+                console.log("[Grader] ⚠️ JSONパース失敗、生テキストを使用");
+            }
         } catch (error) {
             console.error("[Grader] OCRレスポンスの読み取りエラー:", error);
             throw new Error("OCR結果の取得に失敗しました。画像が破損している可能性があります。");
         }
         
-        // デバッグログ: OCRの生の結果を確認
-        console.log("[Grader] OCR raw output length:", rawText.length);
-        console.log("[Grader] OCR raw preview:", rawText.substring(0, 160));
+        // デバッグログ
+        console.log("[Grader] OCR final text length:", rawText.length);
+        console.log("[Grader] OCR final preview:", rawText.substring(0, 160));
 
         // 注: 2パスOCR（マス目OCR）はタイムアウトの原因となるため削除
         // topP/topKの修正により、1パスでも高精度な読み取りが期待できる

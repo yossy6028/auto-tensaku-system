@@ -114,7 +114,8 @@ export class EduShiftGrader {
         temperature: 0,
         topP: 0.4,
         topK: 32,
-        maxOutputTokens: 8192
+        maxOutputTokens: 2048,
+        responseMimeType: "application/json" as const
     };
     
     // 採点用の設定（JSON出力を強制）
@@ -182,53 +183,39 @@ export class EduShiftGrader {
      */
     private async performOcr(targetLabel: string, imageParts: ContentPart[], categorizedFiles?: CategorizedFiles): Promise<{ text: string; fullText: string; matchedTarget: boolean }> {
         console.log("[Grader] Stage 1: OCR開始");
-        
-        // OCR対象を選択
+
+        // OCR対象を選択（答案優先、なければ全画像）
         let targetParts: ContentPart[];
-        
         if (categorizedFiles && categorizedFiles.studentFiles.length > 0) {
             console.log(`[Grader] 答案ファイル数: ${categorizedFiles.studentFiles.length}`);
             targetParts = categorizedFiles.studentFiles.map(file => this.toGenerativePart(file));
         } else {
-            // フォールバック: 従来のロジック
             const answerParts = imageParts.filter((part, idx) => {
                 if (idx > 0) {
                     const prevPart = imageParts[idx - 1];
-                    if ('text' in prevPart && prevPart.text?.includes('答案')) {
+                    if ("text" in prevPart && prevPart.text?.includes("答案")) {
                         return true;
                     }
                 }
                 return false;
             });
-            targetParts = answerParts.length > 0 ? answerParts : imageParts.filter(p => 'inlineData' in p);
+            targetParts = answerParts.length > 0 ? answerParts : imageParts.filter(p => "inlineData" in p);
         }
-        
-        console.log(`[Grader] OCR対象パーツ数: ${targetParts.length}`);
 
-        console.log(`[Grader] OCR対象パーツ数: ${targetParts.length}`);
-        
-        // 画像パーツが0の場合はエラー
         if (targetParts.length === 0) {
             console.error("[Grader] ❌ OCR対象の画像がありません");
             throw new Error("答案画像が見つかりません。ファイルを正しくアップロードしてください。");
         }
 
-        const sanitizedLabel = targetLabel.replace(/[<>\\\"'`]/g, '').trim();
-
-        // OCRプロンプト - ターゲット問題のみを読み取る
-        const ocrPrompt = `この画像から「${sanitizedLabel}」の回答部分のみを読み取ってください。
-
-【重要】
-- 「${sanitizedLabel}」というラベル（問8、問八、⑧など）を探す
-- そのラベルの直後に書かれている回答テキストのみを読み取る
-- 他の問題（問7、問9など）は無視する
-
-【出力形式】
-読み取った回答テキストをそのまま出力してください。
-要約・省略・言い換えは禁止です。
-
-【縦書きの場合】
-右の列から左へ、各列は上から下へ読んでください。`;
+        const sanitizedLabel = targetLabel.replace(/[<>\\\"'`]/g, "").trim() || "target";
+        const ocrPrompt = [
+            `「${sanitizedLabel}」の解答欄のみをそのまま転写してください。`,
+            "要約・補正・言い換えは禁止。句読点も含めて書いてある通りに。",
+            "読めない文字は \"〓\" に置き換える。",
+            "縦書き: 右列上から下へ、次に左の列へ移る（列順を入れ替えない）。",
+            "他の設問や欄外メモ、添削マークは無視する。",
+            "JSONで返してください: { \"text\": \"<verbatim answer>\", \"char_count\": <整数(空白・改行を除いた文字数)> }"
+        ].join("\n");
 
         let result;
         try {
@@ -245,50 +232,38 @@ export class EduShiftGrader {
             throw new Error(`OCR処理に失敗しました: ${error instanceof Error ? error.message : String(error)}`);
         }
 
-        let rawText = "";
+        let raw = "";
         try {
-            rawText = result.response.text().trim();
+            raw = result.response.text().trim();
         } catch (error) {
             console.error("[Grader] OCRレスポンスの読み取りエラー:", error);
             throw new Error("OCR結果の取得に失敗しました。画像が破損している可能性があります。");
         }
-        
-        // デバッグログ
-        console.log("[Grader] OCR target:", sanitizedLabel);
-        console.log("[Grader] OCR result length:", rawText.length);
-        console.log("[Grader] OCR result preview:", rawText.substring(0, 160));
 
-        // 注: 2パスOCR（マス目OCR）はタイムアウトの原因となるため削除
-        // topP/topKの修正により、1パスでも高精度な読み取りが期待できる
-        
-        const narrowed = this.extractTargetAnswerSection(rawText, sanitizedLabel);
-
-        // ターゲット抽出結果を優先、失敗時は全文フォールバック
-        let finalText = "";
-        if (narrowed.text && narrowed.text.trim()) {
-            finalText = narrowed.text.trim();
-        } else if (rawText) {
-            finalText = rawText;
-            console.log("[Grader] ⚠️ ターゲット抽出失敗、全文を使用");
+        const cleaned = raw.replace(/```json\\s*|```/g, "").trim();
+        let text = cleaned;
+        let charCount = text.replace(/\\s+/g, "").length;
+        try {
+            const parsed = JSON.parse(cleaned);
+            text = String(parsed.text ?? "").trim();
+            charCount = Number.isFinite(parsed.char_count) ? Number(parsed.char_count) : text.replace(/\\s+/g, "").length;
+        } catch (e) {
+            console.warn("[Grader] OCR JSON parse failed, using raw text");
         }
-        
-        // 最終チェック: 本当に空の場合のみエラーメッセージ
-        if (!finalText || finalText.length === 0) {
+
+        if (!text) {
             console.error("[Grader] ❌ OCRが空の結果を返しました");
-            finalText = "（回答を読み取れませんでした。画像が不鮮明か、指定された問題が見つかりません）";
+            text = "（回答を読み取れませんでした）";
+            charCount = 0;
         }
-
-        // OCR再試行や全文がある場合は recognized_text_full として保持
-        const recognizedFull = rawText || finalText;
 
         console.log("[Grader] Stage 1 完了:", {
-            mode: narrowed.matched ? "target-only" : "fallback-full",
-            textLength: finalText.length,
-            preview: finalText.substring(0, 120),
-            rawPreview: rawText.substring(0, 120)
+            textLength: text.length,
+            charCount,
+            preview: text.substring(0, 120)
         });
 
-        return { text: finalText, fullText: recognizedFull, matchedTarget: narrowed.matched };
+        return { text, fullText: text, matchedTarget: true };
     }
 
     /**

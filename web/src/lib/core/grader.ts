@@ -603,13 +603,17 @@ export class EduShiftGrader {
         const gradingResult = parsed.grading_result as GradingResult | undefined;
         if (!gradingResult) return parsed;
 
-        // recognized_text が空だが ocr_debug に列読取がある場合は復元を試みる
-        if ((!gradingResult.recognized_text || !String(gradingResult.recognized_text).trim()) && parsed.ocr_debug) {
+        // recognized_text が空またはプレースホルダーの場合、ocr_debug から復元を試みる
+        const placeholderPattern = /読み取れませんでした|画像が不鮮明|見つかりません|〓{3,}|取得できませんでした/;
+        const currentText = String(gradingResult.recognized_text || "").trim();
+        const needsRecovery = !currentText || placeholderPattern.test(currentText);
+        
+        if (needsRecovery && parsed.ocr_debug) {
             const ocrDebug = parsed.ocr_debug as { column_readings?: string[] } | undefined;
             if (ocrDebug?.column_readings && Array.isArray(ocrDebug.column_readings)) {
                 const rebuilt = ocrDebug.column_readings.join("");
-                if (rebuilt.trim()) {
-                    console.log("[Grader] OCR復元: column_readings から recognized_text を補完");
+                if (rebuilt.trim() && !placeholderPattern.test(rebuilt)) {
+                    console.log("[Grader] OCR復元: column_readings から recognized_text を補完 (validateAndEnhance)");
                     gradingResult.recognized_text = rebuilt;
                 }
             }
@@ -1051,24 +1055,33 @@ export class EduShiftGrader {
             }
         }
 
-        // Stage 2用プロンプト（OCR結果を明示的に渡す）
-        const prompt = `Target Problem Label: ${sanitizedLabel}
-${pdfPageHint}
-
-【Stage 1で読み取った生徒の答案テキスト】
-以下のテキストは、事前にOCRで正確に読み取った生徒の答案です。
-このテキストを「そのまま」使用して採点してください（再度の読み取りは不要です）。
-
+        // OCR結果がプレースホルダーかどうかを判定
+        const ocrIsPlaceholder = /読み取れませんでした|画像が不鮮明|見つかりません/.test(ocrText);
+        
+        // Stage 2用プロンプト（OCR結果の状態に応じて指示を変える）
+        const ocrSection = ocrIsPlaceholder
+            ? `【重要】事前のOCRで回答テキストを読み取れませんでした。
+添付画像から「${sanitizedLabel}」の生徒の回答を直接読み取り、recognized_text に出力してください。
+- 一字一句正確に読み取ること
+- 読めない文字は「〓」で出力
+- 推測や補完は禁止`
+            : `【Stage 1で読み取った生徒の答案テキスト】
 ---
 ${ocrText}
 ---
+上記のテキストを recognized_text として使用してください。`;
 
-上記のテキストと、添付された画像（問題文、模範解答）を参照し、「${sanitizedLabel}」の採点を行ってください。
+        const prompt = `Target Problem Label: ${sanitizedLabel}
+${pdfPageHint}
+
+${ocrSection}
+
+添付された画像（問題文、模範解答、生徒の答案）を参照し、「${sanitizedLabel}」の採点を行ってください。
 
 System Instructionに定義された以下のルールを厳密に適用してください：
 - Global Rules: 5大原則に基づく採点
 - 採点基準: 減点基準リファレンステーブルに従う
-- recognized_text には上記のOCR結果をそのまま使用すること
+- recognized_text は必ず出力すること（生徒が書いた回答テキスト）
 - 可能な場合、マス目の列ごとの読み取りを ocr_debug として出力すること（例: chars_per_column, columns_used, column_readings[], verification）
 
 結果はJSON形式で出力してください。`;
@@ -1096,22 +1109,62 @@ System Instructionに定義された以下のルールを厳密に適用して�
         if (parsed) {
             delete parsed.debug_info;
             
-            // grading_resultを確実に持たせ、OCR結果を強制セット
+            // grading_resultを確実に持たせる
             const gradingResultObj = (parsed.grading_result && typeof parsed.grading_result === 'object')
                 ? parsed.grading_result as Record<string, unknown>
                 : (parsed.grading_result = {} as Record<string, unknown>);
 
-            // recognized_text が空やプレースホルダーの場合は recognized_text_full を優先
-            const placeholderPattern = /読み取れませんでした|画像が不鮮明|見つかりません/;
-            const normalizedText = (ocrText || "").trim();
-            const normalizedFull = (ocrResult.fullText || ocrText || "").trim();
-
-            let finalRecognized = normalizedText;
-            if (!finalRecognized || placeholderPattern.test(finalRecognized)) {
-                if (normalizedFull && normalizedFull.length > finalRecognized.length) {
-                    finalRecognized = normalizedFull;
-                    console.log("[Grader] recognized_text を fullText で補完");
+            // プレースホルダーパターン（これにマッチするテキストは「読み取り失敗」とみなす）
+            const placeholderPattern = /読み取れませんでした|画像が不鮮明|見つかりません|〓{3,}/;
+            
+            // 候補テキストを収集（優先順）
+            const candidates: { source: string; text: string }[] = [];
+            
+            // 1. AIが返したrecognized_text（最優先）
+            const aiRecognized = String(gradingResultObj.recognized_text || "").trim();
+            if (aiRecognized && !placeholderPattern.test(aiRecognized)) {
+                candidates.push({ source: "ai_response", text: aiRecognized });
+            }
+            
+            // 2. ocr_debug.column_readings から復元
+            const ocrDebug = parsed.ocr_debug as { column_readings?: string[] } | undefined;
+            if (ocrDebug?.column_readings && Array.isArray(ocrDebug.column_readings)) {
+                const rebuilt = ocrDebug.column_readings.join("");
+                if (rebuilt.trim() && !placeholderPattern.test(rebuilt)) {
+                    candidates.push({ source: "column_readings", text: rebuilt.trim() });
                 }
+            }
+            
+            // 3. Stage 1のOCR結果（fullText優先）
+            const normalizedFull = (ocrResult.fullText || "").trim();
+            if (normalizedFull && !placeholderPattern.test(normalizedFull)) {
+                candidates.push({ source: "ocr_fullText", text: normalizedFull });
+            }
+            
+            // 4. Stage 1のOCR結果（ターゲット抽出済み）
+            const normalizedText = (ocrText || "").trim();
+            if (normalizedText && !placeholderPattern.test(normalizedText)) {
+                candidates.push({ source: "ocr_text", text: normalizedText });
+            }
+            
+            // 最も長い有効なテキストを選択
+            let finalRecognized = "";
+            let selectedSource = "none";
+            
+            for (const candidate of candidates) {
+                if (candidate.text.length > finalRecognized.length) {
+                    finalRecognized = candidate.text;
+                    selectedSource = candidate.source;
+                }
+            }
+            
+            // どれも有効でない場合はプレースホルダー（ただしログで警告）
+            if (!finalRecognized) {
+                console.error("[Grader] ❌ 有効なOCR結果が見つかりません。candidates:", candidates);
+                finalRecognized = "（回答テキストを取得できませんでした）";
+                selectedSource = "placeholder";
+            } else {
+                console.log(`[Grader] ✅ recognized_text選択: ${selectedSource} (${finalRecognized.length}文字)`);
             }
 
             gradingResultObj.recognized_text = finalRecognized;

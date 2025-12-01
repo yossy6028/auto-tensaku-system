@@ -1,4 +1,4 @@
-import { GoogleGenerativeAI } from "@google/generative-ai";
+import { GoogleGenAI, MediaResolution, ThinkingLevel } from "@google/genai";
 import { CONFIG } from "../config";
 import { SYSTEM_INSTRUCTION } from "../prompts/eduShift";
 
@@ -105,22 +105,21 @@ const FILE_PATTERNS = {
 };
 
 export class EduShiftGrader {
-    private genAI: GoogleGenerativeAI;
-    private model: ReturnType<GoogleGenerativeAI["getGenerativeModel"]>;
+    private ai: GoogleGenAI;
     
-    // OCR用の設定（Gemini 3対応）
+    // OCR用の設定（Gemini 3対応 + v1alpha API）
     // thinkingConfig: 要約/補完を抑える
     // mediaResolution: マス目の細かい文字を拾う
     // responseMimeType: JSON強制で出力ブレを抑える
     // temperature: 0でOCRは決定的に
-    private readonly ocrConfig: Record<string, unknown> = {
+    private readonly ocrConfig = {
         temperature: 0,
         topP: 0.4,
         topK: 32,
         maxOutputTokens: 4096,
-        responseMimeType: "application/json",
-        thinkingConfig: { thinkingLevel: "low" },
-        mediaResolution: "high"
+        responseMimeType: "application/json" as const,
+        thinkingConfig: { thinkingLevel: ThinkingLevel.LOW },
+        mediaResolution: MediaResolution.MEDIA_RESOLUTION_HIGH
     };
     
     // 採点用の設定（JSON出力を強制）
@@ -130,29 +129,21 @@ export class EduShiftGrader {
         topK: 16,
         responseMimeType: "application/json" as const
     };
-
-    // OCR専用モデル（systemInstructionを最小化してOCRに集中）
-    private ocrModel: ReturnType<GoogleGenerativeAI["getGenerativeModel"]>;
+    
+    // OCR用のsystemInstruction
+    private readonly ocrSystemInstruction = `あなたは高精度OCRです。画像の文字を一字一句そのまま読み取って出力してください。
+禁止：要約、補足（書いていない文字の追加）、省略、言い換え
+許可：似た文字（ぬ↔め、わ↔れ等）の文脈に基づく判断
+書いてある通りに出力してください。`;
 
     constructor() {
         if (!CONFIG.GEMINI_API_KEY) {
             throw new Error("GEMINI_API_KEY is not set in environment variables.");
         }
-        this.genAI = new GoogleGenerativeAI(CONFIG.GEMINI_API_KEY);
-        
-        // 採点用モデル（フルのsystemInstruction）
-        this.model = this.genAI.getGenerativeModel({
-            model: CONFIG.MODEL_NAME,
-            systemInstruction: SYSTEM_INSTRUCTION
-        });
-        
-        // OCR専用モデル
-        this.ocrModel = this.genAI.getGenerativeModel({
-            model: CONFIG.MODEL_NAME,
-            systemInstruction: `あなたは高精度OCRです。画像の文字を一字一句そのまま読み取って出力してください。
-禁止：要約、補足（書いていない文字の追加）、省略、言い換え
-許可：似た文字（ぬ↔め、わ↔れ等）の文脈に基づく判断
-書いてある通りに出力してください。`
+        // 新SDK: v1alpha APIを使用（mediaResolution等の新機能を有効化）
+        this.ai = new GoogleGenAI({
+            apiKey: CONFIG.GEMINI_API_KEY,
+            httpOptions: { apiVersion: 'v1alpha' }
         });
     }
 
@@ -224,10 +215,15 @@ export class EduShiftGrader {
 
         let result;
         try {
+            // 新SDK: ai.models.generateContent()を使用
             result = await withTimeout(
-                this.ocrModel.generateContent({
+                this.ai.models.generateContent({
+                    model: CONFIG.MODEL_NAME,
                     contents: [{ role: "user", parts: [{ text: ocrPrompt }, ...targetParts] }],
-                    generationConfig: this.ocrConfig
+                    config: {
+                        ...this.ocrConfig,
+                        systemInstruction: this.ocrSystemInstruction
+                    }
                 }),
                 OCR_TIMEOUT_MS,
                 "OCR処理"
@@ -239,7 +235,7 @@ export class EduShiftGrader {
 
         let raw = "";
         try {
-            raw = result.response.text().trim();
+            raw = result.text?.trim() ?? "";
         } catch (error) {
             console.error("[Grader] OCRレスポンスの読み取りエラー:", error);
             throw new Error("OCR結果の取得に失敗しました。画像が破損している可能性があります。");
@@ -1113,15 +1109,19 @@ System Instructionに定義された以下のルールを厳密に適用して�
 結果はJSON形式で出力してください。`;
 
         const result = await withTimeout(
-            this.model.generateContent({
+            this.ai.models.generateContent({
+                model: CONFIG.MODEL_NAME,
                 contents: [{ role: "user", parts: [{ text: prompt }, ...imageParts] }],
-                generationConfig: this.gradingConfig
+                config: {
+                    ...this.gradingConfig,
+                    systemInstruction: SYSTEM_INSTRUCTION
+                }
             }),
             GRADING_TIMEOUT_MS,
             "採点処理"
         );
 
-        const text = result.response.text();
+        const text = result.text ?? "";
         console.log("[Grader] Stage 2 AIレスポンス長:", text.length);
         console.log("[Grader] Stage 2 AIレスポンスプレビュー:", text.substring(0, 500));
         

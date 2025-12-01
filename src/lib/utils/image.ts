@@ -23,6 +23,7 @@ export function getMimeType(filePath: string): string {
     const ext = path.extname(filePath).toLowerCase();
     if (ext === '.png') return 'image/png';
     if (ext === '.jpg' || ext === '.jpeg') return 'image/jpeg';
+    if (ext === '.pdf') return 'application/pdf';
     if (ext === '.webp') return 'image/webp';
     if (ext === '.heic') return 'image/heic';
     if (ext === '.heif') return 'image/heif';

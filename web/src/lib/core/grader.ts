@@ -109,13 +109,12 @@ export class EduShiftGrader {
     private model: ReturnType<GoogleGenerativeAI["getGenerativeModel"]>;
     
     // OCR用の設定
-    // 重要: OCRは「創造的」な出力が不要なので、中程度のtopP/topKが最適
-    // topP: 0.1は低すぎ（読み飛ばし）、0.95は高すぎ（要約してしまう）
-    // OCR用設定 - Web版Geminiのデフォルトに近づける
+    // topP: 0.4は行ごとの読み取りが良好だった（13b2a1c時点）
     private readonly ocrConfig = {
         temperature: 0,
+        topP: 0.4,
+        topK: 32,
         maxOutputTokens: 8192
-        // topP, topKは指定しない（デフォルト値を使用）
     };
     
     // 採点用の設定（JSON出力を強制）
@@ -141,9 +140,13 @@ export class EduShiftGrader {
             systemInstruction: SYSTEM_INSTRUCTION
         });
         
-        // OCR専用モデル（systemInstructionなし - Web版と同じ条件）
+        // OCR専用モデル
         this.ocrModel = this.genAI.getGenerativeModel({
-            model: CONFIG.MODEL_NAME
+            model: CONFIG.MODEL_NAME,
+            systemInstruction: `あなたは高精度OCRです。画像の文字を一字一句そのまま読み取って出力してください。
+禁止：要約、補足（書いていない文字の追加）、省略、言い換え
+許可：似た文字（ぬ↔め、わ↔れ等）の文脈に基づく判断
+書いてある通りに出力してください。`
         });
     }
 
@@ -174,56 +177,20 @@ export class EduShiftGrader {
     }
 
     /**
-     * Stage 1: OCR専用（JSON強制なし - Web版Geminiと同等の条件）
-     * 答案ファイルのみからテキストを高精度で読み取る
-     * 
-     * 重要: 画像ファイル（PNG/JPEG）を優先。PDFよりも単一画像の方がOCR精度が高い。
+     * Stage 1: OCR専用（JSON強制なし）
+     * 答案ファイルからテキストを高精度で読み取る
      */
     private async performOcr(targetLabel: string, imageParts: ContentPart[], categorizedFiles?: CategorizedFiles): Promise<{ text: string; fullText: string; matchedTarget: boolean }> {
         console.log("[Grader] Stage 1: OCR開始");
         
-        // OCR対象を選択（優先順位: 画像 > PDF）
-        let targetParts: ContentPart[] = [];
-        let ocrSource = "unknown";
+        // OCR対象を選択
+        let targetParts: ContentPart[];
         
-        if (categorizedFiles) {
-            // 全カテゴリから画像ファイル（非PDF）を収集
-            const allFiles = [
-                ...categorizedFiles.studentFiles,
-                ...categorizedFiles.modelAnswerFiles, // 手書き答案がmodelに誤分類されている可能性
-                ...categorizedFiles.otherFiles
-            ];
-            
-            // 画像ファイル（PNG/JPEG/WEBP等）のみ抽出
-            const imageFiles = allFiles.filter(file => 
-                file.mimeType.startsWith('image/') && 
-                !file.mimeType.includes('pdf')
-            );
-            
-            // PDFファイル
-            const pdfFiles = allFiles.filter(file => 
-                file.mimeType === 'application/pdf' || 
-                file.name?.toLowerCase().endsWith('.pdf')
-            );
-            
-            console.log(`[Grader] ファイル分析: 画像=${imageFiles.length}, PDF=${pdfFiles.length}`);
-            
-            // 画像ファイルを優先（手書き答案である可能性が高い）
-            if (imageFiles.length > 0) {
-                // 最初の1枚のみをOCR（複数だと混乱する）
-                targetParts = [this.toGenerativePart(imageFiles[0])];
-                ocrSource = `image: ${imageFiles[0].name}`;
-                console.log(`[Grader] OCR対象: 画像ファイル「${imageFiles[0].name}」を使用`);
-            } else if (categorizedFiles.studentFiles.length > 0) {
-                // 画像がなければstudentFilesを使用
-                targetParts = categorizedFiles.studentFiles.map(file => this.toGenerativePart(file));
-                ocrSource = "studentFiles";
-                console.log(`[Grader] OCR対象: studentFiles ${categorizedFiles.studentFiles.length}件を使用`);
-            }
-        }
-        
-        // フォールバック: 従来のロジック
-        if (targetParts.length === 0) {
+        if (categorizedFiles && categorizedFiles.studentFiles.length > 0) {
+            console.log(`[Grader] 答案ファイル数: ${categorizedFiles.studentFiles.length}`);
+            targetParts = categorizedFiles.studentFiles.map(file => this.toGenerativePart(file));
+        } else {
+            // フォールバック: 従来のロジック
             const answerParts = imageParts.filter((part, idx) => {
                 if (idx > 0) {
                     const prevPart = imageParts[idx - 1];
@@ -234,10 +201,9 @@ export class EduShiftGrader {
                 return false;
             });
             targetParts = answerParts.length > 0 ? answerParts : imageParts.filter(p => 'inlineData' in p);
-            ocrSource = "fallback";
         }
         
-        console.log(`[Grader] OCRソース: ${ocrSource}, パーツ数: ${targetParts.length}`);
+        console.log(`[Grader] OCR対象パーツ数: ${targetParts.length}`);
 
         console.log(`[Grader] OCR対象パーツ数: ${targetParts.length}`);
         
@@ -249,10 +215,35 @@ export class EduShiftGrader {
 
         const sanitizedLabel = targetLabel.replace(/[<>\\\"'`]/g, '').trim();
 
-        // OCRプロンプト - Web版Geminiと同等のシンプルさ
-        const ocrPrompt = `この画像に書かれている文字を全て書き出してください。
-縦書きなので右から左へ読んでください。
-一字一句省略せずに書き出してください。`;
+        // OCRプロンプト（13b2a1c時点で行ごと読み取りが良好だった）
+        const ocrPrompt = `【重要】この画像の手書き文字を「一字一句そのまま」読み取ってください。
+
+■ 禁止事項：
+- 要約しない
+- 補足しない（書いていない文字を追加しない）
+- 言い換えない
+- 省略しない
+
+■ 許可事項：
+- 似た文字の文脈判断による置き換えはOK
+  例：「ぬ」↔「め」、「わ」↔「れ」、「た」↔「だ」など
+
+■ マス目（原稿用紙）の読み取り方法：
+1. 右端の列から開始
+2. その列を上から下へ、1マスずつ読む
+3. 列の終わりまで読んだら、左隣の列へ移動
+4. 繰り返す
+
+■ 重要：小さい文字を見逃さない！
+- 文章途中に空マスはない（文末のみ空マスがある）
+- 空マスに見える場合、以下が小さく書かれている可能性大：
+  - 句読点：「、」「。」
+  - 拗音：「ゃ」「ゅ」「ょ」
+  - 促音：「っ」
+  - 小文字：「ぁ」「ぃ」「ぅ」「ぇ」「ぉ」
+- マスの中を注意深く確認してください
+
+書いてある文字を、書いてある順番で出力してください。`;
 
         let result;
         try {
@@ -1103,17 +1094,42 @@ export class EduShiftGrader {
         const ocrCharCount = ocrText.replace(/\s+/g, "").length;
         
         // Stage 2用プロンプト
-        // 重要: OCR結果はStage 1で確定。Stage 2では再読み取りさせない（要約の原因になる）
         const ocrSection = ocrIsPlaceholder
             ? `【重要】事前のOCRで回答テキストを読み取れませんでした。
-添付画像から「${sanitizedLabel}」の生徒の回答を読み取り、recognized_text に出力してください。
-縦書きの場合は右から左へ、1マス1文字として読んでください。`
-            : `【生徒の答案テキスト（確定）】
-${ocrText}
+添付画像から「${sanitizedLabel}」の生徒の回答を**マス目を1つずつ確認して**読み取り、recognized_text に出力してください。
 
-上記のテキストをそのまま recognized_text として使用してください。
-【禁止】テキストの修正、要約、言い換え、省略
-【禁止】画像から再度読み取りを行うこと`;
+マス目（原稿用紙形式）の場合：
+- 縦書き: 右の列から左へ、各列は上から下へ
+- 1マス1文字として、すべてのマスを読み取る
+- 句読点も1文字として数える
+- 読めない文字は「〓」で出力
+- 推測や補完は禁止
+
+ocr_debug にマス目の詳細を出力：
+{
+  "chars_per_column": 1列あたりの文字数,
+  "columns_used": 使用した列数,
+  "column_readings": ["列1の文字", "列2の文字", ...],
+  "total_chars": 総文字数
+}`
+            : `【Stage 1で読み取った生徒の答案テキスト】（${ocrCharCount}文字）
+---
+${ocrText}
+---
+
+上記のテキストを recognized_text として使用してください。
+ただし、**マス目の画像を確認し、文字の抜けや誤りがないか検証**してください。
+
+もし抜けや誤りを発見した場合は、正しいテキストに修正して recognized_text に出力してください。
+その場合、ocr_debug に修正内容を記録：
+{
+  "original_text": "事前OCRの結果",
+  "corrected_text": "修正後のテキスト",
+  "corrections": ["修正1の説明", "修正2の説明", ...],
+  "chars_per_column": 1列あたりの文字数,
+  "columns_used": 使用した列数,
+  "column_readings": ["列1の文字", "列2の文字", ...]
+}`;
 
         const prompt = `Target Problem Label: ${sanitizedLabel}
 ${pdfPageHint}
@@ -1161,41 +1177,54 @@ System Instructionに定義された以下のルールを厳密に適用して�
             // プレースホルダーパターン（これにマッチするテキストは「読み取り失敗」とみなす）
             const placeholderPattern = /読み取れませんでした|画像が不鮮明|見つかりません|〓{3,}/;
             
-            // Stage 1のOCR結果を最優先（AIの再読み取りは要約の原因になる）
-            const normalizedText = (ocrText || "").trim();
-            const normalizedFull = (ocrResult.fullText || "").trim();
+            // 候補テキストを収集（優先順）
+            const candidates: { source: string; text: string }[] = [];
             
+            // 1. AIが返したrecognized_text（検証・修正済みの可能性）
+            const aiRecognized = String(gradingResultObj.recognized_text || "").trim();
+            if (aiRecognized && !placeholderPattern.test(aiRecognized)) {
+                candidates.push({ source: "ai_response", text: aiRecognized });
+            }
+            
+            // 2. ocr_debug.column_readings から復元
+            const ocrDebug = parsed.ocr_debug as { column_readings?: string[] } | undefined;
+            if (ocrDebug?.column_readings && Array.isArray(ocrDebug.column_readings)) {
+                const rebuilt = ocrDebug.column_readings.join("");
+                if (rebuilt.trim() && !placeholderPattern.test(rebuilt)) {
+                    candidates.push({ source: "column_readings", text: rebuilt.trim() });
+                }
+            }
+            
+            // 3. Stage 1のOCR結果（fullText優先）
+            const normalizedFull = (ocrResult.fullText || "").trim();
+            if (normalizedFull && !placeholderPattern.test(normalizedFull)) {
+                candidates.push({ source: "ocr_fullText", text: normalizedFull });
+            }
+            
+            // 4. Stage 1のOCR結果（ターゲット抽出済み）
+            const normalizedText = (ocrText || "").trim();
+            if (normalizedText && !placeholderPattern.test(normalizedText)) {
+                candidates.push({ source: "ocr_text", text: normalizedText });
+            }
+            
+            // 最も長い有効なテキストを選択
             let finalRecognized = "";
             let selectedSource = "none";
             
-            // 優先順位1: Stage 1のOCR結果（プレースホルダーでなければ採用）
-            if (normalizedText && !placeholderPattern.test(normalizedText)) {
-                finalRecognized = normalizedText;
-                selectedSource = "stage1_ocr";
-            }
-            // 優先順位2: Stage 1のfullText
-            else if (normalizedFull && !placeholderPattern.test(normalizedFull)) {
-                finalRecognized = normalizedFull;
-                selectedSource = "stage1_fullText";
-            }
-            // 優先順位3: AIが返したrecognized_text（Stage 1が失敗した場合のみ）
-            else {
-                const aiRecognized = String(gradingResultObj.recognized_text || "").trim();
-                if (aiRecognized && !placeholderPattern.test(aiRecognized)) {
-                    finalRecognized = aiRecognized;
-                    selectedSource = "ai_fallback";
+            for (const candidate of candidates) {
+                if (candidate.text.length > finalRecognized.length) {
+                    finalRecognized = candidate.text;
+                    selectedSource = candidate.source;
                 }
             }
             
             // どれも有効でない場合はプレースホルダー
             if (!finalRecognized) {
-                console.error("[Grader] ❌ 有効なOCR結果が見つかりません");
-                console.error("[Grader] stage1_ocr:", normalizedText?.substring(0, 50));
-                console.error("[Grader] stage1_full:", normalizedFull?.substring(0, 50));
+                console.error("[Grader] ❌ 有効なOCR結果が見つかりません。candidates:", candidates);
                 finalRecognized = "（回答テキストを取得できませんでした）";
                 selectedSource = "placeholder";
             } else {
-                console.log(`[Grader] ✅ recognized_text: ${selectedSource} (${finalRecognized.length}文字)`);
+                console.log(`[Grader] ✅ recognized_text選択: ${selectedSource} (${finalRecognized.length}文字)`);
             }
 
             gradingResultObj.recognized_text = finalRecognized;

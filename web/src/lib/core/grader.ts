@@ -1182,11 +1182,36 @@ System Instructionに定義された以下のルールを厳密に適用して�
                 candidates.push({ source: "ocr_text", text: normalizedText });
             }
             
-            // 優先順位ベースで選択し、極端に短い場合のみより長い候補に差し替える
-            // （少し長いだけの誤読で文字数超過にならないようにする）
+            // マス数（列情報）から期待文字数を算出
+            const expectedCells = (() => {
+                if (!ocrDebug?.column_readings || !Array.isArray(ocrDebug.column_readings)) return 0;
+                return ocrDebug.column_readings.reduce((sum, col, idx) => {
+                    const isLast = idx === ocrDebug.column_readings!.length - 1;
+                    if (ocrDebug.chars_per_column && !isLast) {
+                        return sum + ocrDebug.chars_per_column;
+                    }
+                    return sum + (col?.length ?? 0);
+                }, 0);
+            })();
+
+            // 期待文字数に最も近い候補を優先し、極端に短い場合のみより長い候補に差し替える
             let finalRecognized = "";
             let selectedSource = "none";
 
+            if (expectedCells > 0) {
+                let bestDiff = Number.POSITIVE_INFINITY;
+                for (const candidate of candidates) {
+                    const normalizedLen = candidate.text.replace(/\s+/g, "").length;
+                    const diff = Math.abs(normalizedLen - expectedCells);
+                    if (diff < bestDiff) {
+                        bestDiff = diff;
+                        finalRecognized = candidate.text;
+                        selectedSource = candidate.source;
+                    }
+                }
+            }
+
+            // 期待文字数で決まらない場合は優先順ベースで選択し、極端に短い場合のみより長い候補に差し替える
             for (const candidate of candidates) {
                 if (!finalRecognized) {
                     finalRecognized = candidate.text;

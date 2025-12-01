@@ -1,15 +1,14 @@
-import { GoogleGenAI, ThinkingLevel, MediaResolution } from "@google/genai";
-import type { GenerateContentConfig } from "@google/genai";
+import { GoogleGenerativeAI } from "@google/generative-ai";
 import { CONFIG } from "../config";
 import { SYSTEM_INSTRUCTION } from "../prompts/eduShift";
 
 // API呼び出しのタイムアウト設定（ミリ秒）
 // Vercel Proプラン + maxDuration=300秒対応
-// OCR: thinkingConfig + mediaResolutionで高精度化のため長め
-// 採点: OCRが長いので短め
-const OCR_TIMEOUT_MS = 180000;     // 180秒（高精度OCRのため延長）
-const GRADING_TIMEOUT_MS = 110000; // 110秒（合計290秒に収める）
-// 合計300秒以内（maxDuration=300秒制限に合わせる）
+// OCR: シンプルなプロンプトなので短め
+// 採点: 複雑な処理＋大きなPDFに対応するため長め
+const OCR_TIMEOUT_MS = 90000;      // 90秒
+const GRADING_TIMEOUT_MS = 180000; // 180秒
+// 合計270秒以内（300秒制限に余裕を持たせる）
 
 /**
  * タイムアウト付きでPromiseを実行
@@ -106,45 +105,50 @@ const FILE_PATTERNS = {
 };
 
 export class EduShiftGrader {
-    private ai: GoogleGenAI;
+    private genAI: GoogleGenerativeAI;
+    private model: ReturnType<GoogleGenerativeAI["getGenerativeModel"]>;
     
-    // OCR用の設定（Gemini 3対応 + v1alpha API）
-    // thinkingConfig: 要約/補完を抑える（重要！）
-    // mediaResolution: マス目の細かい文字を拾う（重要！）
-    // responseMimeType: JSON強制で出力ブレを抑える
-    // temperature: 0でOCRは決定的に
-    private readonly ocrConfig: GenerateContentConfig = {
-        temperature: 0,
-        topP: 0.4,
-        topK: 32,
-        maxOutputTokens: 4096,
-        responseMimeType: "application/json",
-        thinkingConfig: { thinkingLevel: ThinkingLevel.LOW },
-        mediaResolution: MediaResolution.MEDIA_RESOLUTION_HIGH
+    // OCR用の設定
+    // 重要: OCRは「創造的」な出力が不要なので、中程度のtopP/topKが最適
+    // topP: 0.1は低すぎ（読み飛ばし）、0.95は高すぎ（要約してしまう）
+    private readonly ocrConfig = {
+        temperature: 0,      // 決定論的（同じ入力で同じ出力）
+        topP: 0.4,           // 中程度（0.1は低すぎ、0.95は高すぎ）
+        topK: 32,            // 中程度
+        maxOutputTokens: 8192 // 長い答案に対応
+        // responseMimeType なし - 自由形式でOCRに集中させる
     };
     
     // 採点用の設定（JSON出力を強制）
-    private readonly gradingConfig: GenerateContentConfig = {
+    private readonly gradingConfig = {
         temperature: 0,
         topP: 0.1,
         topK: 16,
-        responseMimeType: "application/json"
+        responseMimeType: "application/json" as const
     };
-    
-    // OCR用のsystemInstruction
-    private readonly ocrSystemInstruction = `あなたは機械的なOCRエンジンです。
-意味を理解せず、見たままの文字を転写してください。
-絶対に要約・言い換え・解釈をしないでください。
-文法的に変でも、意味が通らなくても、書いてある通りに出力してください。`;
+
+    // OCR専用モデル（systemInstructionを最小化してOCRに集中）
+    private ocrModel: ReturnType<GoogleGenerativeAI["getGenerativeModel"]>;
 
     constructor() {
         if (!CONFIG.GEMINI_API_KEY) {
             throw new Error("GEMINI_API_KEY is not set in environment variables.");
         }
-        // 新SDK: v1alpha APIを使用（mediaResolution等の新機能を有効化）
-        this.ai = new GoogleGenAI({
-            apiKey: CONFIG.GEMINI_API_KEY,
-            httpOptions: { apiVersion: 'v1alpha' }
+        this.genAI = new GoogleGenerativeAI(CONFIG.GEMINI_API_KEY);
+        
+        // 採点用モデル（フルのsystemInstruction）
+        this.model = this.genAI.getGenerativeModel({
+            model: CONFIG.MODEL_NAME,
+            systemInstruction: SYSTEM_INSTRUCTION
+        });
+        
+        // OCR専用モデル
+        this.ocrModel = this.genAI.getGenerativeModel({
+            model: CONFIG.MODEL_NAME,
+            systemInstruction: `あなたは高精度OCRです。画像の文字を一字一句そのまま読み取って出力してください。
+禁止：要約、補足（書いていない文字の追加）、省略、言い換え
+許可：似た文字（ぬ↔め、わ↔れ等）の文脈に基づく判断
+書いてある通りに出力してください。`
         });
     }
 
@@ -175,65 +179,78 @@ export class EduShiftGrader {
     }
 
     /**
-     * Stage 1: OCR専用（JSON強制なし）
-     * 答案ファイルからテキストを高精度で読み取る
+     * Stage 1: OCR専用（JSON強制なし - Web版Geminiと同等の条件）
+     * 答案ファイルのみからテキストを高精度で読み取る
      */
     private async performOcr(targetLabel: string, imageParts: ContentPart[], categorizedFiles?: CategorizedFiles): Promise<{ text: string; fullText: string; matchedTarget: boolean }> {
-        console.log("[Grader] Stage 1: OCR開始");
-
-        // OCR対象を選択（答案優先、なければ全画像）
+        console.log("[Grader] Stage 1: OCR開始（答案ファイルのみ）");
+        
+        // categorizedFilesがある場合は、答案ファイルのみをOCRに使用（処理時間短縮）
         let targetParts: ContentPart[];
+        
         if (categorizedFiles && categorizedFiles.studentFiles.length > 0) {
             console.log(`[Grader] 答案ファイル数: ${categorizedFiles.studentFiles.length}`);
             targetParts = categorizedFiles.studentFiles.map(file => this.toGenerativePart(file));
         } else {
+            // フォールバック: 従来のロジック
             const answerParts = imageParts.filter((part, idx) => {
                 if (idx > 0) {
                     const prevPart = imageParts[idx - 1];
-                    if ("text" in prevPart && prevPart.text?.includes("答案")) {
+                    if ('text' in prevPart && prevPart.text?.includes('答案')) {
                         return true;
                     }
                 }
                 return false;
             });
-            targetParts = answerParts.length > 0 ? answerParts : imageParts.filter(p => "inlineData" in p);
+            targetParts = answerParts.length > 0 ? answerParts : imageParts.filter(p => 'inlineData' in p);
         }
 
+        console.log(`[Grader] OCR対象パーツ数: ${targetParts.length}`);
+        
+        // 画像パーツが0の場合はエラー
         if (targetParts.length === 0) {
             console.error("[Grader] ❌ OCR対象の画像がありません");
             throw new Error("答案画像が見つかりません。ファイルを正しくアップロードしてください。");
         }
 
-        const sanitizedLabel = targetLabel.replace(/[<>\\\"'`]/g, "").trim() || "target";
-        const ocrPrompt = [
-            `「${sanitizedLabel}」の解答欄を一字一句そのまま転写してください。`,
-            "",
-            "【絶対禁止】",
-            "- 要約しない",
-            "- 言い換えない（「するものだと」→「する動物が」のような変換禁止）",
-            "- 意味を解釈しない",
-            "- 文法的におかしくても修正しない",
-            "",
-            "【ルール】",
-            "- 書いてある文字をそのまま写す",
-            "- 読めない文字は「〓」",
-            "- 縦書き: 右列→左列、上→下",
-            "- 他の設問は無視",
-            "",
-            "JSONで返す: { \"text\": \"<そのまま転写>\", \"char_count\": <使用マス数> }"
-        ].join("\n");
+        const sanitizedLabel = targetLabel.replace(/[<>\\\"'`]/g, '').trim();
+
+        // OCRプロンプト
+        const ocrPrompt = `【重要】この画像の手書き文字を「一字一句そのまま」読み取ってください。
+
+■ 禁止事項：
+- 要約しない
+- 補足しない（書いていない文字を追加しない）
+- 言い換えない
+- 省略しない
+
+■ 許可事項：
+- 似た文字の文脈判断による置き換えはOK
+  例：「ぬ」↔「め」、「わ」↔「れ」、「た」↔「だ」など
+
+■ マス目（原稿用紙）の読み取り方法：
+1. 右端の列から開始
+2. その列を上から下へ、1マスずつ読む
+3. 列の終わりまで読んだら、左隣の列へ移動
+4. 繰り返す
+
+■ 重要：小さい文字を見逃さない！
+- 文章途中に空マスはない（文末のみ空マスがある）
+- 空マスに見える場合、以下が小さく書かれている可能性大：
+  - 句読点：「、」「。」
+  - 拗音：「ゃ」「ゅ」「ょ」
+  - 促音：「っ」
+  - 小文字：「ぁ」「ぃ」「ぅ」「ぇ」「ぉ」
+- マスの中を注意深く確認してください
+
+書いてある文字を、書いてある順番で出力してください。`;
 
         let result;
         try {
-            // 新SDK: ai.models.generateContent()を使用
             result = await withTimeout(
-                this.ai.models.generateContent({
-                    model: CONFIG.MODEL_NAME,
+                this.ocrModel.generateContent({
                     contents: [{ role: "user", parts: [{ text: ocrPrompt }, ...targetParts] }],
-                    config: {
-                        ...this.ocrConfig,
-                        systemInstruction: this.ocrSystemInstruction
-                    }
+                    generationConfig: this.ocrConfig
                 }),
                 OCR_TIMEOUT_MS,
                 "OCR処理"
@@ -243,38 +260,49 @@ export class EduShiftGrader {
             throw new Error(`OCR処理に失敗しました: ${error instanceof Error ? error.message : String(error)}`);
         }
 
-        let raw = "";
+        let rawText = "";
         try {
-            raw = result.text?.trim() ?? "";
+            rawText = result.response.text().trim();
         } catch (error) {
             console.error("[Grader] OCRレスポンスの読み取りエラー:", error);
             throw new Error("OCR結果の取得に失敗しました。画像が破損している可能性があります。");
         }
+        
+        // デバッグログ: OCRの生の結果を確認
+        console.log("[Grader] OCR raw output length:", rawText.length);
+        console.log("[Grader] OCR raw preview:", rawText.substring(0, 160));
 
-        const cleaned = raw.replace(/```json\s*|```/g, "").trim();
-        let text = cleaned;
-        let charCount = text.replace(/\s+/g, "").length;
-        try {
-            const parsed = JSON.parse(cleaned);
-            text = String(parsed.text ?? "").trim();
-            charCount = Number.isFinite(parsed.char_count) ? Number(parsed.char_count) : text.replace(/\s+/g, "").length;
-        } catch (e) {
-            console.warn("[Grader] OCR JSON parse failed, using raw text");
+        // 注: 2パスOCR（マス目OCR）はタイムアウトの原因となるため削除
+        // topP/topKの修正により、1パスでも高精度な読み取りが期待できる
+        
+        const narrowed = this.extractTargetAnswerSection(rawText, sanitizedLabel);
+
+        // ターゲット抽出結果を優先、失敗時は全文フォールバック
+        let finalText = "";
+        if (narrowed.text && narrowed.text.trim()) {
+            finalText = narrowed.text.trim();
+        } else if (rawText) {
+            finalText = rawText;
+            console.log("[Grader] ⚠️ ターゲット抽出失敗、全文を使用");
         }
-
-        if (!text) {
+        
+        // 最終チェック: 本当に空の場合のみエラーメッセージ
+        if (!finalText || finalText.length === 0) {
             console.error("[Grader] ❌ OCRが空の結果を返しました");
-            text = "（回答を読み取れませんでした）";
-            charCount = 0;
+            finalText = "（回答を読み取れませんでした。画像が不鮮明か、指定された問題が見つかりません）";
         }
+
+        // OCR再試行や全文がある場合は recognized_text_full として保持
+        const recognizedFull = rawText || finalText;
 
         console.log("[Grader] Stage 1 完了:", {
-            textLength: text.length,
-            charCount,
-            preview: text.substring(0, 120)
+            mode: narrowed.matched ? "target-only" : "fallback-full",
+            textLength: finalText.length,
+            preview: finalText.substring(0, 120),
+            rawPreview: rawText.substring(0, 120)
         });
 
-        return { text, fullText: text, matchedTarget: true };
+        return { text: finalText, fullText: recognizedFull, matchedTarget: narrowed.matched };
     }
 
     /**
@@ -1065,7 +1093,7 @@ export class EduShiftGrader {
         const ocrIsPlaceholder = /読み取れませんでした|画像が不鮮明|見つかりません/.test(ocrText);
         const ocrCharCount = ocrText.replace(/\s+/g, "").length;
         
-        // Stage 2用プロンプト
+        // Stage 2用プロンプト（OCR結果の状態に応じて指示を変える）
         const ocrSection = ocrIsPlaceholder
             ? `【重要】事前のOCRで回答テキストを読み取れませんでした。
 添付画像から「${sanitizedLabel}」の生徒の回答を**マス目を1つずつ確認して**読み取り、recognized_text に出力してください。
@@ -1119,19 +1147,15 @@ System Instructionに定義された以下のルールを厳密に適用して�
 結果はJSON形式で出力してください。`;
 
         const result = await withTimeout(
-            this.ai.models.generateContent({
-                model: CONFIG.MODEL_NAME,
+            this.model.generateContent({
                 contents: [{ role: "user", parts: [{ text: prompt }, ...imageParts] }],
-                config: {
-                    ...this.gradingConfig,
-                    systemInstruction: SYSTEM_INSTRUCTION
-                }
+                generationConfig: this.gradingConfig
             }),
             GRADING_TIMEOUT_MS,
             "採点処理"
         );
 
-        const text = result.text ?? "";
+        const text = result.response.text();
         console.log("[Grader] Stage 2 AIレスポンス長:", text.length);
         console.log("[Grader] Stage 2 AIレスポンスプレビュー:", text.substring(0, 500));
         
@@ -1156,14 +1180,14 @@ System Instructionに定義された以下のルールを厳密に適用して�
             // 候補テキストを収集（優先順）
             const candidates: { source: string; text: string }[] = [];
             
-            // 1. AIが返したrecognized_text（検証・修正済みの可能性）
+            // 1. AIが返したrecognized_text（最優先）
             const aiRecognized = String(gradingResultObj.recognized_text || "").trim();
             if (aiRecognized && !placeholderPattern.test(aiRecognized)) {
                 candidates.push({ source: "ai_response", text: aiRecognized });
             }
             
             // 2. ocr_debug.column_readings から復元
-            const ocrDebug = parsed.ocr_debug as { column_readings?: string[]; chars_per_column?: number; columns_used?: number } | undefined;
+            const ocrDebug = parsed.ocr_debug as { column_readings?: string[] } | undefined;
             if (ocrDebug?.column_readings && Array.isArray(ocrDebug.column_readings)) {
                 const rebuilt = ocrDebug.column_readings.join("");
                 if (rebuilt.trim() && !placeholderPattern.test(rebuilt)) {
@@ -1183,51 +1207,18 @@ System Instructionに定義された以下のルールを厳密に適用して�
                 candidates.push({ source: "ocr_text", text: normalizedText });
             }
             
-            // マス数（列情報）から期待文字数を算出
-            const expectedCells = (() => {
-                if (!ocrDebug?.column_readings || !Array.isArray(ocrDebug.column_readings)) return 0;
-                return ocrDebug.column_readings.reduce((sum, col, idx) => {
-                    const isLast = idx === ocrDebug.column_readings!.length - 1;
-                    if (ocrDebug.chars_per_column && !isLast) {
-                        return sum + ocrDebug.chars_per_column;
-                    }
-                    return sum + (col?.length ?? 0);
-                }, 0);
-            })();
-
-            // 期待文字数に最も近い候補を優先し、極端に短い場合のみより長い候補に差し替える
+            // 最も長い有効なテキストを選択
             let finalRecognized = "";
             let selectedSource = "none";
-
-            if (expectedCells > 0) {
-                let bestDiff = Number.POSITIVE_INFINITY;
-                for (const candidate of candidates) {
-                    const normalizedLen = candidate.text.replace(/\s+/g, "").length;
-                    const diff = Math.abs(normalizedLen - expectedCells);
-                    if (diff < bestDiff) {
-                        bestDiff = diff;
-                        finalRecognized = candidate.text;
-                        selectedSource = candidate.source;
-                    }
-                }
-            }
-
-            // 期待文字数で決まらない場合は優先順ベースで選択し、極端に短い場合のみより長い候補に差し替える
+            
             for (const candidate of candidates) {
-                if (!finalRecognized) {
-                    finalRecognized = candidate.text;
-                    selectedSource = candidate.source;
-                    continue;
-                }
-
-                const isSignificantlyLonger = candidate.text.length > finalRecognized.length * 1.2;
-                if (isSignificantlyLonger) {
+                if (candidate.text.length > finalRecognized.length) {
                     finalRecognized = candidate.text;
                     selectedSource = candidate.source;
                 }
             }
             
-            // どれも有効でない場合はプレースホルダー
+            // どれも有効でない場合はプレースホルダー（ただしログで警告）
             if (!finalRecognized) {
                 console.error("[Grader] ❌ 有効なOCR結果が見つかりません。candidates:", candidates);
                 finalRecognized = "（回答テキストを取得できませんでした）";

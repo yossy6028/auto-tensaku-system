@@ -114,8 +114,7 @@ export class EduShiftGrader {
         temperature: 0,
         topP: 0.4,
         topK: 32,
-        maxOutputTokens: 2048,
-        responseMimeType: "application/json" as const
+        maxOutputTokens: 4096
     };
     
     // 採点用の設定（JSON出力を強制）
@@ -240,13 +239,13 @@ export class EduShiftGrader {
             throw new Error("OCR結果の取得に失敗しました。画像が破損している可能性があります。");
         }
 
-        const cleaned = raw.replace(/```json\\s*|```/g, "").trim();
+        const cleaned = raw.replace(/```json\s*|```/g, "").trim();
         let text = cleaned;
-        let charCount = text.replace(/\\s+/g, "").length;
+        let charCount = text.replace(/\s+/g, "").length;
         try {
             const parsed = JSON.parse(cleaned);
             text = String(parsed.text ?? "").trim();
-            charCount = Number.isFinite(parsed.char_count) ? Number(parsed.char_count) : text.replace(/\\s+/g, "").length;
+            charCount = Number.isFinite(parsed.char_count) ? Number(parsed.char_count) : text.replace(/\s+/g, "").length;
         } catch (e) {
             console.warn("[Grader] OCR JSON parse failed, using raw text");
         }

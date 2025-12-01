@@ -1154,20 +1154,20 @@ System Instructionに定義された以下のルールを厳密に適用して�
             
             // 候補テキストを収集（優先順）
             const candidates: { source: string; text: string }[] = [];
-            
-            // 1. AIが返したrecognized_text（検証・修正済みの可能性）
-            const aiRecognized = String(gradingResultObj.recognized_text || "").trim();
-            if (aiRecognized && !placeholderPattern.test(aiRecognized)) {
-                candidates.push({ source: "ai_response", text: aiRecognized });
-            }
-            
-            // 2. ocr_debug.column_readings から復元
+
+            // 1. ocr_debug.column_readings から復元（マス目に基づくため最優先）
             const ocrDebug = parsed.ocr_debug as { column_readings?: string[] } | undefined;
             if (ocrDebug?.column_readings && Array.isArray(ocrDebug.column_readings)) {
                 const rebuilt = ocrDebug.column_readings.join("");
                 if (rebuilt.trim() && !placeholderPattern.test(rebuilt)) {
                     candidates.push({ source: "column_readings", text: rebuilt.trim() });
                 }
+            }
+
+            // 2. AIが返したrecognized_text（検証・修正済みの可能性）
+            const aiRecognized = String(gradingResultObj.recognized_text || "").trim();
+            if (aiRecognized && !placeholderPattern.test(aiRecognized)) {
+                candidates.push({ source: "ai_response", text: aiRecognized });
             }
             
             // 3. Stage 1のOCR結果（fullText優先）

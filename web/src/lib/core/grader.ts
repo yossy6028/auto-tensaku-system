@@ -1162,7 +1162,7 @@ System Instructionに定義された以下のルールを厳密に適用して�
             }
             
             // 2. ocr_debug.column_readings から復元
-            const ocrDebug = parsed.ocr_debug as { column_readings?: string[] } | undefined;
+            const ocrDebug = parsed.ocr_debug as { column_readings?: string[]; chars_per_column?: number; columns_used?: number } | undefined;
             if (ocrDebug?.column_readings && Array.isArray(ocrDebug.column_readings)) {
                 const rebuilt = ocrDebug.column_readings.join("");
                 if (rebuilt.trim() && !placeholderPattern.test(rebuilt)) {

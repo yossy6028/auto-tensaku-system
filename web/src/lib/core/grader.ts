@@ -209,20 +209,17 @@ export class EduShiftGrader {
             "",
             "【絶対禁止】",
             "- 要約しない",
-            "- 言い換えない",
-            "- 句読点を追加しない（書いてない「、」「。」を入れない）",
+            "- 言い換えない（「するものだと」→「する動物が」のような変換禁止）",
+            "- 意味を解釈しない",
             "- 文法的におかしくても修正しない",
             "",
-            "【マス目カウント】",
-            "- 文字が書かれているマスの数を数える",
-            "- 1マス=1文字（句読点も1マス）",
-            "- 空白マスはカウントしない",
-            "",
-            "【読み取り】",
-            "- 縦書き: 右列→左列、上→下",
+            "【ルール】",
+            "- 書いてある文字をそのまま写す",
             "- 読めない文字は「〓」",
+            "- 縦書き: 右列→左列、上→下",
+            "- 他の設問は無視",
             "",
-            "JSONで返す: { \"text\": \"<転写>\", \"char_count\": <マス数> }"
+            "JSONで返す: { \"text\": \"<そのまま転写>\", \"char_count\": <文字が入っているマス数> }"
         ].join("\n");
 
         let result;
@@ -1157,20 +1154,20 @@ System Instructionに定義された以下のルールを厳密に適用して�
             
             // 候補テキストを収集（優先順）
             const candidates: { source: string; text: string }[] = [];
-
-            // 1. ocr_debug.column_readings から復元（マス目に基づくため最優先）
+            
+            // 1. AIが返したrecognized_text（検証・修正済みの可能性）
+            const aiRecognized = String(gradingResultObj.recognized_text || "").trim();
+            if (aiRecognized && !placeholderPattern.test(aiRecognized)) {
+                candidates.push({ source: "ai_response", text: aiRecognized });
+            }
+            
+            // 2. ocr_debug.column_readings から復元
             const ocrDebug = parsed.ocr_debug as { column_readings?: string[] } | undefined;
             if (ocrDebug?.column_readings && Array.isArray(ocrDebug.column_readings)) {
                 const rebuilt = ocrDebug.column_readings.join("");
                 if (rebuilt.trim() && !placeholderPattern.test(rebuilt)) {
                     candidates.push({ source: "column_readings", text: rebuilt.trim() });
                 }
-            }
-
-            // 2. AIが返したrecognized_text（検証・修正済みの可能性）
-            const aiRecognized = String(gradingResultObj.recognized_text || "").trim();
-            if (aiRecognized && !placeholderPattern.test(aiRecognized)) {
-                candidates.push({ source: "ai_response", text: aiRecognized });
             }
             
             // 3. Stage 1のOCR結果（fullText優先）
@@ -1185,20 +1182,12 @@ System Instructionに定義された以下のルールを厳密に適用して�
                 candidates.push({ source: "ocr_text", text: normalizedText });
             }
             
-            // 優先順位ベースで選択し、極端に短い場合のみより長い候補に差し替える
-            // （少し長いだけの誤読で文字数超過にならないようにする）
+            // 最も長い有効なテキストを選択
             let finalRecognized = "";
             let selectedSource = "none";
-
+            
             for (const candidate of candidates) {
-                if (!finalRecognized) {
-                    finalRecognized = candidate.text;
-                    selectedSource = candidate.source;
-                    continue;
-                }
-
-                const isSignificantlyLonger = candidate.text.length > finalRecognized.length * 1.2;
-                if (isSignificantlyLonger) {
+                if (candidate.text.length > finalRecognized.length) {
                     finalRecognized = candidate.text;
                     selectedSource = candidate.source;
                 }

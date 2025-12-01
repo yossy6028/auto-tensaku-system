@@ -215,23 +215,20 @@ export class EduShiftGrader {
 
         const sanitizedLabel = targetLabel.replace(/[<>\\\"'`]/g, '').trim();
 
-        // OCRプロンプト - 1文字ずつ出力させて要約を防ぐ
-        const ocrPrompt = `この画像の手書き文字を1文字ずつ読み取り、JSON配列として出力してください。
+        // OCRプロンプト - ターゲット問題のみを読み取る
+        const ocrPrompt = `この画像から「${sanitizedLabel}」の回答部分のみを読み取ってください。
+
+【重要】
+- 「${sanitizedLabel}」というラベル（問8、問八、⑧など）を探す
+- そのラベルの直後に書かれている回答テキストのみを読み取る
+- 他の問題（問7、問9など）は無視する
 
 【出力形式】
-["文", "字", "1", "文", "字", "2", ...]
+読み取った回答テキストをそのまま出力してください。
+要約・省略・言い換えは禁止です。
 
-【読み取りルール】
-- 縦書き: 右の列から左へ、各列は上から下
-- 1マスに1文字（句読点「、」「。」も1文字）
-- 小さい文字（っ、ゃ、ゅ、ょ等）も1文字として出力
-- 読めない文字は "?" で出力
-
-【禁止】
-- 要約、省略、言い換え
-- 文字の追加や削除
-
-JSON配列のみを出力してください。`;
+【縦書きの場合】
+右の列から左へ、各列は上から下へ読んでください。`;
 
         let result;
         try {
@@ -250,34 +247,16 @@ JSON配列のみを出力してください。`;
 
         let rawText = "";
         try {
-            const responseText = result.response.text().trim();
-            console.log("[Grader] OCR raw response:", responseText.substring(0, 200));
-            
-            // JSON配列をパースしてテキストに変換
-            try {
-                // ```json ... ``` を除去
-                const jsonStr = responseText.replace(/```json\n?|\n?```/g, "").trim();
-                const charArray = JSON.parse(jsonStr);
-                if (Array.isArray(charArray)) {
-                    rawText = charArray.join("");
-                    console.log("[Grader] ✅ JSON配列からテキスト変換成功:", rawText.length, "文字");
-                } else {
-                    rawText = responseText;
-                    console.log("[Grader] ⚠️ JSONが配列ではない、生テキストを使用");
-                }
-            } catch {
-                // JSONパース失敗時は生テキストをそのまま使用
-                rawText = responseText;
-                console.log("[Grader] ⚠️ JSONパース失敗、生テキストを使用");
-            }
+            rawText = result.response.text().trim();
         } catch (error) {
             console.error("[Grader] OCRレスポンスの読み取りエラー:", error);
             throw new Error("OCR結果の取得に失敗しました。画像が破損している可能性があります。");
         }
         
         // デバッグログ
-        console.log("[Grader] OCR final text length:", rawText.length);
-        console.log("[Grader] OCR final preview:", rawText.substring(0, 160));
+        console.log("[Grader] OCR target:", sanitizedLabel);
+        console.log("[Grader] OCR result length:", rawText.length);
+        console.log("[Grader] OCR result preview:", rawText.substring(0, 160));
 
         // 注: 2パスOCR（マス目OCR）はタイムアウトの原因となるため削除
         // topP/topKの修正により、1パスでも高精度な読み取りが期待できる

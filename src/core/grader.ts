@@ -1,15 +1,21 @@
 import { GoogleGenerativeAI } from "@google/generative-ai";
-import { GoogleGenerativeAI } from "@google/generative-ai";
 import { CONFIG } from "../config";
 import { SYSTEM_INSTRUCTION } from "../prompts/eduShift";
 import { fileToGenerativePart, getMimeType } from "../utils/image";
 
-const OCR_CONFIG = {
+// OCR用の設定（Gemini 3対応）
+// thinkingConfig: 要約/補完を抑える
+// mediaResolution: マス目の細かい文字を拾う
+// responseMimeType: JSON強制で出力ブレを抑える
+// temperature: 0でOCRは決定的に
+const OCR_CONFIG: Record<string, unknown> = {
     temperature: 0,
     topP: 0.4,
     topK: 32,
-    maxOutputTokens: 2048,
-    responseMimeType: "application/json" as const
+    maxOutputTokens: 4096,
+    responseMimeType: "application/json",
+    thinkingConfig: { thinkingLevel: "low" },
+    mediaResolution: "high"
 };
 
 const GRADING_CONFIG = {

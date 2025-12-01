@@ -108,15 +108,19 @@ export class EduShiftGrader {
     private genAI: GoogleGenerativeAI;
     private model: ReturnType<GoogleGenerativeAI["getGenerativeModel"]>;
     
-    // OCR用の設定
-    // topP: 0.4は行ごとの読み取りが良好だった（13b2a1c時点）
+    // OCR用の設定（Gemini 3対応）
+    // thinkingConfig: 要約/補完を抑える
+    // mediaResolution: マス目の細かい文字を拾う
     // responseMimeType: JSON強制で出力ブレを抑える
-    private readonly ocrConfig = {
+    // temperature: 0でOCRは決定的に
+    private readonly ocrConfig: Record<string, unknown> = {
         temperature: 0,
         topP: 0.4,
         topK: 32,
         maxOutputTokens: 4096,
-        responseMimeType: "application/json" as const
+        responseMimeType: "application/json",
+        thinkingConfig: { thinkingLevel: "low" },
+        mediaResolution: "high"
     };
     
     // 採点用の設定（JSON出力を強制）

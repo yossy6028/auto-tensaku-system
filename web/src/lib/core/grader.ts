@@ -105,13 +105,13 @@ export class EduShiftGrader {
     private genAI: GoogleGenerativeAI;
     private model: ReturnType<GoogleGenerativeAI["getGenerativeModel"]>;
     
-    // OCR用の設定（JSON強制なし - Web版Geminiと同等の条件）
-    // JSON出力を強制すると、モデルは「正しいJSON」を優先し、OCR精度が落ちる
+    // OCR用の設定（Web版Geminiと同等の条件を目指す）
+    // 重要: topP/topKを高くしないと、モデルが「安全な」出力を選び読み飛ばしが発生する
     private readonly ocrConfig = {
-        temperature: 0,
-        topP: 0.1,
-        topK: 16,
-        maxOutputTokens: 4096
+        temperature: 0,      // 決定論的（同じ入力で同じ出力）
+        topP: 0.95,          // Web版に近い設定（0.1は低すぎて読み飛ばしの原因）
+        topK: 40,            // Web版に近い設定（16は低すぎる）
+        maxOutputTokens: 8192 // 長い答案に対応
         // responseMimeType なし - 自由形式でOCRに集中させる
     };
     
@@ -138,18 +138,11 @@ export class EduShiftGrader {
             systemInstruction: SYSTEM_INSTRUCTION
         });
         
-        // OCR専用モデル（最小限のsystemInstruction - Web版Geminiに近い条件）
+        // OCR専用モデル（systemInstructionを最小化 - Web版Geminiに近い条件）
+        // 複雑な指示は逆効果なので、最小限に抑える
         this.ocrModel = this.genAI.getGenerativeModel({
             model: CONFIG.MODEL_NAME,
-            systemInstruction: `あなたは高精度OCRエンジンです。
-画像内のテキストを一字一句正確に読み取ってください。
-
-【絶対ルール】
-1. 画像に書かれている文字を「そのまま」出力する
-2. 意味が通らなくても、文法的に変でも、そのまま出力する
-3. 読めない文字は「〓」で出力する
-4. 推測や補完は絶対にしない
-5. 縦書きの場合は右から左、上から下の順で読む`
+            systemInstruction: `画像の文字を正確に読み取って出力してください。`
         });
     }
 
@@ -216,30 +209,13 @@ export class EduShiftGrader {
 
         const sanitizedLabel = targetLabel.replace(/[<>\\\"'`]/g, '').trim();
 
-        // マス目（原稿用紙形式）対応の高精度OCRプロンプト
-        const ocrPrompt = `【手書き答案の文字読み取り】
+        // シンプルなOCRプロンプト（Web版Geminiに近い条件）
+        // 複雑な指示は逆効果 - モデルが「指示に従う」ことに集中して読み取り精度が落ちる
+        const ocrPrompt = `この画像に書かれている手書きの文字をすべて読み取って、そのまま出力してください。
 
-この画像は生徒の手書き答案です。書かれている文字を**一文字も漏らさず、正確に**読み取ってください。
-
-## 読み取りルール
-
-### マス目（原稿用紙形式）の場合：
-1. **縦書き**の場合：右の列から左の列へ、各列は上から下へ読む
-2. **横書き**の場合：上の行から下の行へ、各行は左から右へ読む
-3. **1マス1文字**として、すべてのマスの文字を読み取る
-4. 空白マスは読み飛ばさず、文の区切りとして認識する
-5. 句読点（。、）も1マス分として数える
-
-### 読み取り精度の確保：
-- 書いてある文字を**そのまま**出力（意味が通らなくても修正しない）
-- 似た文字の区別を慎重に：「め」と「ぬ」、「わ」と「れ」、「は」と「ほ」など
-- 読めない・判別できない文字は「〓」で出力
-- 推測・補完・要約は**絶対に禁止**
-
-### 出力形式：
-読み取った文字列のみを出力してください。説明や注釈は不要です。
-
-【重要】文字数が少なすぎる場合は読み落としの可能性があります。マス目があれば全マスを確認してください。`;
+縦書きの場合は右から左へ、上から下へ読んでください。
+マス目がある場合は1マスずつ丁寧に読んでください。
+読めない文字は「〓」で出力してください。`;
 
         let result;
         try {
@@ -268,26 +244,17 @@ export class EduShiftGrader {
         console.log("[Grader] OCR raw output length:", rawText.length);
         console.log("[Grader] OCR raw preview:", rawText.substring(0, 160));
 
-        // マス目形式の精密OCR（列ごとの読み取り）
-        const gridOcrPrompt = `この画像はマス目（原稿用紙形式）の答案です。
+        // マス目形式の精密OCR（列ごとの読み取り）- シンプル版
+        const gridOcrPrompt = `この画像のマス目に書かれた文字を、列ごとに読み取ってください。
 
-【列ごとの読み取り指示】
-1. 縦書きの場合、右端の列を「列1」として、左に向かって列2、列3...と番号付け
-2. 各列の文字を上から下へ順に読み取り、以下の形式で出力：
+縦書きなので、右の列から順に読んでください。
 
-列1: [文字列]
-列2: [文字列]
-列3: [文字列]
-...
+列1: （右端の列の文字）
+列2: （次の列の文字）
+列3: ...
 
-最後に、すべての列を連結した完全なテキストを出力：
-完全テキスト: [全文]
-
-【注意】
-- 1マス1文字として読む
-- 空白マスは無視して詰める
-- 句読点も1文字として数える
-- 読めない文字は「〓」`;
+最後に全文を出力：
+完全テキスト: （すべての列を連結した文字列）`;
 
         try {
             const gridResult = await withTimeout(
@@ -337,9 +304,7 @@ export class EduShiftGrader {
         // 極端に短い場合は追加リトライ
         if (rawText.replace(/\s+/g, "").length < 10) {
             console.warn("[Grader] ⚠️ OCR結果が極端に短いため追加リトライ");
-            const retryPrompt = `画像に書かれている手書き文字をすべて読み取ってください。
-マス目がある場合は、1マスずつ丁寧に読んでください。
-文字のみ出力。説明不要。`;
+            const retryPrompt = `画像の文字を全部読み取って出力してください。`;
             try {
                 const retryResult = await withTimeout(
                     this.ocrModel.generateContent({

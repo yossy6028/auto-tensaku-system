@@ -244,85 +244,8 @@ export class EduShiftGrader {
         console.log("[Grader] OCR raw output length:", rawText.length);
         console.log("[Grader] OCR raw preview:", rawText.substring(0, 160));
 
-        // マス目形式の精密OCR（列ごとの読み取り）- シンプル版
-        const gridOcrPrompt = `この画像のマス目に書かれた文字を、列ごとに読み取ってください。
-
-縦書きなので、右の列から順に読んでください。
-
-列1: （右端の列の文字）
-列2: （次の列の文字）
-列3: ...
-
-最後に全文を出力：
-完全テキスト: （すべての列を連結した文字列）`;
-
-        try {
-            const gridResult = await withTimeout(
-                this.ocrModel.generateContent({
-                    contents: [{ role: "user", parts: [{ text: gridOcrPrompt }, ...targetParts] }],
-                    generationConfig: this.ocrConfig
-                }),
-                API_TIMEOUT_MS,
-                "マス目OCR"
-            );
-            const gridRaw = gridResult.response.text().trim();
-            console.log("[Grader] Grid OCR raw length:", gridRaw.length);
-            console.log("[Grader] Grid OCR preview:", gridRaw.substring(0, 300));
-            
-            // 「完全テキスト:」の後のテキストを抽出
-            const fullTextMatch = gridRaw.match(/完全テキスト[:：]\s*([^\n]+)/);
-            if (fullTextMatch && fullTextMatch[1]) {
-                const gridText = fullTextMatch[1].trim();
-                console.log("[Grader] Grid OCR extracted text length:", gridText.length);
-                
-                // マス目OCRの結果がより長ければ採用
-                if (gridText.length > rawText.replace(/\s+/g, "").length) {
-                    console.log("[Grader] ✅ マス目OCR結果を採用（より長い）");
-                    rawText = gridText;
-                }
-            }
-            
-            // 列ごとの読み取り結果も保存（後でデバッグ用に使用可能）
-            const columnMatches = gridRaw.matchAll(/列(\d+)[:：]\s*(.+?)(?:\n|$)/g);
-            const columns: string[] = [];
-            for (const match of columnMatches) {
-                columns.push(match[2].trim());
-            }
-            if (columns.length > 0) {
-                console.log("[Grader] Grid columns detected:", columns.length);
-                // 列を連結して比較用テキストを作成
-                const columnsJoined = columns.join("");
-                if (columnsJoined.length > rawText.replace(/\s+/g, "").length) {
-                    console.log("[Grader] ✅ 列連結結果を採用（より長い）");
-                    rawText = columnsJoined;
-                }
-            }
-        } catch (err) {
-            console.warn("[Grader] マス目OCRでエラー（通常OCR結果を使用）:", err);
-        }
-
-        // 極端に短い場合は追加リトライ
-        if (rawText.replace(/\s+/g, "").length < 10) {
-            console.warn("[Grader] ⚠️ OCR結果が極端に短いため追加リトライ");
-            const retryPrompt = `画像の文字を全部読み取って出力してください。`;
-            try {
-                const retryResult = await withTimeout(
-                    this.ocrModel.generateContent({
-                        contents: [{ role: "user", parts: [{ text: retryPrompt }, ...targetParts] }],
-                        generationConfig: this.ocrConfig
-                    }),
-                    API_TIMEOUT_MS,
-                    "OCR追加リトライ"
-                );
-                const retryRaw = retryResult.response.text().trim();
-                console.log("[Grader] OCR retry raw length:", retryRaw.length);
-                if (retryRaw.replace(/\s+/g, "").length > rawText.replace(/\s+/g, "").length) {
-                    rawText = retryRaw;
-                }
-            } catch (err) {
-                console.warn("[Grader] OCR追加リトライでエラー:", err);
-            }
-        }
+        // 注: 2パスOCR（マス目OCR）はタイムアウトの原因となるため削除
+        // topP/topKの修正により、1パスでも高精度な読み取りが期待できる
         
         const narrowed = this.extractTargetAnswerSection(rawText, sanitizedLabel);
 

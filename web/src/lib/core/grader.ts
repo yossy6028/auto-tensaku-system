@@ -1,4 +1,4 @@
-import { GoogleGenAI, MediaResolution, ThinkingLevel } from "@google/genai";
+import { GoogleGenerativeAI } from "@google/generative-ai";
 import { CONFIG } from "../config";
 import { SYSTEM_INSTRUCTION } from "../prompts/eduShift";
 
@@ -105,21 +105,17 @@ const FILE_PATTERNS = {
 };
 
 export class EduShiftGrader {
-    private ai: GoogleGenAI;
+    private genAI: GoogleGenerativeAI;
+    private model: ReturnType<GoogleGenerativeAI["getGenerativeModel"]>;
+    private ocrModel: ReturnType<GoogleGenerativeAI["getGenerativeModel"]>;
     
-    // OCR用の設定（Gemini 3対応 + v1alpha API）
-    // thinkingConfig: 要約/補完を抑える
-    // mediaResolution: マス目の細かい文字を拾う
-    // responseMimeType: JSON強制で出力ブレを抑える
-    // temperature: 0でOCRは決定的に
+    // OCR用の設定
     private readonly ocrConfig = {
         temperature: 0,
         topP: 0.4,
         topK: 32,
         maxOutputTokens: 4096,
-        responseMimeType: "application/json" as const,
-        thinkingConfig: { thinkingLevel: ThinkingLevel.LOW },
-        mediaResolution: MediaResolution.MEDIA_RESOLUTION_HIGH
+        responseMimeType: "application/json" as const
     };
     
     // 採点用の設定（JSON出力を強制）
@@ -140,10 +136,18 @@ export class EduShiftGrader {
         if (!CONFIG.GEMINI_API_KEY) {
             throw new Error("GEMINI_API_KEY is not set in environment variables.");
         }
-        // 新SDK: v1alpha APIを使用（mediaResolution等の新機能を有効化）
-        this.ai = new GoogleGenAI({
-            apiKey: CONFIG.GEMINI_API_KEY,
-            httpOptions: { apiVersion: 'v1alpha' }
+        this.genAI = new GoogleGenerativeAI(CONFIG.GEMINI_API_KEY);
+        
+        // 採点用モデル
+        this.model = this.genAI.getGenerativeModel({
+            model: CONFIG.MODEL_NAME,
+            systemInstruction: SYSTEM_INSTRUCTION
+        });
+        
+        // OCR専用モデル
+        this.ocrModel = this.genAI.getGenerativeModel({
+            model: CONFIG.MODEL_NAME,
+            systemInstruction: this.ocrSystemInstruction
         });
     }
 
@@ -224,15 +228,11 @@ export class EduShiftGrader {
 
         let result;
         try {
-            // 新SDK: ai.models.generateContent()を使用
+            // 旧SDK: ocrModel.generateContent()を使用
             result = await withTimeout(
-                this.ai.models.generateContent({
-                    model: CONFIG.MODEL_NAME,
+                this.ocrModel.generateContent({
                     contents: [{ role: "user", parts: [{ text: ocrPrompt }, ...targetParts] }],
-                    config: {
-                        ...this.ocrConfig,
-                        systemInstruction: this.ocrSystemInstruction
-                    }
+                    generationConfig: this.ocrConfig
                 }),
                 OCR_TIMEOUT_MS,
                 "OCR処理"
@@ -244,7 +244,7 @@ export class EduShiftGrader {
 
         let raw = "";
         try {
-            raw = result.text?.trim() ?? "";
+            raw = result.response.text().trim();
         } catch (error) {
             console.error("[Grader] OCRレスポンスの読み取りエラー:", error);
             throw new Error("OCR結果の取得に失敗しました。画像が破損している可能性があります。");
@@ -1118,19 +1118,15 @@ System Instructionに定義された以下のルールを厳密に適用して�
 結果はJSON形式で出力してください。`;
 
         const result = await withTimeout(
-            this.ai.models.generateContent({
-                model: CONFIG.MODEL_NAME,
+            this.model.generateContent({
                 contents: [{ role: "user", parts: [{ text: prompt }, ...imageParts] }],
-                config: {
-                    ...this.gradingConfig,
-                    systemInstruction: SYSTEM_INSTRUCTION
-                }
+                generationConfig: this.gradingConfig
             }),
             GRADING_TIMEOUT_MS,
             "採点処理"
         );
 
-        const text = result.text ?? "";
+        const text = result.response.text();
         console.log("[Grader] Stage 2 AIレスポンス長:", text.length);
         console.log("[Grader] Stage 2 AIレスポンスプレビュー:", text.substring(0, 500));
         

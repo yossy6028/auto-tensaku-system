@@ -124,18 +124,8 @@ export class EduShiftGrader {
         responseMimeType: "application/json" as const
     };
     
-    // OCR用のsystemInstruction
-    private readonly ocrSystemInstruction = `あなたは高精度OCRです。
-
-【絶対禁止】
-- 言い換え禁止：「であるので」→「であり」のような変換をしない
-- 省略禁止：「していたため」→「しており」のような短縮をしない
-- 接続詞・助詞・語尾も一字残らず書き出す
-
-【許可】
-- 類似文字の推測（め↔ぬ、わ↔れ等）
-
-マス目の文字を一字残らず転写してください。`;
+    // OCR用のsystemInstruction（シンプルに）
+    private readonly ocrSystemInstruction = `画像の文字を一字残らず書き出してください。省略・要約禁止。`;
 
     constructor() {
         if (!CONFIG.GEMINI_API_KEY) {
@@ -204,17 +194,7 @@ export class EduShiftGrader {
         }
 
         const sanitizedLabel = targetLabel.replace(/[<>\\\"'`]/g, "").trim() || "target";
-        const ocrPrompt = `「${sanitizedLabel}」の解答欄の文字を全て書き出してください。
-
-【絶対禁止】
-- 「であるので」→「であり」のような言い換え禁止
-- 「思いこんでいたため」→「思いこみ」のような省略禁止
-- 接続詞・語尾も含め一字も省略しない
-
-【許可】類似文字の推測（め↔ぬ等）
-
-縦書きは右→左、上→下。
-書いてある文字を一字残らず書き出してください。`;
+        const ocrPrompt = `「${sanitizedLabel}」の文字を全て書き出す。省略禁止。縦書きは右から左へ。`;
 
         let result;
         try {

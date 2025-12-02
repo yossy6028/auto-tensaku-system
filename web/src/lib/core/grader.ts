@@ -107,14 +107,13 @@ export class EduShiftGrader {
     private ai: GoogleGenAI;
     
     // OCR用の設定
-    // responseMimeType: JSON強制で出力ブレを抑える
+    // responseMimeTypeなし: 自由形式で一字一句転写に集中させる
     // temperature: 0でOCRは決定的に
     private readonly ocrConfig = {
         temperature: 0,
         topP: 0.4,
         topK: 32,
-        maxOutputTokens: 4096,
-        responseMimeType: "application/json" as const
+        maxOutputTokens: 8192  // 長い答案に対応
     };
     
     // 採点用の設定（JSON出力を強制）
@@ -198,23 +197,15 @@ export class EduShiftGrader {
         }
 
         const sanitizedLabel = targetLabel.replace(/[<>\\\"'`]/g, "").trim() || "target";
-        const ocrPrompt = [
-            `「${sanitizedLabel}」の解答欄を一字一句そのまま転写してください。`,
-            "",
-            "【絶対禁止】",
-            "- 要約しない",
-            "- 言い換えない（「するものだと」→「する動物が」のような変換禁止）",
-            "- 意味を解釈しない",
-            "- 文法的におかしくても修正しない",
-            "",
-            "【ルール】",
-            "- 書いてある文字をそのまま写す",
-            "- 読めない文字は「〓」",
-            "- 縦書き: 右列→左列、上→下",
-            "- 他の設問は無視",
-            "",
-            "JSONで返す: { \"text\": \"<そのまま転写>\", \"char_count\": <文字数> }"
-        ].join("\n");
+        const ocrPrompt = `「${sanitizedLabel}」の解答欄に書かれている文字を、一字一句そのまま書き出してください。
+
+重要：
+- 省略しない（全ての文字を書き出す）
+- 要約しない
+- 言い換えない
+- 縦書きの場合は右列から左列へ、上から下へ読む
+
+書いてある通りに出力してください。`;
 
         let result;
         try {

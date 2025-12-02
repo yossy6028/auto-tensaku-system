@@ -124,8 +124,11 @@ export class EduShiftGrader {
         responseMimeType: "application/json" as const
     };
     
+    // OCR専用モデル（gemini-2.0-flashはOCRに強い）
+    private readonly ocrModelName = "gemini-2.0-flash";
+    
     // OCR用のsystemInstruction（シンプルに）
-    private readonly ocrSystemInstruction = `画像の文字を一字残らず書き出してください。省略・要約禁止。`;
+    private readonly ocrSystemInstruction = `画像の手書き文字を一字残らず書き出す。省略禁止。`;
 
     constructor() {
         if (!CONFIG.GEMINI_API_KEY) {
@@ -199,9 +202,10 @@ export class EduShiftGrader {
         let result;
         try {
             // 新SDK: ai.models.generateContent()を使用
+            // OCRにはgemini-2.0-flashを使用（要約しにくい）
             result = await withTimeout(
                 this.ai.models.generateContent({
-                    model: CONFIG.MODEL_NAME,
+                    model: this.ocrModelName,
                     contents: [{ role: "user", parts: [{ text: ocrPrompt }, ...targetParts] }],
                     config: {
                         ...this.ocrConfig,

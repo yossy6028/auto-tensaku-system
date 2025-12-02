@@ -106,13 +106,13 @@ export class EduShiftGrader {
     private ai: GoogleGenAI;
     
     // OCR用の設定
-    // responseMimeTypeなし: 自由形式で一字一句転写に集中させる
-    // temperature: 0でOCRは決定的に
+    // responseMimeType: JSONで構造化出力を強制
     private readonly ocrConfig = {
         temperature: 0,
         topP: 0.4,
         topK: 32,
-        maxOutputTokens: 8192  // 長い答案に対応
+        maxOutputTokens: 8192,
+        responseMimeType: "application/json" as const
     };
     
     // 採点用の設定（JSON出力を強制）
@@ -194,17 +194,23 @@ export class EduShiftGrader {
         }
 
         const sanitizedLabel = targetLabel.replace(/[<>\\\"'`]/g, "").trim() || "target";
-        const ocrPrompt = `「${sanitizedLabel}」の解答をマス目に沿って読み取る。
+        const ocrPrompt = `「${sanitizedLabel}」の解答欄を読み取り、以下のJSON形式で出力:
 
-【手順】
-1. 縦1列が何マスか数える
-2. 右端の列から順に、各列の文字を上から下へ読む
-3. 各列: 「○列目(○文字): ○○○○○○」の形式で出力
+{
+  "cells_per_column": <縦1列のマス数>,
+  "columns": [
+    {"col": 1, "chars": "<1列目の文字列>"},
+    {"col": 2, "chars": "<2列目の文字列>"},
+    ...
+  ],
+  "full_text": "<全文を一続きに>"
+}
 
-【ルール】
-- 空マスも「□」で表示
-- 似た文字は文脈で判断（た↔失、漢字↔かな等）
-- 全ての列を出力後、最後に全文を一続きで出力`;
+ルール:
+- 縦書き: 右列から左列へ、上から下へ読む
+- 空マスは無視（詰めて出力）
+- 似た形の文字は文脈で判断（た↔失等）
+- 省略禁止: 全ての文字を出力`;
 
         let result;
         try {
@@ -238,10 +244,31 @@ export class EduShiftGrader {
         const cleaned = raw.replace(/```json\s*|```/g, "").trim();
         let text = cleaned;
         let charCount = text.replace(/\s+/g, "").length;
+        let columnsDebug: string[] = [];
+        
         try {
             const parsed = JSON.parse(cleaned);
-            text = String(parsed.text ?? "").trim();
-            charCount = Number.isFinite(parsed.char_count) ? Number(parsed.char_count) : text.replace(/\s+/g, "").length;
+            // 新形式: { columns: [...], full_text: "..." }
+            if (parsed.full_text) {
+                text = String(parsed.full_text).trim();
+            } else if (parsed.text) {
+                text = String(parsed.text).trim();
+            }
+            
+            // 列ごとの読み取り結果を保存（デバッグ用）
+            if (parsed.columns && Array.isArray(parsed.columns)) {
+                columnsDebug = parsed.columns.map((c: { col: number; chars: string }) => 
+                    `${c.col}列: ${c.chars}`
+                );
+                console.log("[Grader] 列ごとの読み取り:", columnsDebug);
+                
+                // full_textがない場合、columnsから構築
+                if (!text && columnsDebug.length > 0) {
+                    text = parsed.columns.map((c: { chars: string }) => c.chars).join("");
+                }
+            }
+            
+            charCount = parsed.char_count ?? parsed.cells_per_column ?? text.replace(/\s+/g, "").length;
         } catch (e) {
             console.warn("[Grader] OCR JSON parse failed, using raw text");
         }

@@ -123,8 +123,9 @@ export class EduShiftGrader {
         responseMimeType: "application/json" as const
     };
     
-    // OCR用のsystemInstruction（シンプルに）
-    private readonly ocrSystemInstruction = `画像の手書き文字を一字残らず書き出す。省略禁止。`;
+    // OCR用のsystemInstruction
+    private readonly ocrSystemInstruction = `手書き文字を一字残らず書き出す。省略禁止。
+似た形の文字は文脈で判断（た↔失、め↔ぬ、漢字↔かな等）。`;
 
     constructor() {
         if (!CONFIG.GEMINI_API_KEY) {
@@ -193,7 +194,10 @@ export class EduShiftGrader {
         }
 
         const sanitizedLabel = targetLabel.replace(/[<>\\\"'`]/g, "").trim() || "target";
-        const ocrPrompt = `「${sanitizedLabel}」の文字を全て書き出す。省略禁止。縦書きは右から左へ。`;
+        const ocrPrompt = `「${sanitizedLabel}」の解答を全て書き出す。
+省略禁止。縦書きは右→左。
+似た文字は文脈で判断（た↔失、漢字↔かな等）。
+改行なしで一続きに出力。`;
 
         let result;
         try {

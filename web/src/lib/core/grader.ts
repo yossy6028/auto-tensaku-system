@@ -194,10 +194,17 @@ export class EduShiftGrader {
         }
 
         const sanitizedLabel = targetLabel.replace(/[<>\\\"'`]/g, "").trim() || "target";
-        const ocrPrompt = `「${sanitizedLabel}」の解答を全て書き出す。
-省略禁止。縦書きは右→左。
-似た文字は文脈で判断（た↔失、漢字↔かな等）。
-改行なしで一続きに出力。`;
+        const ocrPrompt = `「${sanitizedLabel}」の解答をマス目に沿って読み取る。
+
+【手順】
+1. 縦1列が何マスか数える
+2. 右端の列から順に、各列の文字を上から下へ読む
+3. 各列: 「○列目(○文字): ○○○○○○」の形式で出力
+
+【ルール】
+- 空マスも「□」で表示
+- 似た文字は文脈で判断（た↔失、漢字↔かな等）
+- 全ての列を出力後、最後に全文を一続きで出力`;
 
         let result;
         try {

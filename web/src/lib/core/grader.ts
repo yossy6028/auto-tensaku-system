@@ -125,10 +125,19 @@ export class EduShiftGrader {
     };
     
     // OCR用のsystemInstruction
-    private readonly ocrSystemInstruction = `あなたは機械的なOCRエンジンです。
-意味を理解せず、見たままの文字を転写してください。
-絶対に要約・言い換え・解釈をしないでください。
-文法的に変でも、意味が通らなくても、書いてある通りに出力してください。`;
+    private readonly ocrSystemInstruction = `あなたは高精度OCRです。
+
+【禁止】
+- 意味的な補充（書いていない言葉を追加しない）
+- 省略（文字を飛ばさない）
+- 要約（短くまとめない）
+- 言い換え（別の表現に変えない）
+
+【許可】
+- 類似文字の推測変換（め↔ぬ、わ↔れ、は↔ほ等）
+- 一字だけの置換で意味が通る場合の修正
+
+全ての文字を一字一句書き出してください。`;
 
     constructor() {
         if (!CONFIG.GEMINI_API_KEY) {
@@ -197,15 +206,13 @@ export class EduShiftGrader {
         }
 
         const sanitizedLabel = targetLabel.replace(/[<>\\\"'`]/g, "").trim() || "target";
-        const ocrPrompt = `「${sanitizedLabel}」の解答欄に書かれている文字を、一字一句そのまま書き出してください。
+        const ocrPrompt = `「${sanitizedLabel}」の解答欄の文字を全て書き出してください。
 
-重要：
-- 省略しない（全ての文字を書き出す）
-- 要約しない
-- 言い換えない
-- 縦書きの場合は右列から左列へ、上から下へ読む
+【禁止】省略・要約・言い換え・意味的な補充
+【許可】類似文字の推測（め↔ぬ等）、一字の修正で意味が通る場合
 
-書いてある通りに出力してください。`;
+縦書きは右→左、上→下で読んでください。
+全文字を書き出してください。`;
 
         let result;
         try {

@@ -189,10 +189,8 @@ export class EduShiftGrader {
         }
 
         const sanitizedLabel = targetLabel.replace(/[<>\\\"'`]/g, "").trim() || "target";
-        const ocrPrompt = `「${sanitizedLabel}」の手書き文字を全て書き出してください。
-- 縦書きは右から左へ読む
-- 書いてある通りに出力（句読点を追加しない）
-- 最後に使用マス数を記載: [○マス]`;
+        // 高精度だったシンプルなプロンプト
+        const ocrPrompt = `「${sanitizedLabel}」の手書き文字を全て書き出してください。縦書きは右から左へ読みます。一字も省略せず、書いてある通りに出力してください。`;
 
         let result;
         try {
@@ -225,13 +223,8 @@ export class EduShiftGrader {
 
         // プレーンテキストとして処理（改行を削除）
         let text = raw.replace(/[\r\n]+/g, "").trim();
-        
-        // マス数を抽出 [○マス] 形式
-        const cellMatch = text.match(/\[(\d+)マス\]/);
-        let charCount = cellMatch ? parseInt(cellMatch[1], 10) : text.replace(/\s+/g, "").length;
-        
-        // マス数表記を本文から削除
-        text = text.replace(/\s*\[\d+マス\]\s*$/, "").trim();
+        // 文字数：シンプルに空白除去してカウント
+        let charCount = text.replace(/\s+/g, "").length;
         
         console.log("[Grader] OCR結果:", { text: text.substring(0, 100), charCount });
 

@@ -4,9 +4,8 @@ import { SYSTEM_INSTRUCTION } from "../prompts/eduShift";
 
 // API呼び出しのタイムアウト設定（ミリ秒）
 // Vercel Proプラン + maxDuration=300秒対応
-// Gemini APIが遅いため、タイムアウトを延長
-const OCR_TIMEOUT_MS = 150000;     // 150秒
-const GRADING_TIMEOUT_MS = 140000; // 140秒（合計290秒以内）
+const OCR_TIMEOUT_MS = 120000;     // 120秒
+const GRADING_TIMEOUT_MS = 170000; // 170秒（合計290秒以内）
 // 合計270秒以内（300秒制限に余裕を持たせる）
 
 /**
@@ -124,9 +123,6 @@ export class EduShiftGrader {
         responseMimeType: "application/json" as const
     };
     
-    // OCR専用モデル（gemini-2.0-flashはOCRに強い）
-    private readonly ocrModelName = "gemini-2.0-flash";
-    
     // OCR用のsystemInstruction（シンプルに）
     private readonly ocrSystemInstruction = `画像の手書き文字を一字残らず書き出す。省略禁止。`;
 
@@ -202,10 +198,10 @@ export class EduShiftGrader {
         let result;
         try {
             // 新SDK: ai.models.generateContent()を使用
-            // OCRにはgemini-2.0-flashを使用（要約しにくい）
+            // OCRもgemini-3-pro-previewを使用（高精度）
             result = await withTimeout(
                 this.ai.models.generateContent({
-                    model: this.ocrModelName,
+                    model: CONFIG.MODEL_NAME,
                     contents: [{ role: "user", parts: [{ text: ocrPrompt }, ...targetParts] }],
                     config: {
                         ...this.ocrConfig,

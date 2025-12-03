@@ -1605,15 +1605,7 @@ export default function Home() {
                   </button>
                 </div>
 
-                {/* 現在の選択プレビュー */}
-                <div className="text-center mb-2">
-                  <span className="text-xs text-slate-500">現在の選択: </span>
-                  <span className="text-sm font-bold text-indigo-600 bg-indigo-50 px-3 py-1 rounded-full">
-                    {generateProblemLabel() || '（未入力）'}
-                  </span>
-                </div>
-
-                {/* Selected Problems List / Current Selection Display */}
+                {/* 選択された採点対象 */}
                 <div className="mt-4">
                   {selectedProblems.length > 0 ? (
                     <>
@@ -1638,18 +1630,7 @@ export default function Home() {
                   ) : (
                     <div className="bg-slate-100 border border-slate-200 rounded-xl p-4 text-center">
                       <p className="text-sm text-slate-600 font-medium">
-                        <span className="text-amber-500 mr-2">⚠️</span>
-                        採点対象が選ばれていません
-                      </p>
-                      <p className="text-xs text-slate-500 mt-1">
-                        上で問題を選択し、
-                        <span className="inline-flex items-center bg-indigo-100 text-indigo-700 px-2 py-0.5 rounded mx-1">
-                          <Plus className="w-3 h-3" />
-                        </span>
-                        ボタンで追加してください
-                      </p>
-                      <p className="text-xs text-indigo-600 mt-2 font-medium">
-                        ※ 未追加でも現在選択中の「{generateProblemLabel() || '（未入力）'}」が採点されます
+                        問題が選択されていません
                       </p>
                     </div>
                   )}

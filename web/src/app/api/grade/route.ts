@@ -284,12 +284,25 @@ export async function POST(req: NextRequest) {
         const files = formData.getAll('files') as File[];
         const pdfPageInfoJson = formData.get('pdfPageInfo') as string | null;
         const fileRolesJson = formData.get('fileRoles') as string | null;
+        // ユーザー確認済みテキスト（OCR結果をユーザーが修正した場合）
+        const confirmedTextsJson = formData.get('confirmedTexts') as string | null;
 
         if (!targetLabelsJson || !files || files.length === 0) {
             return NextResponse.json(
                 { status: 'error', message: 'ファイルをアップロードしてください。本人の答案、問題がすべてクリアに写っていることを確認してください。' },
                 { status: 400 }
             );
+        }
+        
+        // 確認済みテキストを解析
+        let confirmedTexts: Record<string, string> = {};
+        if (confirmedTextsJson) {
+            try {
+                confirmedTexts = JSON.parse(confirmedTextsJson);
+                logger.debug('[API] Confirmed texts provided:', Object.keys(confirmedTexts));
+            } catch {
+                // パース失敗時は無視
+            }
         }
 
         // ファイルのセキュリティ検証
@@ -345,7 +358,17 @@ export async function POST(req: NextRequest) {
 
         for (const label of sanitizedLabels) {
             try {
-                const result = await grader.gradeAnswerFromMultipleFiles(label, fileBuffers, pdfPageInfo, fileRoles);
+                let result;
+                
+                // 確認済みテキストがある場合はそれを使用（OCRスキップ）
+                if (confirmedTexts[label]) {
+                    logger.info(`[API] Using confirmed text for ${label}: ${confirmedTexts[label].length} chars`);
+                    result = await grader.gradeWithConfirmedText(label, confirmedTexts[label], fileBuffers, pdfPageInfo, fileRoles);
+                } else {
+                    // 従来通りOCR + 採点
+                    result = await grader.gradeAnswerFromMultipleFiles(label, fileBuffers, pdfPageInfo, fileRoles);
+                }
+                
                 results.push({ label, result });
             } catch (error: unknown) {
                 const message = error instanceof Error ? error.message : 'Unknown error';

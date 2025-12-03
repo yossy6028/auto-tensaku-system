@@ -121,9 +121,6 @@ export class EduShiftGrader {
     
     // OCR用のsystemInstruction（最小限）
     private readonly ocrSystemInstruction = `OCR。省略禁止。`;
-    
-    // マス数カウント用のsystemInstruction
-    private readonly cellCountSystemInstruction = `答案用紙のマス目を数える。数字のみ出力。`;
 
     constructor() {
         if (!CONFIG.GEMINI_API_KEY) {
@@ -133,6 +130,71 @@ export class EduShiftGrader {
         this.ai = new GoogleGenAI({
             apiKey: CONFIG.GEMINI_API_KEY
         });
+    }
+
+    /**
+     * OCRのみ実行（ユーザー確認用）
+     * 採点前にユーザーが読み取り結果を確認・修正できるよう、OCRのみを実行
+     */
+    async performOcrOnly(
+        targetLabel: string, 
+        files: UploadedFilePart[],
+        pdfPageInfo?: { answerPage?: string; problemPage?: string; modelAnswerPage?: string } | null,
+        fileRoles?: Record<string, FileRole>
+    ): Promise<{ text: string; charCount: number }> {
+        try {
+            // ファイルに役割情報を付与
+            if (fileRoles) {
+                files.forEach((file, idx) => {
+                    if (!file.role) {
+                        file.role = fileRoles[idx.toString()];
+                    }
+                });
+            }
+            const categorizedFiles = this.categorizeFiles(files, pdfPageInfo);
+            const imageParts = this.buildContentSequence(categorizedFiles);
+            
+            const sanitizedLabel = targetLabel.replace(/[<>\\\"'`]/g, '').trim();
+            const ocrResult = await this.performOcr(sanitizedLabel, imageParts, categorizedFiles);
+            const text = (ocrResult.text || ocrResult.fullText).trim();
+            const charCount = text.replace(/\s+/g, "").length;
+            
+            return { text, charCount };
+        } catch (error: unknown) {
+            const message = error instanceof Error ? error.message : 'OCRエラー';
+            throw new Error(message);
+        }
+    }
+
+    /**
+     * 確認済みテキストで採点を実行（OCR結果の修正後）
+     */
+    async gradeWithConfirmedText(
+        targetLabel: string, 
+        confirmedText: string,
+        files: UploadedFilePart[],
+        pdfPageInfo?: { answerPage?: string; problemPage?: string; modelAnswerPage?: string } | null,
+        fileRoles?: Record<string, FileRole>
+    ) {
+        try {
+            // ファイルに役割情報を付与
+            if (fileRoles) {
+                files.forEach((file, idx) => {
+                    if (!file.role) {
+                        file.role = fileRoles[idx.toString()];
+                    }
+                });
+            }
+            const categorizedFiles = this.categorizeFiles(files, pdfPageInfo);
+            const imageParts = this.buildContentSequence(categorizedFiles);
+            
+            const sanitizedLabel = targetLabel.replace(/[<>\\\"'`]/g, '').trim();
+            
+            // Stage 2のみ実行（confirmedTextを使用）
+            return await this.executeGradingWithText(sanitizedLabel, confirmedText, imageParts, pdfPageInfo);
+        } catch (error: unknown) {
+            return this.handleError(error);
+        }
     }
 
     /**
@@ -244,47 +306,6 @@ export class EduShiftGrader {
         });
 
         return { text, fullText: text, matchedTarget: true };
-    }
-
-    /**
-     * Stage 1.5: マス数カウント専用（別API呼び出し）
-     * OCRとは別に、使用されているマス数だけを数える
-     */
-    private async countCells(targetLabel: string, targetParts: ContentPart[]): Promise<number | null> {
-        console.log("[Grader] Stage 1.5: マス数カウント開始");
-        
-        const sanitizedLabel = targetLabel.replace(/[<>\\\"'`]/g, "").trim() || "target";
-        const countPrompt = `「${sanitizedLabel}」の答案で、文字が書かれているマスの数を数えてください。句読点も1マスとして数えます。空白マスは数えません。数字のみ出力してください。`;
-
-        try {
-            const result = await withTimeout(
-                this.ai.models.generateContent({
-                    model: CONFIG.MODEL_NAME,
-                    contents: [{ role: "user", parts: [{ text: countPrompt }, ...targetParts] }],
-                    config: {
-                        temperature: 0,
-                        maxOutputTokens: 32,
-                        systemInstruction: this.cellCountSystemInstruction
-                    }
-                }),
-                30000,  // 30秒（短いタスクなので短め）
-                "マス数カウント"
-            );
-
-            const raw = result.text?.trim() ?? "";
-            // 数字のみを抽出
-            const match = raw.match(/\d+/);
-            if (match) {
-                const cellCount = parseInt(match[0], 10);
-                console.log("[Grader] Stage 1.5 完了: マス数 =", cellCount);
-                return cellCount;
-            }
-            console.warn("[Grader] マス数カウント結果が数字ではありません:", raw);
-            return null;
-        } catch (error) {
-            console.warn("[Grader] マス数カウントエラー（採点は続行）:", error);
-            return null;
-        }
     }
 
     /**
@@ -1030,6 +1051,103 @@ export class EduShiftGrader {
     }
 
     /**
+     * 確認済みテキストで採点のみ実行（Stage 2のみ）
+     */
+    private async executeGradingWithText(
+        targetLabel: string,
+        confirmedText: string,
+        imageParts: ContentPart[],
+        pdfPageInfo?: { answerPage?: string; problemPage?: string; modelAnswerPage?: string } | null
+    ) {
+        console.log("[Grader] 確認済みテキストで採点開始");
+        
+        // PDFページ指定ヒントを構築
+        let pdfPageHint = '';
+        const hasPdf = imageParts.some(part => 
+            typeof part === 'object' && 'inlineData' in part && 
+            part.inlineData.mimeType === 'application/pdf'
+        );
+        
+        if (hasPdf && pdfPageInfo) {
+            const hints: string[] = [];
+            if (pdfPageInfo.answerPage) hints.push(`生徒の答案: ${pdfPageInfo.answerPage}ページ目`);
+            if (pdfPageInfo.problemPage) hints.push(`問題文: ${pdfPageInfo.problemPage}ページ目`);
+            if (pdfPageInfo.modelAnswerPage) hints.push(`模範解答: ${pdfPageInfo.modelAnswerPage}ページ目`);
+            if (hints.length > 0) {
+                pdfPageHint = `\n【PDFページ指定】\n${hints.join('\n')}\n`;
+            }
+        }
+
+        const charCount = confirmedText.replace(/\s+/g, "").length;
+        
+        const prompt = `Target Problem Label: ${targetLabel}
+${pdfPageHint}
+
+【ユーザーが確認・修正した生徒の答案テキスト】（${charCount}文字）
+---
+${confirmedText}
+---
+
+上記のテキストを recognized_text として使用してください（これはユーザーが確認済みです）。
+
+添付された画像（問題文、模範解答）を参照し、「${targetLabel}」の採点を行ってください。
+
+System Instructionに定義された以下のルールを厳密に適用してください：
+- Global Rules: 5大原則に基づく採点
+- 採点基準: 減点基準リファレンステーブルに従う
+- recognized_text は上記の確認済みテキストをそのまま出力すること
+
+結果はJSON形式で出力してください。`;
+
+        const result = await withTimeout(
+            this.ai.models.generateContent({
+                model: CONFIG.MODEL_NAME,
+                contents: [{ role: "user", parts: [{ text: prompt }, ...imageParts] }],
+                config: {
+                    ...this.gradingConfig,
+                    systemInstruction: SYSTEM_INSTRUCTION
+                }
+            }),
+            GRADING_TIMEOUT_MS,
+            "採点処理"
+        );
+
+        const text = result.text ?? "";
+        console.log("[Grader] 採点AIレスポンス長:", text.length);
+        
+        const parsed = this.extractJsonFromText(text);
+        
+        if (parsed) {
+            delete parsed.debug_info;
+            
+            const gradingResultObj = (parsed.grading_result && typeof parsed.grading_result === 'object')
+                ? parsed.grading_result as Record<string, unknown>
+                : (parsed.grading_result = {} as Record<string, unknown>);
+
+            // 確認済みテキストを強制的に設定
+            gradingResultObj.recognized_text = confirmedText;
+            gradingResultObj.recognized_text_full = confirmedText;
+            gradingResultObj.user_confirmed = true;
+            
+            // プログラムによる検証・補完を実行
+            const validated = this.validateAndEnhanceGrading(parsed);
+            
+            console.log("[Grader] 採点完了（確認済みテキスト使用）");
+            return validated;
+        }
+
+        console.error("[Grader] ❌ JSONパース失敗");
+        return {
+            status: "error",
+            message: "System Error: Failed to parse AI response.",
+            grading_result: {
+                recognized_text: confirmedText,
+                user_confirmed: true
+            }
+        };
+    }
+
+    /**
      * 2段階採点を実行
      * Stage 1: OCR（JSON強制なし - Web版Geminiと同等の高精度）
      * Stage 2: 採点（OCR結果を使用してJSON出力）
@@ -1048,16 +1166,6 @@ export class EduShiftGrader {
         // ========================================
         const ocrResult = await this.performOcr(sanitizedLabel, imageParts, categorizedFiles);
         const ocrText = (ocrResult.text || ocrResult.fullText).trim();
-        
-        // ========================================
-        // Stage 1.5: マス数カウント（別API呼び出し）
-        // OCRとは別に、使用マス数だけを数える
-        // ========================================
-        let cellCountFromImage: number | null = null;
-        if (categorizedFiles && categorizedFiles.studentFiles.length > 0) {
-            const targetParts = categorizedFiles.studentFiles.map(file => this.toGenerativePart(file));
-            cellCountFromImage = await this.countCells(sanitizedLabel, targetParts);
-        }
         
         // ========================================
         // Stage 2: 採点（OCR結果を使用）
@@ -1237,12 +1345,6 @@ System Instructionに定義された以下のルールを厳密に適用して�
                 matched_target: ocrResult.matchedTarget,
                 full_length: ocrResult.fullText?.length ?? 0
             };
-            
-            // マス数カウント結果を追加
-            if (cellCountFromImage !== null) {
-                gradingResultObj.cell_count = cellCountFromImage;
-                console.log(`[Grader] マス数カウント結果: ${cellCountFromImage}マス（OCR文字数: ${finalRecognized.length}文字）`);
-            }
             
             // プログラムによる検証・補完を実行
             const validated = this.validateAndEnhanceGrading(parsed);

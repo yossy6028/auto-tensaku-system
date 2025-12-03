@@ -85,6 +85,13 @@ export default function Home() {
   const [compressionProgress, setCompressionProgress] = useState(0);
   const [compressionFileName, setCompressionFileName] = useState('');
 
+  // OCR確認フロー用のステート
+  type OcrFlowStep = 'idle' | 'ocr-loading' | 'confirm' | 'grading';
+  const [ocrFlowStep, setOcrFlowStep] = useState<OcrFlowStep>('idle');
+  const [ocrResults, setOcrResults] = useState<Record<string, { text: string; charCount: number }>>({});
+  const [confirmedTexts, setConfirmedTexts] = useState<Record<string, string>>({});
+  const [currentOcrLabel, setCurrentOcrLabel] = useState<string>('');
+
   // PDFページ番号指定（複数ページPDF対応）
   const [pdfPageInfo, setPdfPageInfo] = useState<{
     answerPage: string;      // 答案のあるページ番号
@@ -716,6 +723,154 @@ export default function Home() {
     setIsAuthModalOpen(true);
   };
 
+  // OCRのみ実行（確認フロー開始）
+  const handleOcrStart = async (e: React.FormEvent) => {
+    e.preventDefault();
+
+    if (!user) {
+      openAuthModal('signin');
+      return;
+    }
+
+    if (!session) {
+      openAuthModal('signin');
+      return;
+    }
+
+    if (uploadedFiles.length === 0) {
+      setError('ファイルをアップロードしてください。');
+      return;
+    }
+
+    let targetLabels = selectedProblems;
+    if (targetLabels.length === 0) {
+      const currentLabel = generateProblemLabel();
+      if (!currentLabel) {
+        setError('採点対象の問題を選択または入力してください。');
+        return;
+      }
+      targetLabels = [currentLabel];
+    }
+
+    setOcrFlowStep('ocr-loading');
+    setError(null);
+    setOcrResults({});
+    setConfirmedTexts({});
+
+    // 各ラベルに対してOCRを実行
+    const newOcrResults: Record<string, { text: string; charCount: number }> = {};
+
+    for (const label of targetLabels) {
+      setCurrentOcrLabel(label);
+      
+      const formData = new FormData();
+      formData.append('targetLabel', label);
+      
+      if (pdfPageInfo.answerPage || pdfPageInfo.problemPage || pdfPageInfo.modelAnswerPage) {
+        formData.append('pdfPageInfo', JSON.stringify(pdfPageInfo));
+      }
+      formData.append('fileRoles', JSON.stringify(fileRoles));
+      
+      uploadedFiles.forEach((file) => {
+        formData.append('files', file);
+      });
+
+      try {
+        const res = await fetch('/api/ocr', {
+          method: 'POST',
+          body: formData,
+          credentials: 'include',
+        });
+
+        const data = await res.json();
+
+        if (data.status === 'error') {
+          setError(data.message);
+          setOcrFlowStep('idle');
+          return;
+        }
+
+        newOcrResults[label] = {
+          text: data.ocrResult.text,
+          charCount: data.ocrResult.charCount
+        };
+        
+        // 初期値として確認済みテキストにも設定
+        setConfirmedTexts(prev => ({
+          ...prev,
+          [label]: data.ocrResult.text
+        }));
+      } catch (err) {
+        console.error('OCR error:', err);
+        setError('OCR処理中にエラーが発生しました。');
+        setOcrFlowStep('idle');
+        return;
+      }
+    }
+
+    setOcrResults(newOcrResults);
+    setOcrFlowStep('confirm');
+    setCurrentOcrLabel('');
+  };
+
+  // 確認済みテキストで採点を実行
+  const handleGradeWithConfirmed = async () => {
+    setOcrFlowStep('grading');
+    setIsLoading(true);
+    setError(null);
+    setResults(null);
+
+    const targetLabels = Object.keys(confirmedTexts);
+
+    const formData = new FormData();
+    formData.append('targetLabels', JSON.stringify(targetLabels));
+    formData.append('confirmedTexts', JSON.stringify(confirmedTexts));
+
+    if (pdfPageInfo.answerPage || pdfPageInfo.problemPage || pdfPageInfo.modelAnswerPage) {
+      formData.append('pdfPageInfo', JSON.stringify(pdfPageInfo));
+    }
+    formData.append('fileRoles', JSON.stringify(fileRoles));
+
+    uploadedFiles.forEach((file) => {
+      formData.append('files', file);
+    });
+
+    try {
+      const res = await fetch('/api/grade', {
+        method: 'POST',
+        body: formData,
+        credentials: 'include',
+      });
+
+      const data = await res.json();
+
+      if (data.status === 'error') {
+        setError(data.message);
+        if (data.requirePlan) {
+          setRequirePlan(true);
+        }
+      } else {
+        setResults(data.results);
+        refreshUsageInfo().catch((err) => {
+          console.warn('Failed to refresh usage info:', err);
+        });
+      }
+    } catch (err) {
+      console.error('Grading error:', err);
+      setError('採点処理中にエラーが発生しました。');
+    } finally {
+      setIsLoading(false);
+      setOcrFlowStep('idle');
+    }
+  };
+
+  // OCR確認をキャンセル
+  const handleOcrCancel = () => {
+    setOcrFlowStep('idle');
+    setOcrResults({});
+    setConfirmedTexts({});
+  };
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
 
@@ -1199,7 +1354,7 @@ export default function Home() {
         <div className="bg-white/70 backdrop-blur-2xl shadow-[0_20px_60px_-15px_rgba(0,0,0,0.1)] rounded-[2.5rem] overflow-hidden border border-white/60 ring-1 ring-white/60 transition-all duration-500 hover:shadow-[0_30px_70px_-15px_rgba(79,70,229,0.15)] relative">
           <div className="absolute top-0 left-0 w-full h-2 bg-gradient-to-r from-indigo-500 via-violet-500 to-fuchsia-500"></div>
           <div className="p-8 md:p-14">
-            <form onSubmit={handleSubmit} className="space-y-12">
+            <form onSubmit={handleOcrStart} className="space-y-12">
 
               {/* 生徒名・添削担当者名入力 */}
               <div className="max-w-2xl mx-auto">
@@ -1814,23 +1969,85 @@ export default function Home() {
               <div className="pt-6">
                 <button
                   type="submit"
-                  disabled={isLoading}
+                  disabled={isLoading || ocrFlowStep !== 'idle'}
                   className="w-full group relative flex justify-center py-5 px-6 border-0 rounded-2xl shadow-[0_10px_30px_rgba(79,70,229,0.3)] text-lg font-bold text-white bg-gradient-to-r from-indigo-600 via-violet-600 to-indigo-600 bg-[length:200%_auto] hover:bg-[position:right_center] focus:outline-none focus:ring-4 focus:ring-indigo-500/30 disabled:opacity-70 disabled:cursor-not-allowed transition-all duration-500 transform hover:-translate-y-1"
                 >
-                  {isLoading ? (
+                  {ocrFlowStep === 'ocr-loading' ? (
                     <span className="flex items-center">
                       <Loader2 className="animate-spin -ml-1 mr-3 h-6 w-6" />
-                      AIが思考中...
+                      {currentOcrLabel ? `「${currentOcrLabel}」を読み取り中...` : '読み取り中...'}
                     </span>
                   ) : (
                     <span className="flex items-center">
-                      採点を開始する
+                      <BookOpen className="mr-3 h-6 w-6" />
+                      答案を読み取る
                       <ArrowRight className="ml-3 h-6 w-6 group-hover:translate-x-1 transition-transform" />
                     </span>
                   )}
                 </button>
               </div>
             </form>
+
+            {/* OCR確認UI */}
+            {ocrFlowStep === 'confirm' && Object.keys(ocrResults).length > 0 && (
+              <div className="mt-8 p-6 bg-gradient-to-br from-amber-50 to-orange-50 border border-amber-200 rounded-2xl">
+                <h3 className="text-lg font-bold text-amber-800 mb-4 flex items-center">
+                  <Edit3 className="mr-2 h-5 w-5" />
+                  読み取り結果を確認・修正してください
+                </h3>
+                <p className="text-sm text-amber-700 mb-6">
+                  AIが読み取った内容に誤りがあれば、下のテキストを直接編集してから「採点を開始」を押してください。
+                </p>
+
+                {Object.entries(ocrResults).map(([label, result]) => (
+                  <div key={label} className="mb-6 last:mb-0">
+                    <div className="flex items-center justify-between mb-2">
+                      <label className="font-semibold text-slate-700">{label}</label>
+                      <span className="text-sm text-slate-500">
+                        {confirmedTexts[label]?.length || 0}文字
+                      </span>
+                    </div>
+                    <textarea
+                      value={confirmedTexts[label] || ''}
+                      onChange={(e) => setConfirmedTexts(prev => ({ ...prev, [label]: e.target.value }))}
+                      className="w-full h-40 p-4 border border-slate-300 rounded-xl focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 font-mono text-sm leading-relaxed resize-y"
+                      placeholder="読み取り結果がここに表示されます"
+                    />
+                    {result.charCount !== (confirmedTexts[label]?.length || 0) && (
+                      <p className="mt-1 text-xs text-amber-600">
+                        ※ 元の読み取り: {result.charCount}文字 → 修正後: {confirmedTexts[label]?.length || 0}文字
+                      </p>
+                    )}
+                  </div>
+                ))}
+
+                <div className="flex gap-4 mt-6">
+                  <button
+                    onClick={handleOcrCancel}
+                    className="flex-1 py-3 px-6 border border-slate-300 rounded-xl text-slate-700 font-semibold hover:bg-slate-50 transition-colors"
+                  >
+                    キャンセル
+                  </button>
+                  <button
+                    onClick={handleGradeWithConfirmed}
+                    disabled={isLoading}
+                    className="flex-1 py-3 px-6 bg-gradient-to-r from-emerald-500 to-teal-500 text-white font-bold rounded-xl shadow-lg hover:shadow-xl transition-all disabled:opacity-70 flex items-center justify-center"
+                  >
+                    {isLoading ? (
+                      <>
+                        <Loader2 className="animate-spin mr-2 h-5 w-5" />
+                        採点中...
+                      </>
+                    ) : (
+                      <>
+                        <CheckCircle className="mr-2 h-5 w-5" />
+                        採点を開始
+                      </>
+                    )}
+                  </button>
+                </div>
+              </div>
+            )}
           </div>
         </div>
 

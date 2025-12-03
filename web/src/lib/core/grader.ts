@@ -121,6 +121,9 @@ export class EduShiftGrader {
     
     // OCR用のsystemInstruction（最小限）
     private readonly ocrSystemInstruction = `OCR。省略禁止。`;
+    
+    // マス数カウント用のsystemInstruction
+    private readonly cellCountSystemInstruction = `答案用紙のマス目を数える。数字のみ出力。`;
 
     constructor() {
         if (!CONFIG.GEMINI_API_KEY) {
@@ -241,6 +244,47 @@ export class EduShiftGrader {
         });
 
         return { text, fullText: text, matchedTarget: true };
+    }
+
+    /**
+     * Stage 1.5: マス数カウント専用（別API呼び出し）
+     * OCRとは別に、使用されているマス数だけを数える
+     */
+    private async countCells(targetLabel: string, targetParts: ContentPart[]): Promise<number | null> {
+        console.log("[Grader] Stage 1.5: マス数カウント開始");
+        
+        const sanitizedLabel = targetLabel.replace(/[<>\\\"'`]/g, "").trim() || "target";
+        const countPrompt = `「${sanitizedLabel}」の答案で、文字が書かれているマスの数を数えてください。句読点も1マスとして数えます。空白マスは数えません。数字のみ出力してください。`;
+
+        try {
+            const result = await withTimeout(
+                this.ai.models.generateContent({
+                    model: CONFIG.MODEL_NAME,
+                    contents: [{ role: "user", parts: [{ text: countPrompt }, ...targetParts] }],
+                    config: {
+                        temperature: 0,
+                        maxOutputTokens: 32,
+                        systemInstruction: this.cellCountSystemInstruction
+                    }
+                }),
+                30000,  // 30秒（短いタスクなので短め）
+                "マス数カウント"
+            );
+
+            const raw = result.text?.trim() ?? "";
+            // 数字のみを抽出
+            const match = raw.match(/\d+/);
+            if (match) {
+                const cellCount = parseInt(match[0], 10);
+                console.log("[Grader] Stage 1.5 完了: マス数 =", cellCount);
+                return cellCount;
+            }
+            console.warn("[Grader] マス数カウント結果が数字ではありません:", raw);
+            return null;
+        } catch (error) {
+            console.warn("[Grader] マス数カウントエラー（採点は続行）:", error);
+            return null;
+        }
     }
 
     /**
@@ -1006,6 +1050,16 @@ export class EduShiftGrader {
         const ocrText = (ocrResult.text || ocrResult.fullText).trim();
         
         // ========================================
+        // Stage 1.5: マス数カウント（別API呼び出し）
+        // OCRとは別に、使用マス数だけを数える
+        // ========================================
+        let cellCountFromImage: number | null = null;
+        if (categorizedFiles && categorizedFiles.studentFiles.length > 0) {
+            const targetParts = categorizedFiles.studentFiles.map(file => this.toGenerativePart(file));
+            cellCountFromImage = await this.countCells(sanitizedLabel, targetParts);
+        }
+        
+        // ========================================
         // Stage 2: 採点（OCR結果を使用）
         // ========================================
         console.log("[Grader] Stage 2: 採点開始（JSON出力）");
@@ -1183,6 +1237,12 @@ System Instructionに定義された以下のルールを厳密に適用して�
                 matched_target: ocrResult.matchedTarget,
                 full_length: ocrResult.fullText?.length ?? 0
             };
+            
+            // マス数カウント結果を追加
+            if (cellCountFromImage !== null) {
+                gradingResultObj.cell_count = cellCountFromImage;
+                console.log(`[Grader] マス数カウント結果: ${cellCountFromImage}マス（OCR文字数: ${finalRecognized.length}文字）`);
+            }
             
             // プログラムによる検証・補完を実行
             const validated = this.validateAndEnhanceGrading(parsed);

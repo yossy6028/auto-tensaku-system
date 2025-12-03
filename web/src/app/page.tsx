@@ -815,10 +815,32 @@ export default function Home() {
 
   // 確認済みテキストで採点を実行
   const handleGradeWithConfirmed = async () => {
+    console.log('[Page] handleGradeWithConfirmed called');
+    console.log('[Page] user:', !!user, 'session:', !!session);
+    console.log('[Page] confirmedTexts:', confirmedTexts);
+    console.log('[Page] uploadedFiles:', uploadedFiles.length);
+
     // 認証チェック
     if (!user || !session) {
+      console.log('[Page] No user or session, showing auth modal');
       setError('セッションが切れました。再度ログインしてください。');
       openAuthModal('signin');
+      setOcrFlowStep('idle');
+      return;
+    }
+
+    // 確認済みテキストがない場合
+    if (Object.keys(confirmedTexts).length === 0) {
+      console.log('[Page] No confirmedTexts');
+      setError('読み取り結果がありません。');
+      setOcrFlowStep('idle');
+      return;
+    }
+
+    // ファイルがない場合
+    if (uploadedFiles.length === 0) {
+      console.log('[Page] No uploadedFiles');
+      setError('ファイルがありません。');
       setOcrFlowStep('idle');
       return;
     }
@@ -829,6 +851,7 @@ export default function Home() {
     setResults(null);
 
     const targetLabels = Object.keys(confirmedTexts);
+    console.log('[Page] Starting grading with labels:', targetLabels);
 
     const formData = new FormData();
     formData.append('targetLabels', JSON.stringify(targetLabels));
@@ -844,13 +867,16 @@ export default function Home() {
     });
 
     try {
+      console.log('[Page] Sending request to /api/grade...');
       const res = await fetch('/api/grade', {
         method: 'POST',
         body: formData,
         credentials: 'include',
       });
+      console.log('[Page] Response status:', res.status);
 
       const data = await res.json();
+      console.log('[Page] Response data:', data);
 
       if (data.status === 'error') {
         setError(data.message);
@@ -864,7 +890,7 @@ export default function Home() {
         });
       }
     } catch (err) {
-      console.error('Grading error:', err);
+      console.error('[Page] Grading error:', err);
       setError('採点処理中にエラーが発生しました。');
     } finally {
       setIsLoading(false);

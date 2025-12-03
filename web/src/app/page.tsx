@@ -2067,19 +2067,19 @@ export default function Home() {
                     disabled={isLoading}
                     className="flex-1 py-3 px-6 bg-gradient-to-r from-emerald-500 to-teal-500 text-white font-bold rounded-xl shadow-lg hover:shadow-xl transition-all disabled:opacity-70 flex items-center justify-center"
                   >
-                    {isLoading ? (
-                      <>
-                        <Loader2 className="animate-spin mr-2 h-5 w-5" />
-                        採点中...
-                      </>
-                    ) : (
-                      <>
-                        <CheckCircle className="mr-2 h-5 w-5" />
-                        採点を開始
-                      </>
-                    )}
+                    <CheckCircle className="mr-2 h-5 w-5" />
+                    採点を開始
                   </button>
                 </div>
+              </div>
+            )}
+
+            {/* 採点中の大きな表示（独立） */}
+            {ocrFlowStep === 'grading' && (
+              <div className="mt-8 p-8 bg-gradient-to-br from-indigo-50 to-violet-50 border-2 border-indigo-200 rounded-2xl text-center">
+                <Loader2 className="animate-spin h-12 w-12 text-indigo-600 mx-auto mb-4" />
+                <p className="text-xl font-bold text-indigo-800 animate-pulse">AIが採点中...</p>
+                <p className="text-sm text-indigo-600 mt-2">30秒〜2分程度かかる場合があります。<br />このままお待ちください。</p>
               </div>
             )}
           </div>

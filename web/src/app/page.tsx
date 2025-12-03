@@ -815,6 +815,14 @@ export default function Home() {
 
   // 確認済みテキストで採点を実行
   const handleGradeWithConfirmed = async () => {
+    // 認証チェック
+    if (!user || !session) {
+      setError('セッションが切れました。再度ログインしてください。');
+      openAuthModal('signin');
+      setOcrFlowStep('idle');
+      return;
+    }
+
     setOcrFlowStep('grading');
     setIsLoading(true);
     setError(null);

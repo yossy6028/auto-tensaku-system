@@ -241,6 +241,14 @@ export async function POST(req: NextRequest) {
             }
         }
 
+        // デバッグ: ファイルとロールの対応を出力
+        logger.info(`[OCR API] targetLabel: ${sanitizedLabel}`);
+        logger.info(`[OCR API] fileRoles受信: ${JSON.stringify(fileRoles)}`);
+        files.forEach((file, idx) => {
+            const role = fileRoles[idx.toString()] || 'other';
+            logger.info(`[OCR API] File[${idx}]: ${file.name} (${(file.size / 1024).toFixed(1)}KB) → role: ${role}`);
+        });
+
         // ファイルをバッファに変換
         const fileBuffers = await convertFilesToBuffers(files, fileRoles);
 

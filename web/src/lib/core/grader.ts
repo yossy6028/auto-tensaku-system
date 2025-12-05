@@ -229,11 +229,15 @@ export class EduShiftGrader {
      */
     private async performOcr(targetLabel: string, imageParts: ContentPart[], categorizedFiles?: CategorizedFiles): Promise<{ text: string; fullText: string; matchedTarget: boolean }> {
         console.log("[Grader] Stage 1: OCR開始");
+        console.log(`[Grader] targetLabel: ${targetLabel}`);
 
         // OCR対象を選択（答案優先、なければ全画像）
         let targetParts: ContentPart[];
         if (categorizedFiles && categorizedFiles.studentFiles.length > 0) {
             console.log(`[Grader] 答案ファイル数: ${categorizedFiles.studentFiles.length}`);
+            categorizedFiles.studentFiles.forEach((f, i) => {
+                console.log(`[Grader]   答案[${i}]: ${f.name} (${(f.buffer.length / 1024).toFixed(1)}KB, role:${f.role})`);
+            });
             // タイムアウト回避のため、答案ファイルが複数ある場合は最小サイズのものを1件だけ採用
             const selectedAnswers = [...categorizedFiles.studentFiles]
                 .sort((a, b) => a.buffer.length - b.buffer.length)
@@ -241,6 +245,7 @@ export class EduShiftGrader {
             if (selectedAnswers.length < categorizedFiles.studentFiles.length) {
                 console.warn("[Grader] 複数の答案が指定されたため、最小サイズの1件に絞り込んでOCRを実行します");
             }
+            console.log(`[Grader] OCRに送る答案: ${selectedAnswers[0]?.name} (${(selectedAnswers[0]?.buffer.length / 1024).toFixed(1)}KB)`);
             targetParts = selectedAnswers.map(file => this.toGenerativePart(file));
         } else {
             const answerParts = imageParts.filter((part, idx) => {
@@ -969,6 +974,13 @@ export class EduShiftGrader {
         ensureAtLeastOne(buckets.problemFiles);
         ensureAtLeastOne(buckets.modelAnswerFiles);
         buckets.otherFiles = fallbackPool;
+
+        // デバッグ: 分類結果を出力
+        console.log("[Grader] ファイル分類結果:");
+        console.log(`  - 答案(studentFiles): ${buckets.studentFiles.map(f => `${f.name}(role:${f.role})`).join(', ') || 'なし'}`);
+        console.log(`  - 問題(problemFiles): ${buckets.problemFiles.map(f => `${f.name}(role:${f.role})`).join(', ') || 'なし'}`);
+        console.log(`  - 模範解答(modelAnswerFiles): ${buckets.modelAnswerFiles.map(f => `${f.name}(role:${f.role})`).join(', ') || 'なし'}`);
+        console.log(`  - その他(otherFiles): ${buckets.otherFiles.map(f => `${f.name}(role:${f.role})`).join(', ') || 'なし'}`);
 
         return buckets;
     }

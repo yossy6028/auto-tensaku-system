@@ -782,7 +782,33 @@ export default function Home() {
           credentials: 'include',
         });
 
-        const data = await res.json();
+        const responseText = await res.text();
+        let data: any;
+
+        // JSON以外（504など）のレスポンスも安全に扱う
+        try {
+          data = JSON.parse(responseText || '{}');
+        } catch (parseError) {
+          console.error('OCR response parse error:', parseError, responseText);
+          const fallbackMessage =
+            res.status === 504
+              ? 'OCRサーバーがタイムアウトしました。時間をおいて再試行してください。'
+              : `OCRサーバーの応答が不正です（status ${res.status}）。`;
+          setError(fallbackMessage);
+          setOcrFlowStep('idle');
+          return;
+        }
+
+        if (!res.ok) {
+          const message =
+            data?.message ||
+            (res.status === 504
+              ? 'OCRサーバーがタイムアウトしました。時間をおいて再試行してください。'
+              : `OCRリクエストが失敗しました（status ${res.status}）。`);
+          setError(message);
+          setOcrFlowStep('idle');
+          return;
+        }
 
         if (data.status === 'error') {
           setError(data.message);
@@ -1856,8 +1882,8 @@ export default function Home() {
                             {[
                               { value: 'answer', label: '📝 答案', color: 'indigo' },
                               { value: 'problem', label: '📋 問題', color: 'amber' },
-                              { value: 'model', label: '✅ 模範', color: 'emerald' },
-                              { value: 'problem_model', label: '📋✅ 問題+模範', color: 'cyan' },
+                              { value: 'model', label: '✅ 模範解答', color: 'emerald' },
+                              { value: 'problem_model', label: '📋✅ 問題+模範解答', color: 'cyan' },
                               { value: 'all', label: '📦 全部', color: 'rose' },
                             ].map(({ value, label, color }) => (
                               <button

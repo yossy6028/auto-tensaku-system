@@ -3,10 +3,10 @@ import { CONFIG } from "../config";
 import { SYSTEM_INSTRUCTION } from "../prompts/eduShift";
 
 // API呼び出しのタイムアウト設定（ミリ秒）
-// Vercel Proプラン + maxDuration=300秒対応
-const OCR_TIMEOUT_MS = 120000;     // 120秒
-const GRADING_TIMEOUT_MS = 170000; // 170秒（合計290秒以内）
-// 合計270秒以内（300秒制限に余裕を持たせる）
+// OCRは /api/ocr (maxDuration=60s) に合わせてバッファを持たせる
+const OCR_TIMEOUT_MS = 55_000;      // 55秒
+const GRADING_TIMEOUT_MS = 170_000; // 170秒（合計225秒以内）
+// 合計225秒以内（300秒制限に余裕を持たせる）
 
 /**
  * タイムアウト付きでPromiseを実行

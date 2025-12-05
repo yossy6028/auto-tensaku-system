@@ -262,8 +262,36 @@ export class EduShiftGrader {
         }
 
         const sanitizedLabel = targetLabel.replace(/[<>\\\"'`]/g, "").trim() || "target";
-        // 高精度だったシンプルなプロンプト
-        const ocrPrompt = `「${sanitizedLabel}」の手書き文字を全て書き出してください。縦書きは右から左へ読みます。一字も省略せず、書いてある通りに出力してください。`;
+        
+        // 問題番号の表記パターンを解析
+        // 例: "大問2 問9" → 大問番号=2, 小問番号=9
+        const labelMatch = sanitizedLabel.match(/大問\s*(\d+|[一二三四五六七八九十]+)\s*問?\s*(\d+|[一二三四五六七八九十]+)?/i);
+        const daimonNum = labelMatch?.[1] || "";
+        const shomonNum = labelMatch?.[2] || "";
+        
+        // 様々な表記パターンに対応するためのヒント
+        const patternHints = daimonNum ? `
+【重要】問題番号の表記について:
+- 「大問${daimonNum}」は、答案用紙上では以下のように表記されている可能性があります:
+  - 丸囲み数字: ①②③④⑤⑥⑦⑧⑨⑩ または ㊀㊁㊂㊃㊄㊅㊆㊇㊈㊉
+  - 漢数字: 一、二、三、四、五、六、七、八、九、十
+  - 四角囲み: [一] [二] [三] や 【一】【二】【三】
+  - アラビア数字: 1, 2, 3 または (1), (2), (3)
+- これらの表記を「大問${daimonNum}」として認識してください。
+${shomonNum ? `- 「問${shomonNum}」も同様に、問9、問九、(9)、⑨ などの表記がありえます。` : ""}
+` : "";
+
+        // 改善されたOCRプロンプト
+        const ocrPrompt = `この答案用紙から「${sanitizedLabel}」に対応する手書きの解答を読み取ってください。
+${patternHints}
+【読み取りルール】
+1. 縦書きの場合は右から左へ、上から下へ読みます。
+2. 一字も省略せず、書いてある通りに出力してください。
+3. 誤字脱字があってもそのまま書き起こしてください。
+4. 添削の赤ペン・青ペンは無視し、黒鉛筆の文字のみを読み取ってください。
+
+【出力】
+該当する問題の解答テキストのみを出力してください。見つからない場合や読み取れない場合は「NOT_FOUND」と出力してください。`;
 
         let result;
         try {
@@ -296,15 +324,23 @@ export class EduShiftGrader {
 
         // プレーンテキストとして処理（改行を削除）
         let text = raw.replace(/[\r\n]+/g, "").trim();
+        
+        console.log("[Grader] OCR生結果:", { raw: text.substring(0, 200) });
+
+        // NOT_FOUNDチェック（問題が見つからなかった場合）
+        if (text.toUpperCase().includes("NOT_FOUND") || text.includes("見つかりません") || text.includes("見つけられません")) {
+            console.warn(`[Grader] ⚠️ 指定された問題「${targetLabel}」が答案内で見つかりませんでした`);
+            throw new Error(`「${targetLabel}」の解答が答案用紙内で見つかりませんでした。問題番号が正しいか、または答案用紙に該当する問題が含まれているか確認してください。`);
+        }
+        
         // 文字数：シンプルに空白除去してカウント
         let charCount = text.replace(/\s+/g, "").length;
         
         console.log("[Grader] OCR結果:", { text: text.substring(0, 100), charCount });
 
-        if (!text) {
+        if (!text || charCount === 0) {
             console.error("[Grader] ❌ OCRが空の結果を返しました");
-            text = "（回答を読み取れませんでした）";
-            charCount = 0;
+            throw new Error(`「${targetLabel}」の解答を読み取れませんでした。画像が不鮮明か、該当する問題が見つからない可能性があります。`);
         }
 
         console.log("[Grader] Stage 1 完了:", {

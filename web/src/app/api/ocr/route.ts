@@ -9,8 +9,9 @@ import { logger } from '@/lib/security/logger';
 // Force dynamic to prevent caching
 export const dynamic = 'force-dynamic';
 
-// OCRは比較的短いので60秒
-export const maxDuration = 60;
+// OCR処理時間の延長（Vercel Pro + Fluid Compute対応）
+// 大きなPDFやページ数が多い場合、Gemini APIの応答に時間がかかるため
+export const maxDuration = 300;
 
 // 型定義
 type UploadedFilePart = {

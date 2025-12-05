@@ -4,7 +4,7 @@ import { SYSTEM_INSTRUCTION } from "../prompts/eduShift";
 
 // API呼び出しのタイムアウト設定（ミリ秒）
 // OCRは /api/ocr (maxDuration=60s) に合わせてバッファを持たせる
-const OCR_TIMEOUT_MS = 55_000;      // 55秒
+const OCR_TIMEOUT_MS = 58_000;      // 58秒（ネットワーク揺らぎ吸収）
 const GRADING_TIMEOUT_MS = 170_000; // 170秒（合計225秒以内）
 // 合計225秒以内（300秒制限に余裕を持たせる）
 

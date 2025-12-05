@@ -234,7 +234,14 @@ export class EduShiftGrader {
         let targetParts: ContentPart[];
         if (categorizedFiles && categorizedFiles.studentFiles.length > 0) {
             console.log(`[Grader] 答案ファイル数: ${categorizedFiles.studentFiles.length}`);
-            targetParts = categorizedFiles.studentFiles.map(file => this.toGenerativePart(file));
+            // タイムアウト回避のため、答案ファイルが複数ある場合は最小サイズのものを1件だけ採用
+            const selectedAnswers = [...categorizedFiles.studentFiles]
+                .sort((a, b) => a.buffer.length - b.buffer.length)
+                .slice(0, 1);
+            if (selectedAnswers.length < categorizedFiles.studentFiles.length) {
+                console.warn("[Grader] 複数の答案が指定されたため、最小サイズの1件に絞り込んでOCRを実行します");
+            }
+            targetParts = selectedAnswers.map(file => this.toGenerativePart(file));
         } else {
             const answerParts = imageParts.filter((part, idx) => {
                 if (idx > 0) {

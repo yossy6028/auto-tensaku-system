@@ -68,6 +68,10 @@ export default function Home() {
   const [currentSmall, setCurrentSmall] = useState(1);
   const [currentSub, setCurrentSub] = useState(1); // サブ番号（問1-2の「2」）
   const [freeInput, setFreeInput] = useState(''); // 自由入力用
+  
+  // 一括追加モード
+  const [isBatchMode, setIsBatchMode] = useState(false);
+  const [batchEndSmall, setBatchEndSmall] = useState(5); // 終了番号（デフォルト5）
 
   const [uploadedFiles, setUploadedFiles] = useState<File[]>([]);
   const [answerFileIndex, setAnswerFileIndex] = useState<number | null>(null);
@@ -710,6 +714,52 @@ export default function Home() {
     if (problemFormat === 'free') {
       setFreeInput('');
     }
+  };
+
+  // 一括追加: 開始番号から終了番号まで追加
+  const addProblemsInBatch = () => {
+    if (problemFormat === 'free') {
+      // 自由入力モードでは一括追加不可
+      return;
+    }
+    
+    const start = currentSmall;
+    const end = batchEndSmall;
+    
+    if (start > end) {
+      return; // 開始 > 終了 の場合は何もしない
+    }
+    
+    const newLabels: string[] = [];
+    
+    for (let i = start; i <= end; i++) {
+      const smallLabel = formatSmallNumber(
+        i,
+        smallFormat,
+        smallFormat === 'number-sub' ? currentSub : undefined
+      );
+      
+      let label: string;
+      if (problemFormat === 'big-small') {
+        label = `大問${currentBig} ${smallLabel}`;
+      } else {
+        label = smallLabel;
+      }
+      
+      // 重複チェック
+      if (!selectedProblems.includes(label) && !newLabels.includes(label)) {
+        newLabels.push(label);
+      }
+    }
+    
+    if (newLabels.length > 0) {
+      setSelectedProblems([...selectedProblems, ...newLabels]);
+    }
+  };
+
+  // 全クリア
+  const clearAllProblems = () => {
+    setSelectedProblems([]);
   };
 
   const removeProblem = (index: number) => {
@@ -1538,6 +1588,23 @@ export default function Home() {
                   </div>
                 )}
 
+                {/* 一括追加モード切替 */}
+                {problemFormat !== 'free' && (
+                  <div className="flex justify-center mb-3">
+                    <button
+                      type="button"
+                      onClick={() => setIsBatchMode(!isBatchMode)}
+                      className={`text-xs px-3 py-1.5 rounded-full font-bold transition-all duration-300 ${
+                        isBatchMode
+                          ? 'bg-emerald-600 text-white shadow-lg shadow-emerald-200'
+                          : 'bg-slate-100 text-slate-600 hover:bg-slate-200'
+                      }`}
+                    >
+                      {isBatchMode ? '✨ 一括追加モード ON' : '📋 一括追加モード'}
+                    </button>
+                  </div>
+                )}
+
                 {/* 問題番号入力 */}
                 <div className="flex gap-3 items-center justify-center mb-4 flex-wrap">
                   {problemFormat === 'free' ? (
@@ -1569,7 +1636,7 @@ export default function Home() {
                         </div>
                       )}
 
-                      {/* 小問選択 */}
+                      {/* 小問選択（開始番号） */}
                       <div className="relative">
                         <select
                           value={currentSmall}
@@ -1598,8 +1665,39 @@ export default function Home() {
                         </div>
                       </div>
 
+                      {/* 一括追加モード時の終了番号 */}
+                      {isBatchMode && (
+                        <>
+                          <span className="text-emerald-600 font-bold">〜</span>
+                          <div className="relative">
+                            <select
+                              value={batchEndSmall}
+                              onChange={(e) => setBatchEndSmall(Number(e.target.value))}
+                              className="appearance-none bg-emerald-50 border border-emerald-300 text-emerald-700 py-3 px-4 pr-8 rounded-xl leading-tight focus:outline-none focus:bg-white focus:border-emerald-500 font-bold"
+                            >
+                              {smallFormat === 'paren-alpha' ? (
+                                [...Array(26)].map((_, i) => (
+                                  <option key={i + 1} value={i + 1}>({String.fromCharCode(97 + i)})</option>
+                                ))
+                              ) : smallFormat === 'paren-number' ? (
+                                [...Array(20)].map((_, i) => (
+                                  <option key={i + 1} value={i + 1}>({i + 1})</option>
+                                ))
+                              ) : (
+                                [...Array(20)].map((_, i) => (
+                                  <option key={i + 1} value={i + 1}>問 {i + 1}</option>
+                                ))
+                              )}
+                            </select>
+                            <div className="pointer-events-none absolute inset-y-0 right-0 flex items-center px-2 text-emerald-700">
+                              <svg className="fill-current h-4 w-4" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20"><path d="M9.293 12.95l.707.707L15.657 8l-1.414-1.414L10 10.828 5.757 6.586 4.343 8z" /></svg>
+                            </div>
+                          </div>
+                        </>
+                      )}
+
                       {/* サブ番号（問1-2形式のみ） */}
-                      {smallFormat === 'number-sub' && (
+                      {smallFormat === 'number-sub' && !isBatchMode && (
                         <>
                           <span className="text-slate-400 font-bold">-</span>
                           <div className="relative">
@@ -1621,12 +1719,24 @@ export default function Home() {
                     </>
                   )}
 
-                  <button
-                    type="button"
-                    onClick={addProblem}
-                    className="bg-indigo-100 hover:bg-indigo-200 text-indigo-700 font-bold py-3 px-4 rounded-xl transition-colors flex items-center"
-                    title="採点対象に追加"
-                  >
+                  {/* 追加ボタン（単一 or 一括） */}
+                  {isBatchMode && problemFormat !== 'free' ? (
+                    <button
+                      type="button"
+                      onClick={addProblemsInBatch}
+                      className="bg-emerald-500 hover:bg-emerald-600 text-white font-bold py-3 px-5 rounded-xl transition-colors flex items-center gap-2 shadow-lg shadow-emerald-200"
+                      title="まとめて追加"
+                    >
+                      <Plus className="w-5 h-5" />
+                      <span className="text-sm">まとめて追加</span>
+                    </button>
+                  ) : (
+                    <button
+                      type="button"
+                      onClick={addProblem}
+                      className="bg-indigo-100 hover:bg-indigo-200 text-indigo-700 font-bold py-3 px-4 rounded-xl transition-colors flex items-center"
+                      title="採点対象に追加"
+                    >
                     <Plus className="w-5 h-5" />
                   </button>
                 </div>
@@ -1635,9 +1745,18 @@ export default function Home() {
                 <div className="mt-4">
                   {selectedProblems.length > 0 ? (
                     <>
-                      <p className="text-sm text-slate-600 mb-2 text-center font-medium">
-                        📋 選択された採点対象:
-                      </p>
+                      <div className="flex items-center justify-center gap-3 mb-2">
+                        <p className="text-sm text-slate-600 font-medium">
+                          📋 選択された採点対象: <span className="text-indigo-600 font-bold">{selectedProblems.length}問</span>
+                        </p>
+                        <button
+                          type="button"
+                          onClick={clearAllProblems}
+                          className="text-xs text-slate-500 hover:text-red-500 underline transition-colors"
+                        >
+                          全てクリア
+                        </button>
+                      </div>
                       <div className="flex flex-wrap gap-2 justify-center">
                         {selectedProblems.map((label, index) => (
                           <div key={index} className="bg-indigo-50 text-indigo-700 px-4 py-2 rounded-full font-bold text-sm flex items-center shadow-sm border border-indigo-100">
@@ -1658,6 +1777,11 @@ export default function Home() {
                       <p className="text-sm text-slate-600 font-medium">
                         問題が選択されていません
                       </p>
+                      {problemFormat !== 'free' && (
+                        <p className="text-xs text-slate-400 mt-1">
+                          💡 一括追加モードで複数問題をまとめて追加できます
+                        </p>
+                      )}
                     </div>
                   )}
                 </div>

@@ -569,11 +569,13 @@ export class EduShiftGrader {
     }
 
     /**
-     * 語彙チェック（同じ単語の繰り返し検出）
+     * 語彙チェック（同じ単語・表現の繰り返し検出）
      * プログラムで確実に検出する
      */
     private checkVocabularyProgrammatically(text: string): VocabularyCheckResult {
-        // 重複をチェックする単語パターン（2文字以上の形容詞・副詞・名詞）
+        const repeatedWords: Array<{ word: string; count: number }> = [];
+
+        // 1. 形容詞・名詞の反復チェック
         const wordsToCheck = [
             "あたたかい", "あたたか", "温かい", "暖かい",
             "うれしい", "嬉しい", "楽しい", "たのしい",
@@ -585,13 +587,57 @@ export class EduShiftGrader {
             "特別", "とくべつ", "大好き", "だいすき",
         ];
 
-        const repeatedWords: Array<{ word: string; count: number }> = [];
-
         for (const word of wordsToCheck) {
             const regex = new RegExp(word, 'g');
             const matches = text.match(regex);
             if (matches && matches.length >= 2) {
                 repeatedWords.push({ word, count: matches.length });
+            }
+        }
+
+        // 2. 動詞の活用形の反復チェック（語幹ベース）
+        // 例: 「思いこんでいた」「思いこんだ」→「思いこ」で検出
+        const verbStemsToCheck = [
+            { stem: "思いこ", display: "思いこむ" },      // 思いこんでいた、思いこんだ
+            { stem: "思い込", display: "思い込む" },      // 思い込んでいた、思い込んだ
+            { stem: "感じ", display: "感じる" },          // 感じた、感じている
+            { stem: "考え", display: "考える" },          // 考えた、考えている
+            { stem: "思っ", display: "思う" },            // 思った、思っている
+            { stem: "信じ", display: "信じる" },          // 信じた、信じている
+            { stem: "気づ", display: "気づく" },          // 気づいた、気づいている
+            { stem: "気付", display: "気付く" },          // 気付いた、気付いている
+            { stem: "理解", display: "理解する" },        // 理解した、理解している
+            { stem: "納得", display: "納得する" },        // 納得した、納得している
+        ];
+
+        for (const { stem, display } of verbStemsToCheck) {
+            const regex = new RegExp(stem, 'g');
+            const matches = text.match(regex);
+            if (matches && matches.length >= 2) {
+                // 既に同じ表示名で登録されていなければ追加
+                if (!repeatedWords.some(w => w.word === display)) {
+                    repeatedWords.push({ word: display, count: matches.length });
+                }
+            }
+        }
+
+        // 3. 汎用的な反復検出（3文字以上の同一文字列が2回以上出現）
+        // 「〜ため」が2回出現するケースなど
+        const threeCharPatterns = text.match(/(.{3,}?).*\1/g);
+        if (threeCharPatterns) {
+            for (const pattern of threeCharPatterns) {
+                const match = pattern.match(/(.{3,}?).*\1/);
+                if (match && match[1]) {
+                    const repeated = match[1];
+                    // 助詞や接続詞は除外
+                    const excludePatterns = ["ている", "ていた", "である", "ですが", "ますが", "のです", "のだと"];
+                    if (!excludePatterns.includes(repeated) && !repeatedWords.some(w => w.word === repeated)) {
+                        const fullMatches = text.match(new RegExp(repeated.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'), 'g'));
+                        if (fullMatches && fullMatches.length >= 2) {
+                            repeatedWords.push({ word: repeated, count: fullMatches.length });
+                        }
+                    }
+                }
             }
         }
 

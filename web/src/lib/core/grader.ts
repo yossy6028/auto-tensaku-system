@@ -746,21 +746,38 @@ export class EduShiftGrader {
             });
         }
 
-        // 2. 語彙チェックの補完
-        const vocabDeductionExists = deductionDetails.some(d => 
-            d.reason?.includes("繰り返し") || d.reason?.includes("重複") || d.reason?.includes("語彙")
-        );
-
-        if (programmaticChecks.vocabulary_check.deduction > 0 && !vocabDeductionExists) {
-            // AIが語彙重複を見落としている場合、追加
+        // 2. 語彙チェック（プログラム検出を最優先 - AIの判断に依存しない）
+        // AIの判断にブレがあるため、プログラムで検出した場合は必ず減点を適用
+        if (programmaticChecks.vocabulary_check.deduction > 0) {
+            // まず、AIが追加した語彙関連の減点を削除（重複防止）
+            deductionDetails = deductionDetails.filter(d => 
+                !d.reason?.includes("繰り返し") && 
+                !d.reason?.includes("重複") && 
+                !d.reason?.includes("語彙") &&
+                !d.reason?.includes("反復")
+            );
+            
+            // プログラム検出結果で上書き（AIの判断に関係なく適用）
             const repeatedList = programmaticChecks.vocabulary_check.repeated_words
                 .map(w => `「${w.word}」${w.count}回`)
                 .join(", ");
-            console.log("[Grader] プログラム検証: 語彙重複を検出、減点を追加");
+            console.log("[Grader] プログラム検証: 表現の反復を検出、減点を適用:", repeatedList);
             deductionDetails.push({
-                reason: `同じ表現の繰り返し（${repeatedList}）`,
+                reason: `表現の反復（${repeatedList}）`,
                 deduction_percentage: programmaticChecks.vocabulary_check.deduction
             });
+        } else {
+            // プログラムで検出しなかった場合、AIが誤って減点していたら削除
+            const aiVocabDeduction = deductionDetails.find(d => 
+                d.reason?.includes("繰り返し") || 
+                d.reason?.includes("重複") || 
+                d.reason?.includes("語彙") ||
+                d.reason?.includes("反復")
+            );
+            if (aiVocabDeduction) {
+                console.log("[Grader] プログラム検証: 反復なし、AIの誤検出を削除:", aiVocabDeduction.reason);
+                deductionDetails = deductionDetails.filter(d => d !== aiVocabDeduction);
+            }
         }
 
         // 3. OCR列ごと読み取りの検証（エラーが発生しても採点は続行）

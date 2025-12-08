@@ -621,17 +621,64 @@ export class EduShiftGrader {
             }
         }
 
-        // 3. 汎用的な反復検出（3文字以上の同一文字列が2回以上出現）
-        // 「〜ため」が2回出現するケースなど
+        // 3. 同じ機能を持つ表現群の反復チェック
+        // 異なる表現でも同じ機能なら反復とみなす
+        const functionalGroups = [
+            {
+                name: "因果関係",
+                patterns: [/ので/g, /ため/g, /から/g, /によって/g, /ことで/g],
+                display: "因果表現（ので/ため/から等）"
+            },
+            {
+                name: "逆接",
+                patterns: [/しかし/g, /だが/g, /けれど/g, /けど/g, /ものの/g, /のに/g],
+                display: "逆接表現（しかし/だが/けれど等）"
+            },
+            {
+                name: "推測・断定",
+                patterns: [/だろう/g, /であろう/g, /と思う/g, /と考える/g, /ではないか/g],
+                display: "推測表現（だろう/と思う等）"
+            }
+        ];
+
+        for (const group of functionalGroups) {
+            let totalCount = 0;
+            const foundPatterns: string[] = [];
+            
+            for (const pattern of group.patterns) {
+                const matches = text.match(pattern);
+                if (matches && matches.length > 0) {
+                    totalCount += matches.length;
+                    // パターンから表示用文字列を抽出
+                    const patternStr = pattern.source;
+                    if (!foundPatterns.includes(patternStr)) {
+                        foundPatterns.push(patternStr);
+                    }
+                }
+            }
+            
+            // 同じ機能の表現が2回以上使われている場合
+            if (totalCount >= 2 && !repeatedWords.some(w => w.word === group.display)) {
+                repeatedWords.push({ 
+                    word: `${group.display}：${foundPatterns.join("、")}`, 
+                    count: totalCount 
+                });
+            }
+        }
+
+        // 4. 汎用的な反復検出（3文字以上の同一文字列が2回以上出現）
         const threeCharPatterns = text.match(/(.{3,}?).*\1/g);
         if (threeCharPatterns) {
             for (const pattern of threeCharPatterns) {
                 const match = pattern.match(/(.{3,}?).*\1/);
                 if (match && match[1]) {
                     const repeated = match[1];
-                    // 助詞や接続詞は除外
-                    const excludePatterns = ["ている", "ていた", "である", "ですが", "ますが", "のです", "のだと"];
-                    if (!excludePatterns.includes(repeated) && !repeatedWords.some(w => w.word === repeated)) {
+                    // 助詞や接続詞、機能表現は除外（上で検出済み）
+                    const excludePatterns = [
+                        "ている", "ていた", "である", "ですが", "ますが", 
+                        "のです", "のだと", "ので", "ため", "から"
+                    ];
+                    if (!excludePatterns.includes(repeated) && !repeatedWords.some(w => w.word.includes(repeated))) {
                         const fullMatches = text.match(new RegExp(repeated.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'), 'g'));
                         if (fullMatches && fullMatches.length >= 2) {
                             repeatedWords.push({ word: repeated, count: fullMatches.length });

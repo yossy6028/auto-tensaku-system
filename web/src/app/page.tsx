@@ -691,6 +691,11 @@ export default function Home() {
       return freeInput.trim();
     }
 
+    // big-smallで小問が0（なし）の場合は大問のみ
+    if (problemFormat === 'big-small' && currentSmall === 0) {
+      return `大問${currentBig}`;
+    }
+
     const smallLabel = formatSmallNumber(
       currentSmall,
       smallFormat,
@@ -1588,8 +1593,8 @@ export default function Home() {
                   </div>
                 )}
 
-                {/* 一括追加モード切替 */}
-                {problemFormat !== 'free' && (
+                {/* 一括追加モード切替（小問なしの場合は非表示） */}
+                {problemFormat !== 'free' && !(problemFormat === 'big-small' && currentSmall === 0) && (
                   <div className="flex justify-center mb-3">
                     <button
                       type="button"
@@ -1636,34 +1641,63 @@ export default function Home() {
                         </div>
                       )}
 
-                      {/* 小問選択（開始番号） */}
-                      <div className="relative">
-                        <select
-                          value={currentSmall}
-                          onChange={(e) => setCurrentSmall(Number(e.target.value))}
-                          className="appearance-none bg-white border border-slate-200 text-slate-700 py-3 px-4 pr-8 rounded-xl leading-tight focus:outline-none focus:bg-white focus:border-indigo-500 font-bold"
-                        >
-                          {smallFormat === 'paren-alpha' ? (
-                            // アルファベット (a)〜(z)
-                            [...Array(26)].map((_, i) => (
-                              <option key={i + 1} value={i + 1}>({String.fromCharCode(97 + i)})</option>
-                            ))
-                          ) : smallFormat === 'paren-number' ? (
-                            // カッコ数字 (1)〜(20)
-                            [...Array(20)].map((_, i) => (
-                              <option key={i + 1} value={i + 1}>({i + 1})</option>
-                            ))
-                          ) : (
-                            // 数字 問1〜問20
-                            [...Array(20)].map((_, i) => (
-                              <option key={i + 1} value={i + 1}>問 {i + 1}</option>
-                            ))
-                          )}
-                        </select>
-                        <div className="pointer-events-none absolute inset-y-0 right-0 flex items-center px-2 text-slate-700">
-                          <svg className="fill-current h-4 w-4" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20"><path d="M9.293 12.95l.707.707L15.657 8l-1.414-1.414L10 10.828 5.757 6.586 4.343 8z" /></svg>
+                      {/* 小問選択（開始番号） - big-smallでcurrentSmall=0の場合は非表示 */}
+                      {!(problemFormat === 'big-small' && currentSmall === 0) && (
+                        <div className="relative">
+                          <select
+                            value={currentSmall}
+                            onChange={(e) => {
+                              const value = Number(e.target.value);
+                              setCurrentSmall(value);
+                              // 「なし」が選ばれたら一括追加モードをOFF
+                              if (value === 0) {
+                                setIsBatchMode(false);
+                              }
+                            }}
+                            className="appearance-none bg-white border border-slate-200 text-slate-700 py-3 px-4 pr-8 rounded-xl leading-tight focus:outline-none focus:bg-white focus:border-indigo-500 font-bold"
+                          >
+                            {/* big-small形式の場合のみ「なし」オプションを表示 */}
+                            {problemFormat === 'big-small' && (
+                              <option key={0} value={0}>なし（大問のみ）</option>
+                            )}
+                            {smallFormat === 'paren-alpha' ? (
+                              // アルファベット (a)〜(z)
+                              [...Array(26)].map((_, i) => (
+                                <option key={i + 1} value={i + 1}>({String.fromCharCode(97 + i)})</option>
+                              ))
+                            ) : smallFormat === 'paren-number' ? (
+                              // カッコ数字 (1)〜(20)
+                              [...Array(20)].map((_, i) => (
+                                <option key={i + 1} value={i + 1}>({i + 1})</option>
+                              ))
+                            ) : (
+                              // 数字 問1〜問20
+                              [...Array(20)].map((_, i) => (
+                                <option key={i + 1} value={i + 1}>問 {i + 1}</option>
+                              ))
+                            )}
+                          </select>
+                          <div className="pointer-events-none absolute inset-y-0 right-0 flex items-center px-2 text-slate-700">
+                            <svg className="fill-current h-4 w-4" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20"><path d="M9.293 12.95l.707.707L15.657 8l-1.414-1.414L10 10.828 5.757 6.586 4.343 8z" /></svg>
+                          </div>
                         </div>
-                      </div>
+                      )}
+
+                      {/* 大問のみモード時の表示 */}
+                      {problemFormat === 'big-small' && currentSmall === 0 && (
+                        <div className="flex items-center gap-2">
+                          <span className="text-amber-600 font-bold text-sm bg-amber-50 px-3 py-2 rounded-xl border border-amber-200">
+                            大問のみ
+                          </span>
+                          <button
+                            type="button"
+                            onClick={() => setCurrentSmall(1)}
+                            className="text-xs text-slate-500 hover:text-indigo-600 underline transition-colors"
+                          >
+                            小問を追加
+                          </button>
+                        </div>
+                      )}
 
                       {/* 一括追加モード時の終了番号 */}
                       {isBatchMode && (

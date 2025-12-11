@@ -581,7 +581,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         accessType: 'none',
       });
     }
-  }, [supabaseClient, user, fetchFreeAccessInfo]);
+  }, [supabaseClient, user, session, fetchFreeAccessInfo]);
 
   // 初期化
   useEffect(() => {
@@ -616,7 +616,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
           setTimeout(() => resolve({ data: { session: null } }), 2000)
         );
         
-        const { data: { session } } = await Promise.race([sessionPromise, sessionTimeout]) as { data: { session: any } };
+        const { data: { session } } = await Promise.race([sessionPromise, sessionTimeout]) as { data: { session: Session | null } };
         console.log('[AuthProvider] Session retrieved:', session ? 'Found' : 'Null');
         if (session?.user) {
           console.log('[AuthProvider] User ID:', session.user.id);

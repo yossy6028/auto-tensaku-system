@@ -3,7 +3,7 @@
 
 import React, { useState, useRef, useEffect, useCallback } from 'react';
 import { GradingReport } from '@/components/GradingReport';
-import { Upload, FileText, CheckCircle, AlertCircle, Loader2, Sparkles, ArrowRight, BookOpen, PenTool, GraduationCap, Plus, Trash2, CreditCard, LogIn, UserPlus, Edit3, Save, X, User, UserCheck, ImageIcon, Camera } from 'lucide-react';
+import { FileText, CheckCircle, AlertCircle, Loader2, Sparkles, ArrowRight, BookOpen, PenTool, GraduationCap, Plus, Trash2, CreditCard, LogIn, UserPlus, Edit3, Save, X, User, UserCheck, ImageIcon, Camera } from 'lucide-react';
 import { clsx } from 'clsx';
 import { useAuth } from '@/components/AuthProvider';
 import { UserMenu } from '@/components/UserMenu';
@@ -28,8 +28,17 @@ type FeedbackContent = {
 type GradingResultPayload = {
   score: number;
   recognized_text?: string;
+  recognized_text_full?: string;
   deduction_details?: DeductionDetail[];
   feedback_content: FeedbackContent;
+};
+
+type OcrResponseData = {
+  ocrResults?: Record<string, { text: string; charCount: number }>;
+  ocrResult?: { text: string; charCount: number };
+  error?: string;
+  message?: string;
+  status?: string;
 };
 
 type GradingResponseItem = {
@@ -838,11 +847,11 @@ export default function Home() {
         });
 
         const responseText = await res.text();
-        let data: any;
+        let data: OcrResponseData;
 
         // JSON以外（504など）のレスポンスも安全に扱う
         try {
-          data = JSON.parse(responseText || '{}');
+          data = JSON.parse(responseText || '{}') as OcrResponseData;
         } catch (parseError) {
           console.error('OCR response parse error:', parseError, responseText);
           const fallbackMessage =
@@ -866,7 +875,13 @@ export default function Home() {
         }
 
         if (data.status === 'error') {
-          setError(data.message);
+          setError(data.message ?? 'OCR処理中にエラーが発生しました');
+          setOcrFlowStep('idle');
+          return;
+        }
+
+        if (!data.ocrResult) {
+          setError('OCR結果が取得できませんでした');
           setOcrFlowStep('idle');
           return;
         }
@@ -879,7 +894,7 @@ export default function Home() {
         // 初期値として確認済みテキストにも設定
         setConfirmedTexts(prev => ({
           ...prev,
-          [label]: data.ocrResult.text
+          [label]: data.ocrResult!.text
         }));
       } catch (err) {
         console.error('OCR error:', err);
@@ -986,6 +1001,7 @@ export default function Home() {
     setConfirmedTexts({});
   };
 
+  // eslint-disable-next-line @typescript-eslint/no-unused-vars
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
 
@@ -1771,8 +1787,9 @@ export default function Home() {
                       className="bg-indigo-100 hover:bg-indigo-200 text-indigo-700 font-bold py-3 px-4 rounded-xl transition-colors flex items-center"
                       title="採点対象に追加"
                     >
-                    <Plus className="w-5 h-5" />
-                  </button>
+                      <Plus className="w-5 h-5" />
+                    </button>
+                  )}
                 </div>
 
                 {/* 選択された採点対象 */}
@@ -2380,7 +2397,7 @@ export default function Home() {
                     </div>
 
                     {/* Recognized Text Section */}
-                    { (gradingResult.recognized_text || (gradingResult as any).recognized_text_full) && (
+                    { (gradingResult.recognized_text || gradingResult.recognized_text_full) && (
                       <div className="mb-16">
                         <h3 className="text-xl font-bold text-slate-800 mb-6 flex items-center">
                           <span className="bg-blue-100 text-blue-600 rounded-lg w-8 h-8 flex items-center justify-center mr-3">👁️</span>
@@ -2388,7 +2405,7 @@ export default function Home() {
                         </h3>
                         <div className="bg-blue-50 rounded-2xl p-6 border border-blue-100">
                           <p className="text-slate-700 whitespace-pre-wrap font-mono leading-relaxed">
-                            {gradingResult.recognized_text || (gradingResult as any).recognized_text_full}
+                            {gradingResult.recognized_text || gradingResult.recognized_text_full}
                           </p>
                           <p className="text-sm text-slate-500 mt-4 text-right">
                             ※文字数判定の基準となります。誤読がある場合は撮影し直してください。

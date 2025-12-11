@@ -779,7 +779,9 @@ export class EduShiftGrader {
         // ========================================
 
         // 1. 文体チェックの補完
-        const aiStyleCheck = (gradingResult.mandatory_checks as MandatoryChecks | undefined)?.style_check;
+        // AIの文体チェック結果（参考情報として保持、プログラムチェックを優先）
+        const _aiStyleCheck = (gradingResult.mandatory_checks as MandatoryChecks | undefined)?.style_check;
+        void _aiStyleCheck; // 明示的に未使用であることを示す
         const styleDeductionExists = deductionDetails.some(d => 
             d.reason?.includes("文体") || d.reason?.includes("敬体") || d.reason?.includes("常体") || d.reason?.includes("混在")
         );
@@ -1142,7 +1144,7 @@ export class EduShiftGrader {
             const result = JSON.parse(cleaned);
             console.log("[Grader] ✅ JSON parse success (first try)");
             return result;
-        } catch (e) {
+        } catch {
             console.log("[Grader] ⚠️ JSON parse failed (first try), trying to extract {...}");
         }
         

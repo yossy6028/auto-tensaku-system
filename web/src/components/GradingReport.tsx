@@ -34,6 +34,7 @@ interface EssayEvaluation {
 
 interface GradingResult {
     recognized_text?: string;
+    recognized_text_full?: string;
     score: number;
     problem_type?: 'reading' | 'essay';
     essay_evaluation?: EssayEvaluation;
@@ -287,12 +288,12 @@ export const GradingReport = React.forwardRef<HTMLDivElement, GradingReportProps
                     </div>
                 )}
 
-                {(gradingResult.recognized_text || (gradingResult as any).recognized_text_full) && (
+                {(gradingResult.recognized_text || gradingResult.recognized_text_full) && (
                     <div className="mb-8 print:break-inside-avoid print:mb-4">
                         <h2 className="text-lg font-bold border-l-4 border-blue-400 pl-3 mb-4 print:text-base print:mb-2 print:break-after-avoid">AI読み取り結果（確認用）</h2>
                         <div className="bg-blue-50 rounded-xl p-4 border border-blue-100 print:break-inside-avoid print:p-3">
                             <p className="text-sm text-slate-700 whitespace-pre-wrap font-mono print:text-xs">
-                                {gradingResult.recognized_text || (gradingResult as any).recognized_text_full}
+                                {gradingResult.recognized_text || gradingResult.recognized_text_full}
                             </p>
                             <p className="text-xs text-slate-500 mt-2 text-right print:text-[10px] print:mt-1">
                                 ※文字数判定の基準となります。誤読がある場合は撮影し直してください。

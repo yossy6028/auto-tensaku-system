@@ -61,15 +61,15 @@ export function DeviceLimitModal({
   };
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center">
+    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 overflow-y-auto">
       {/* バックドロップ */}
       <div 
-        className="absolute inset-0 bg-black/60 backdrop-blur-sm"
+        className="fixed inset-0 bg-black/60 backdrop-blur-sm"
         onClick={onClose}
       />
       
       {/* モーダル本体 */}
-      <div className="relative z-10 w-full max-w-lg mx-4 bg-white dark:bg-gray-800 rounded-2xl shadow-2xl overflow-hidden">
+      <div className="relative z-10 w-full max-w-lg bg-white dark:bg-gray-800 rounded-2xl shadow-2xl overflow-hidden my-auto max-h-[90vh] flex flex-col">
         {/* ヘッダー */}
         <div className="bg-gradient-to-r from-orange-500 to-red-500 px-6 py-4">
           <div className="flex items-center gap-3">
@@ -86,7 +86,7 @@ export function DeviceLimitModal({
         </div>
         
         {/* コンテンツ */}
-        <div className="p-6">
+        <div className="p-6 overflow-y-auto flex-1">
           <p className="text-gray-600 dark:text-gray-300 mb-4">
             このアカウントは既に{maxDevices}台のデバイスで使用されています。
             新しいデバイスで使用するには、既存のデバイスを削除してください。

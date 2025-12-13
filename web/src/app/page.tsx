@@ -1345,7 +1345,7 @@ export default function Home() {
               </div>
             </div>
             <h1 className="text-4xl md:text-6xl font-black text-slate-800 tracking-tight mb-6 leading-tight">
-              中学・高校受験記述問題<br className="hidden md:block" />
+              中学・高校受験記述問題<br />
               <span className="text-transparent bg-clip-text bg-gradient-to-r from-indigo-600 via-violet-600 to-blue-600 animate-gradient-x">
                 自動添削システム
               </span>
@@ -1533,7 +1533,7 @@ export default function Home() {
             </div>
           </div>
           <h1 className="text-5xl md:text-7xl font-black text-slate-800 tracking-tight mb-8 leading-tight">
-            中学・高校受験記述問題<br className="hidden md:block" />
+            中学・高校受験記述問題<br />
             <span className="text-transparent bg-clip-text bg-gradient-to-r from-indigo-600 via-violet-600 to-fuchsia-600 animate-gradient-x pb-2">
               自動添削システム
             </span>

@@ -21,15 +21,15 @@ export function TrialEndedModal() {
   };
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center">
+    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 overflow-y-auto">
       {/* Backdrop */}
       <div 
-        className="absolute inset-0 bg-black/60 backdrop-blur-sm"
+        className="fixed inset-0 bg-black/60 backdrop-blur-sm"
         onClick={() => setShowTrialEndedModal(false)}
       />
       
       {/* Modal */}
-      <div className="relative bg-white rounded-3xl shadow-2xl w-full max-w-lg mx-4 overflow-hidden animate-scale-in">
+      <div className="relative bg-white rounded-3xl shadow-2xl w-full max-w-lg overflow-hidden animate-scale-in my-auto max-h-[90vh] flex flex-col">
         {/* Close button */}
         <button
           onClick={() => setShowTrialEndedModal(false)}
@@ -58,7 +58,7 @@ export function TrialEndedModal() {
         </div>
 
         {/* Content */}
-        <div className="p-8">
+        <div className="p-8 overflow-y-auto flex-1">
           {/* Trial stats */}
           {isExpired && (
             <div className="bg-slate-50 rounded-2xl p-4 mb-6">

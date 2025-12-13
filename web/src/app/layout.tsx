@@ -15,12 +15,12 @@ const notoSansJP = Noto_Sans_JP({
 });
 
 export const metadata: Metadata = {
-  title: "EduShift - 国語記述式問題 自動添削システム",
+  title: "中学・高校受験記述問題自動添削システム",
   description: "指導歴20年超のベテラン国語講師のノウハウとAIによる解析で、あなたの思考に寄り添うフィードバックを提供する自動添削システムです。",
   keywords: ["国語", "添削", "AI", "自動採点", "記述式", "受験", "教育"],
   authors: [{ name: "EduShift" }],
   openGraph: {
-    title: "EduShift - 国語記述式問題 自動添削システム",
+    title: "中学・高校受験記述問題自動添削システム",
     description: "指導歴20年超のベテラン国語講師のノウハウとAIによる解析で、あなたの思考に寄り添うフィードバックを提供します。",
     type: "website",
     locale: "ja_JP",

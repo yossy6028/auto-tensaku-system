@@ -13,6 +13,8 @@ import { DeviceLimitModal } from '@/components/DeviceLimitModal';
 import Link from 'next/link';
 import { compressMultipleImages, formatFileSize, isImageFile } from '@/lib/utils/imageCompressor';
 
+type GradingStrictness = 'lenient' | 'standard' | 'strict';
+
 type DeductionDetail = {
   reason?: string;
   deduction_percentage?: number;
@@ -46,6 +48,10 @@ type GradingResponseItem = {
   result?: { grading_result?: GradingResultPayload };
   error?: string;
   status?: string;
+  strictness?: GradingStrictness;
+  regradeToken?: string | null;
+  regradeRemaining?: number | null;
+  regradeMode?: 'new' | 'free' | 'none';
 };
 
 export default function Home() {
@@ -88,6 +94,12 @@ export default function Home() {
   // answer=答案, problem=問題, model=模範解答, problem_model=問題+模範解答, all=全部, other=その他
   type FileRole = 'answer' | 'problem' | 'model' | 'problem_model' | 'answer_problem' | 'all' | 'other';
   const [fileRoles, setFileRoles] = useState<Record<number, FileRole>>({});
+
+  // 採点の厳しさ（3段階）
+  const [gradingStrictness, setGradingStrictness] = useState<GradingStrictness>('standard');
+
+  // 無料再採点トークン（labelごと）
+  const [regradeByLabel, setRegradeByLabel] = useState<Record<string, { token: string; remaining: number }>>({});
   const [isLoading, setIsLoading] = useState(false);
   const [results, setResults] = useState<GradingResponseItem[] | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -133,6 +145,30 @@ export default function Home() {
     improvement_advice?: boolean;
     rewrite_example?: boolean;
   }>>({});
+
+  const strictnessLabel = (s: GradingStrictness): string => {
+    switch (s) {
+      case 'lenient':
+        return '甘め';
+      case 'strict':
+        return '厳しめ';
+      case 'standard':
+      default:
+        return '標準';
+    }
+  };
+
+  const ingestRegradeInfo = (items: GradingResponseItem[]) => {
+    setRegradeByLabel((prev) => {
+      const next = { ...prev };
+      for (const item of items) {
+        if (item.regradeToken && typeof item.regradeRemaining === 'number') {
+          next[item.label] = { token: item.regradeToken, remaining: item.regradeRemaining };
+        }
+      }
+      return next;
+    });
+  };
 
   const componentRefs = useRef<Map<number, React.RefObject<HTMLDivElement | null>>>(new Map());
 
@@ -952,6 +988,10 @@ export default function Home() {
     const formData = new FormData();
     formData.append('targetLabels', JSON.stringify(targetLabels));
     formData.append('confirmedTexts', JSON.stringify(confirmedTexts));
+    formData.append('strictness', gradingStrictness);
+    if (deviceInfo?.fingerprint) {
+      formData.append('deviceFingerprint', deviceInfo.fingerprint);
+    }
 
     if (pdfPageInfo.answerPage || pdfPageInfo.problemPage || pdfPageInfo.modelAnswerPage) {
       formData.append('pdfPageInfo', JSON.stringify(pdfPageInfo));
@@ -981,6 +1021,7 @@ export default function Home() {
         }
       } else {
         setResults(data.results);
+        if (Array.isArray(data.results)) ingestRegradeInfo(data.results);
         refreshUsageInfo().catch((err) => {
           console.warn('Failed to refresh usage info:', err);
         });
@@ -1076,6 +1117,10 @@ export default function Home() {
 
     const formData = new FormData();
     formData.append('targetLabels', JSON.stringify(targetLabels));
+    formData.append('strictness', gradingStrictness);
+    if (deviceInfo?.fingerprint) {
+      formData.append('deviceFingerprint', deviceInfo.fingerprint);
+    }
 
     // PDFページ番号情報を追加（複数ページPDF対応）
     const hasPdfPageInfo = pdfPageInfo.answerPage || pdfPageInfo.problemPage || pdfPageInfo.modelAnswerPage;
@@ -1137,6 +1182,7 @@ export default function Home() {
           });
         });
         setResults(data.results);
+        if (Array.isArray(data.results)) ingestRegradeInfo(data.results);
         // 利用情報を更新（エラーが発生しても続行、非同期で実行）
         refreshUsageInfo().catch((err) => {
           console.warn('[Page] Failed to refresh usage info:', err);
@@ -1148,6 +1194,99 @@ export default function Home() {
       setError(message);
     } finally {
       console.log('[Page] Grading process complete, clearing loading state');
+      setIsLoading(false);
+    }
+  };
+
+  const handleRegrade = async (label: string, nextStrictness: GradingStrictness) => {
+    // 認証チェック
+    if (!user || !session) {
+      setError('セッションが切れました。再度ログインしてください。');
+      openAuthModal('signin');
+      return;
+    }
+    if (uploadedFiles.length === 0) {
+      setError('ファイルがありません。');
+      return;
+    }
+
+    const tokenInfo = regradeByLabel[label];
+    if (!tokenInfo?.token || tokenInfo.remaining <= 0) {
+      setError('無料再採点の回数が残っていません。');
+      return;
+    }
+
+    setIsLoading(true);
+    setError(null);
+    setRequirePlan(false);
+
+    // 既に結果があるなら、その recognized_text を使ってOCRをスキップ（無料再採点でも速くする）
+    const current = results?.find((r) => r.label === label);
+    const raw = (current?.result as unknown as { grading_result?: unknown })?.grading_result ?? (current?.result as unknown);
+    const recognized =
+      (raw && typeof raw === 'object' && raw !== null
+        ? ((raw as { recognized_text?: unknown }).recognized_text ?? (raw as { recognized_text_full?: unknown }).recognized_text_full)
+        : undefined) ?? '';
+    const confirmedTextForRegrade = confirmedTexts[label] || (typeof recognized === 'string' ? recognized : '');
+
+    const formData = new FormData();
+    formData.append('targetLabels', JSON.stringify([label]));
+    formData.append('strictness', nextStrictness);
+    formData.append('regradeTokens', JSON.stringify({ [label]: tokenInfo.token }));
+    if (deviceInfo?.fingerprint) {
+      formData.append('deviceFingerprint', deviceInfo.fingerprint);
+    }
+    if (confirmedTextForRegrade) {
+      formData.append('confirmedTexts', JSON.stringify({ [label]: confirmedTextForRegrade }));
+    }
+
+    const hasPdfPageInfo = pdfPageInfo.answerPage || pdfPageInfo.problemPage || pdfPageInfo.modelAnswerPage;
+    if (hasPdfPageInfo) {
+      formData.append('pdfPageInfo', JSON.stringify(pdfPageInfo));
+    }
+    formData.append('fileRoles', JSON.stringify(fileRoles));
+    uploadedFiles.forEach((file) => {
+      formData.append('files', file);
+    });
+
+    try {
+      const res = await fetch('/api/grade', {
+        method: 'POST',
+        body: formData,
+        credentials: 'include',
+      });
+
+      const responseText = await res.text();
+      let data: { status?: string; message?: string; requirePlan?: boolean; results?: GradingResponseItem[] };
+      try {
+        data = JSON.parse(responseText);
+      } catch {
+        setError(`サーバーエラー: ${responseText.substring(0, 200)}`);
+        return;
+      }
+
+      if (data.status === 'error') {
+        setError(data.message || '採点に失敗しました。');
+        if (data.requirePlan) setRequirePlan(true);
+        return;
+      }
+
+      const newItems = Array.isArray(data.results) ? data.results : [];
+      ingestRegradeInfo(newItems);
+      setResults((prev) => {
+        if (!prev || prev.length === 0) return newItems;
+        const byLabel = new Map(prev.map((x) => [x.label, x]));
+        for (const item of newItems) byLabel.set(item.label, item);
+        return Array.from(byLabel.values());
+      });
+
+      refreshUsageInfo().catch((err) => {
+        console.warn('[Page] Failed to refresh usage info:', err);
+      });
+    } catch (err) {
+      console.error('[Page] Regrade error:', err);
+      setError('再採点中にエラーが発生しました。');
+    } finally {
       setIsLoading(false);
     }
   };
@@ -1206,7 +1345,7 @@ export default function Home() {
               </div>
             </div>
             <h1 className="text-4xl md:text-6xl font-black text-slate-800 tracking-tight mb-6 leading-tight">
-              国語記述式問題<br className="hidden md:block" />
+              中学・高校受験記述問題<br className="hidden md:block" />
               <span className="text-transparent bg-clip-text bg-gradient-to-r from-indigo-600 via-violet-600 to-blue-600 animate-gradient-x">
                 自動添削システム
               </span>
@@ -1394,7 +1533,7 @@ export default function Home() {
             </div>
           </div>
           <h1 className="text-5xl md:text-7xl font-black text-slate-800 tracking-tight mb-8 leading-tight">
-            国語記述式問題<br className="hidden md:block" />
+            中学・高校受験記述問題<br className="hidden md:block" />
             <span className="text-transparent bg-clip-text bg-gradient-to-r from-indigo-600 via-violet-600 to-fuchsia-600 animate-gradient-x pb-2">
               自動添削システム
             </span>
@@ -1840,6 +1979,51 @@ export default function Home() {
                       )}
                     </div>
                   )}
+                </div>
+
+                {/* 採点の厳しさ（3段階） */}
+                <div className="mt-6">
+                  <label className="block text-sm font-bold text-slate-600 mb-3 text-center tracking-wide">
+                    採点の厳しさ
+                  </label>
+                  <div className="flex flex-wrap gap-2 justify-center">
+                    <button
+                      type="button"
+                      onClick={() => setGradingStrictness('lenient')}
+                      className={`px-4 py-2 rounded-lg text-sm font-bold transition-all ${
+                        gradingStrictness === 'lenient'
+                          ? 'bg-emerald-600 text-white shadow-md'
+                          : 'bg-slate-100 text-slate-600 hover:bg-slate-200'
+                      }`}
+                    >
+                      甘め
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setGradingStrictness('standard')}
+                      className={`px-4 py-2 rounded-lg text-sm font-bold transition-all ${
+                        gradingStrictness === 'standard'
+                          ? 'bg-indigo-600 text-white shadow-md'
+                          : 'bg-slate-100 text-slate-600 hover:bg-slate-200'
+                      }`}
+                    >
+                      標準
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setGradingStrictness('strict')}
+                      className={`px-4 py-2 rounded-lg text-sm font-bold transition-all ${
+                        gradingStrictness === 'strict'
+                          ? 'bg-rose-600 text-white shadow-md'
+                          : 'bg-slate-100 text-slate-600 hover:bg-slate-200'
+                      }`}
+                    >
+                      厳しめ
+                    </button>
+                  </div>
+                  <p className="text-xs text-slate-500 mt-2 text-center">
+                    ※ 採点結果に納得できない場合、「もっと厳しく/甘く」で無料再採点できます
+                  </p>
                 </div>
               </div>
 
@@ -2336,15 +2520,54 @@ export default function Home() {
                       )}
                     </div>
 
-                    <button
-                      onClick={() => handlePrint(index)}
-                      className="flex items-center px-4 py-2 bg-slate-800 text-white rounded-lg hover:bg-slate-700 transition-colors shadow-lg"
-                    >
-                      <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5 mr-2" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 10v6m0 0l-3-3m3 3l3-3m2 8H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
-                      </svg>
-                      PDFで出力
-                    </button>
+                    <div className="flex flex-col items-end gap-3">
+                      <button
+                        onClick={() => handlePrint(index)}
+                        className="flex items-center px-4 py-2 bg-slate-800 text-white rounded-lg hover:bg-slate-700 transition-colors shadow-lg"
+                      >
+                        <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5 mr-2" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 10v6m0 0l-3-3m3 3l3-3m2 8H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+                        </svg>
+                        PDFで出力
+                      </button>
+
+                      {/* 厳しさ表示 + 無料再採点 */}
+                      {res.strictness && (
+                        <div className="text-right">
+                          <div className="text-xs text-slate-500 mb-2">
+                            厳しさ: <span className="font-bold text-slate-700">{strictnessLabel(res.strictness)}</span>
+                            {regradeByLabel[res.label] && (
+                              <span className="ml-2">
+                                （無料再採点 残り <span className="font-bold">{regradeByLabel[res.label].remaining}</span> 回）
+                              </span>
+                            )}
+                          </div>
+                          <div className="flex flex-wrap gap-2 justify-end">
+                            <button
+                              type="button"
+                              onClick={() => handleRegrade(res.label, 'lenient')}
+                              disabled={isLoading || res.strictness === 'lenient' || !regradeByLabel[res.label]?.token || (regradeByLabel[res.label]?.remaining ?? 0) <= 0}
+                              className="px-3 py-2 rounded-lg text-xs font-bold bg-emerald-600 text-white hover:bg-emerald-700 disabled:opacity-50 disabled:cursor-not-allowed"
+                            >
+                              もっと甘くで再採点（無料）
+                            </button>
+                            <button
+                              type="button"
+                              onClick={() => handleRegrade(res.label, 'strict')}
+                              disabled={isLoading || res.strictness === 'strict' || !regradeByLabel[res.label]?.token || (regradeByLabel[res.label]?.remaining ?? 0) <= 0}
+                              className="px-3 py-2 rounded-lg text-xs font-bold bg-rose-600 text-white hover:bg-rose-700 disabled:opacity-50 disabled:cursor-not-allowed"
+                            >
+                              もっと厳しくで再採点（無料）
+                            </button>
+                          </div>
+                          {!regradeByLabel[res.label]?.token && (
+                            <div className="text-[11px] text-slate-400 mt-1">
+                              ※ 無料再採点が無効です（サーバ側の設定が未完了の可能性）
+                            </div>
+                          )}
+                        </div>
+                      )}
+                    </div>
                   </div>
                 </div>
 

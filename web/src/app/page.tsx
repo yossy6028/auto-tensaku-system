@@ -621,10 +621,22 @@ export default function Home() {
     }, 500);
   };
 
-  const detectAnswerIndex = (files: File[], currentAnswerIndex: number | null): number | null => {
+  const detectAnswerIndexByRole = (
+    files: File[],
+    roles: Record<number, FileRole>,
+    currentAnswerIndex: number | null
+  ): number | null => {
     if (files.length === 0) return null;
     if (currentAnswerIndex !== null && currentAnswerIndex < files.length) return currentAnswerIndex;
 
+    // 役割優先: answer > answer_problem > all > problem_model
+    const priority: FileRole[] = ['answer', 'answer_problem', 'all', 'problem_model'];
+    for (const role of priority) {
+      const idx = files.findIndex((_, i) => roles[i] === role);
+      if (idx >= 0) return idx;
+    }
+
+    // 役割で見つからない場合はファイル名ヒューリスティック
     const hintRegex = /(answer|ans|student|解答|答案|生徒)/i;
     const foundIndex = files.findIndex(file => hintRegex.test(file.name));
     return foundIndex >= 0 ? foundIndex : 0;
@@ -716,27 +728,17 @@ export default function Home() {
   }, [uploadedFiles.length]);
 
   const removeFile = (index: number) => {
-    // 役割情報も更新（インデックスをずらす）
-    setFileRoles(prev => {
-      const newRoles: Record<number, FileRole> = {};
-      Object.entries(prev).forEach(([key, value]) => {
-        const oldIdx = parseInt(key);
-        if (oldIdx < index) newRoles[oldIdx] = value;
-        else if (oldIdx > index) newRoles[oldIdx - 1] = value;
-      });
-      return newRoles;
-    });
-    
     setUploadedFiles(prev => {
       const next = prev.filter((_, i) => i !== index);
-      const nextAnswerIndex =
-        answerFileIndex === null
-          ? detectAnswerIndex(next, null)
-          : answerFileIndex > index
-            ? answerFileIndex - 1
-            : answerFileIndex === index
-              ? detectAnswerIndex(next, null)
-              : answerFileIndex;
+      const nextRoles: Record<number, FileRole> = {};
+      Object.entries(fileRoles).forEach(([key, value]) => {
+        const oldIdx = parseInt(key);
+        if (oldIdx < index) nextRoles[oldIdx] = value;
+        else if (oldIdx > index) nextRoles[oldIdx - 1] = value;
+      });
+      setFileRoles(nextRoles);
+
+      const nextAnswerIndex = detectAnswerIndexByRole(next, nextRoles, null);
       setAnswerFileIndex(nextAnswerIndex);
       return next;
     });
@@ -3221,19 +3223,18 @@ export default function Home() {
                   const startIndex = uploadedFiles.length;
                   setUploadedFiles(prev => {
                     const next = [...prev, ...pendingFiles];
-                    // 答案ファイルのインデックスを更新
-                    const currentAnswerIdx = answerFileIndex;
-                    const newAnswerIdx = detectAnswerIndex(next, currentAnswerIdx);
+                    // 役割情報を追加
+                    const newRoles: Record<number, FileRole> = { ...fileRoles };
+                    pendingFiles.forEach((_, i) => {
+                      newRoles[startIndex + i] = pendingFileRoles[i] || 'other';
+                    });
+                    setFileRoles(newRoles);
+
+                    // 答案ファイルのインデックスを役割優先で更新
+                    const newAnswerIdx = detectAnswerIndexByRole(next, newRoles, answerFileIndex);
                     setAnswerFileIndex(newAnswerIdx);
                     return next;
                   });
-
-                  // 役割情報を追加
-                  const newRoles: Record<number, FileRole> = { ...fileRoles };
-                  pendingFiles.forEach((_, i) => {
-                    newRoles[startIndex + i] = pendingFileRoles[i] || 'other';
-                  });
-                  setFileRoles(newRoles);
 
                   // モーダルを閉じる
                   setShowFileRoleModal(false);

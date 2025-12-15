@@ -256,9 +256,10 @@ export async function compressMultipleImages(
             // #region agent log
             fetch('http://127.0.0.1:7242/ingest/e78e9fd7-3fa2-45c5-b036-a4f10b20798a',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'imageCompressor.ts:248',message:'SIZE LIMIT EXCEEDED - RETURNING EARLY',data:{processedCount:compressedFiles.length,totalFiles,currentTotalSize},timestamp:Date.now(),sessionId:'debug-session',hypothesisId:'A'})}).catch(()=>{});
             // #endregion
-            // 残りのファイルは圧縮せずにスキップ
-            // ただし、既に圧縮済みのファイルだけを返す（元のファイルは含めない）
-            return compressedFiles;
+            // 残りのファイルは元のまま返す（欠落させない）
+            compressedFiles.push(compressedFile);
+            const remainingFiles = files.slice(i + 1);
+            return [...compressedFiles, ...remainingFiles];
         }
 
         compressedFiles.push(compressedFile);

@@ -1497,7 +1497,7 @@ export default function Home() {
             {user && (
               <Link
                 href="/usage"
-                className="flex items-center text-sm font-medium text-slate-600 hover:text-indigo-600 transition-colors px-3 py-2 rounded-lg hover:bg-indigo-50/50"
+                className="flex items-center text-sm font-bold text-indigo-700 bg-gradient-to-r from-indigo-50 to-violet-50 border-2 border-indigo-200 hover:border-indigo-400 hover:from-indigo-100 hover:to-violet-100 transition-all px-4 py-2 rounded-xl shadow-sm hover:shadow-md"
               >
                 <BookOpen className="w-4 h-4 mr-2" />
                 <span className="hidden sm:inline">使い方</span>

@@ -1090,6 +1090,72 @@ export default function Home() {
     const targetLabels = Object.keys(confirmedTexts);
     console.log('[Page] Starting grading with labels:', targetLabels);
 
+    // #region agent log
+    const originalTotalSize = uploadedFiles.reduce((sum, f) => sum + f.size, 0);
+    fetch('http://127.0.0.1:7242/ingest/e78e9fd7-3fa2-45c5-b036-a4f10b20798a',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'page.tsx:handleGradeWithConfirmed:start',message:'Grading with confirmed text - before compression',data:{uploadedFilesCount:uploadedFiles.length,originalTotalSizeMB:(originalTotalSize/1024/1024).toFixed(2),fileDetails:uploadedFiles.map(f=>({name:f.name,sizeMB:(f.size/1024/1024).toFixed(2),type:f.type}))},timestamp:Date.now(),sessionId:'debug-session',runId:'run3',hypothesisId:'A'})}).catch(()=>{});
+    // #endregion
+
+    // 画像ファイルを圧縮（OCR時と同様）
+    const hasImages = uploadedFiles.some(f => isImageFile(f));
+    let filesToUse = uploadedFiles;
+    
+    // #region agent log
+    fetch('http://127.0.0.1:7242/ingest/e78e9fd7-3fa2-45c5-b036-a4f10b20798a',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'page.tsx:handleGradeWithConfirmed:hasImages',message:'Checking if compression needed',data:{hasImages,imageCount:uploadedFiles.filter(f=>isImageFile(f)).length},timestamp:Date.now(),sessionId:'debug-session',runId:'run3',hypothesisId:'A'})}).catch(()=>{});
+    // #endregion
+    
+    if (hasImages) {
+      setIsCompressing(true);
+      setCompressionProgress(0);
+      setCompressionFileName('');
+      
+      try {
+        // #region agent log
+        fetch('http://127.0.0.1:7242/ingest/e78e9fd7-3fa2-45c5-b036-a4f10b20798a',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'page.tsx:handleGradeWithConfirmed:compressionStart',message:'Starting compression for grading',data:{filesCount:uploadedFiles.length},timestamp:Date.now(),sessionId:'debug-session',runId:'run3',hypothesisId:'B'})}).catch(()=>{});
+        // #endregion
+        
+        filesToUse = await compressMultipleImages(
+          uploadedFiles,
+          (progress, fileName) => {
+            setCompressionProgress(progress);
+            setCompressionFileName(fileName);
+          }
+        );
+        
+        // #region agent log
+        const compressedTotalSize = filesToUse.reduce((sum, f) => sum + f.size, 0);
+        fetch('http://127.0.0.1:7242/ingest/e78e9fd7-3fa2-45c5-b036-a4f10b20798a',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'page.tsx:handleGradeWithConfirmed:compressionComplete',message:'Compression completed for grading',data:{originalSizeMB:(originalTotalSize/1024/1024).toFixed(2),compressedSizeMB:(compressedTotalSize/1024/1024).toFixed(2),reductionPercent:Math.round((1-compressedTotalSize/originalTotalSize)*100),filesCount:filesToUse.length},timestamp:Date.now(),sessionId:'debug-session',runId:'run3',hypothesisId:'C'})}).catch(()=>{});
+        // #endregion
+      } catch (err) {
+        console.error('[Page] Grading compression error:', err);
+        // #region agent log
+        fetch('http://127.0.0.1:7242/ingest/e78e9fd7-3fa2-45c5-b036-a4f10b20798a',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'page.tsx:handleGradeWithConfirmed:compressionError',message:'Compression failed for grading',data:{error:err instanceof Error?err.message:String(err)},timestamp:Date.now(),sessionId:'debug-session',runId:'run3',hypothesisId:'D'})}).catch(()=>{});
+        // #endregion
+        // 圧縮に失敗しても元のファイルで続行
+        filesToUse = uploadedFiles;
+      } finally {
+        setIsCompressing(false);
+        setCompressionProgress(0);
+        setCompressionFileName('');
+      }
+    }
+
+    // 圧縮後のファイルサイズチェック
+    const MAX_TOTAL_SIZE = 3.5 * 1024 * 1024;
+    const totalSize = filesToUse.reduce((sum, file) => sum + file.size, 0);
+    
+    // #region agent log
+    fetch('http://127.0.0.1:7242/ingest/e78e9fd7-3fa2-45c5-b036-a4f10b20798a',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'page.tsx:handleGradeWithConfirmed:sizeCheck',message:'File size check before API call',data:{totalSizeMB:(totalSize/1024/1024).toFixed(2),maxAllowedMB:(MAX_TOTAL_SIZE/1024/1024).toFixed(2),exceedsLimit:totalSize>MAX_TOTAL_SIZE},timestamp:Date.now(),sessionId:'debug-session',runId:'run3',hypothesisId:'E'})}).catch(()=>{});
+    // #endregion
+    
+    if (totalSize > MAX_TOTAL_SIZE) {
+      const totalMB = (totalSize / 1024 / 1024).toFixed(1);
+      const maxMB = (MAX_TOTAL_SIZE / 1024 / 1024).toFixed(1);
+      setError(`ファイルの合計サイズが大きすぎます（${totalMB}MB）。合計${maxMB}MB以下になるように、ファイルを圧縮するか分割してください。`);
+      setIsLoading(false);
+      setOcrFlowStep('idle');
+      return;
+    }
+
     const formData = new FormData();
     formData.append('targetLabels', JSON.stringify(targetLabels));
     formData.append('confirmedTexts', JSON.stringify(confirmedTexts));
@@ -1103,7 +1169,8 @@ export default function Home() {
     }
     formData.append('fileRoles', JSON.stringify(fileRoles));
 
-    uploadedFiles.forEach((file) => {
+    // 圧縮後のファイルを使用
+    filesToUse.forEach((file) => {
       formData.append('files', file);
     });
 

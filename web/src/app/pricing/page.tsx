@@ -129,7 +129,7 @@ export default function PricingPage() {
         </div>
 
         {/* Reset Notice */}
-        <div className="max-w-3xl mx-auto mb-16">
+        <div className="max-w-3xl mx-auto mb-16 space-y-6">
           <div className="bg-blue-50/80 backdrop-blur-md border border-blue-200 rounded-2xl p-6 flex items-start shadow-lg shadow-blue-100">
             <div className="bg-blue-100 rounded-full p-3 mr-5 flex-shrink-0">
               <RefreshCw className="w-6 h-6 text-blue-600" />
@@ -140,6 +140,22 @@ export default function PricingPage() {
                 ライト・スタンダードプランの採点回数は、<strong className="text-blue-900 border-b border-blue-300">ご契約日から30日ごとに自動的にリセット</strong>されます。
                 未使用分の翌月繰り越しはありませんので、ご了承ください。
                 <span className="block mt-2 text-sm opacity-80">※ 無制限プランは回数制限がないため、リセットの対象外です。</span>
+              </p>
+            </div>
+          </div>
+          
+          <div className="bg-amber-50/80 backdrop-blur-md border border-amber-200 rounded-2xl p-6 flex items-start shadow-lg shadow-amber-100">
+            <div className="bg-amber-100 rounded-full p-3 mr-5 flex-shrink-0">
+              <svg className="w-6 h-6 text-amber-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 18h.01M8 21h8a2 2 0 002-2V5a2 2 0 00-2-2H8a2 2 0 00-2 2v14a2 2 0 002 2z" />
+              </svg>
+            </div>
+            <div>
+              <h3 className="font-bold text-amber-800 mb-2 text-lg">デバイス制限について</h3>
+              <p className="text-amber-700 leading-relaxed">
+                すべてのプランにおいて、<strong className="text-amber-900 border-b border-amber-300">1アカウントあたり最大2台のデバイス</strong>でのみご利用いただけます。
+                塾や学校で複数の教室でアカウントを共有することは利用規約で禁止されています。
+                <span className="block mt-2 text-sm opacity-80">※ デバイス制限の詳細については、<Link href="/privacy" className="underline hover:text-amber-900">プライバシーポリシー</Link>をご確認ください。</span>
               </p>
             </div>
           </div>
@@ -293,18 +309,6 @@ export default function PricingPage() {
           </div>
         </div>
 
-        {/* Contact Section */}
-        <div className="text-center mt-24 pb-12">
-          <p className="text-slate-500 mb-6">
-            ご不明な点がございましたら、お気軽にお問い合わせください
-          </p>
-          <a
-            href="mailto:katsu.yoshii@gmail.com"
-            className="inline-flex items-center text-indigo-600 hover:text-indigo-800 font-medium transition-colors px-6 py-3 rounded-full bg-white border border-slate-200 hover:bg-slate-50 shadow-sm"
-          >
-            katsu.yoshii@gmail.com
-          </a>
-        </div>
       </div>
     </main>
   );

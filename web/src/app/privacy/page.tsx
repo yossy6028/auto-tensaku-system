@@ -278,10 +278,55 @@ export default function PrivacyPolicy() {
             {/* Section 9 */}
             <section>
               <div className="flex items-center mb-4">
+                <div className="bg-purple-100 text-purple-600 rounded-lg w-10 h-10 flex items-center justify-center mr-4">
+                  <Server className="w-5 h-5" />
+                </div>
+                <h2 className="text-2xl font-bold text-slate-800">9. デバイス制限について</h2>
+              </div>
+              <div className="pl-14 space-y-4">
+                <p className="text-slate-700 leading-relaxed">
+                  本サービスでは、アカウントの不正利用や複数教室でのアカウント共有を防ぐため、
+                  <strong className="text-slate-900">1アカウントあたり最大2台のデバイス</strong>でのみご利用いただける制限を設けています。
+                </p>
+                <div className="bg-purple-50 rounded-xl p-5 border border-purple-100">
+                  <h3 className="font-bold text-purple-800 mb-3">デバイス制限の詳細</h3>
+                  <ul className="space-y-2 text-purple-700">
+                    <li className="flex items-start">
+                      <span className="text-purple-500 mr-2">•</span>
+                      <span>1アカウントで登録可能なデバイスは最大2台までです</span>
+                    </li>
+                    <li className="flex items-start">
+                      <span className="text-purple-500 mr-2">•</span>
+                      <span>デバイスはブラウザのフィンガープリント技術により識別されます</span>
+                    </li>
+                    <li className="flex items-start">
+                      <span className="text-purple-500 mr-2">•</span>
+                      <span>3台目以降のデバイスで利用する場合は、既存のデバイスを削除する必要があります</span>
+                    </li>
+                    <li className="flex items-start">
+                      <span className="text-purple-500 mr-2">•</span>
+                      <span>塾や学校で複数の教室でアカウントを共有することは利用規約で禁止されています</span>
+                    </li>
+                    <li className="flex items-start">
+                      <span className="text-purple-500 mr-2">•</span>
+                      <span>30日以上アクセスのないデバイスは自動的に削除される場合があります</span>
+                    </li>
+                  </ul>
+                </div>
+                <p className="text-slate-700 leading-relaxed text-sm">
+                  この制限により、アカウントのセキュリティを確保し、適切な利用を促進しています。
+                  デバイス制限に関する詳細や、デバイスの削除方法については、サービス内の設定画面からご確認いただけます。
+                </p>
+              </div>
+            </section>
+
+            {/* Section 10 */}
+            <section>
+              <div className="flex items-center mb-4">
                 <div className="bg-violet-100 text-violet-600 rounded-lg w-10 h-10 flex items-center justify-center mr-4">
                   <UserCheck className="w-5 h-5" />
                 </div>
-                <h2 className="text-2xl font-bold text-slate-800">9. プライバシーポリシーの変更</h2>
+                <h2 className="text-2xl font-bold text-slate-800">10. プライバシーポリシーの変更</h2>
               </div>
               <div className="pl-14">
                 <p className="text-slate-700 leading-relaxed">
@@ -294,7 +339,7 @@ export default function PrivacyPolicy() {
               </div>
             </section>
 
-            {/* Section 10 - Contact */}
+            {/* Section 11 - Contact */}
             <section>
               <div className="flex items-center mb-4">
                 <div className="bg-green-100 text-green-600 rounded-lg w-10 h-10 flex items-center justify-center mr-4">

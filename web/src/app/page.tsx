@@ -847,18 +847,6 @@ export default function Home() {
       return;
     }
 
-    // ファイルサイズチェック（413エラー対策）
-    // FormDataのオーバーヘッド（約10-20%）を考慮して、3MBに制限
-    const totalFileSize = uploadedFiles.reduce((sum, file) => sum + file.size, 0);
-    const MAX_REQUEST_SIZE = 3 * 1024 * 1024; // 3MB（Vercelの制限4.5MBに安全マージン、FormDataのオーバーヘッドを考慮）
-    
-    if (totalFileSize > MAX_REQUEST_SIZE) {
-      const totalMB = (totalFileSize / 1024 / 1024).toFixed(1);
-      const maxMB = (MAX_REQUEST_SIZE / 1024 / 1024).toFixed(0);
-      setError(`ファイルの合計サイズが大きすぎます（${totalMB}MB）。合計${maxMB}MB以下になるように、ファイルを圧縮するか分割してください。`);
-      return;
-    }
-
     let targetLabels = selectedProblems;
     if (targetLabels.length === 0) {
       const currentLabel = generateProblemLabel();
@@ -867,6 +855,57 @@ export default function Home() {
         return;
       }
       targetLabels = [currentLabel];
+    }
+
+    // 画像ファイルを圧縮（10枚対応）
+    const hasImages = uploadedFiles.some(f => isImageFile(f));
+    let filesToUse = uploadedFiles;
+    
+    // #region agent log
+    fetch('http://127.0.0.1:7242/ingest/e78e9fd7-3fa2-45c5-b036-a4f10b20798a',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'page.tsx:860',message:'OCR compression check',data:{totalFiles:uploadedFiles.length,hasImages,imageFiles:uploadedFiles.filter(f=>isImageFile(f)).length,originalTotalSizeMB:(uploadedFiles.reduce((s,f)=>s+f.size,0)/1024/1024).toFixed(2)},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'E'})}).catch(()=>{});
+    // #endregion
+    
+    if (hasImages) {
+      setIsCompressing(true);
+      setCompressionProgress(0);
+      setCompressionFileName('');
+      
+      try {
+        filesToUse = await compressMultipleImages(
+          uploadedFiles,
+          (progress, fileName) => {
+            setCompressionProgress(progress);
+            setCompressionFileName(fileName);
+          }
+        );
+      } catch (err) {
+        console.error('[Page] OCR compression error:', err);
+        // #region agent log
+        fetch('http://127.0.0.1:7242/ingest/e78e9fd7-3fa2-45c5-b036-a4f10b20798a',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'page.tsx:878',message:'OCR compression error',data:{error:err instanceof Error?err.message:String(err)},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'F'})}).catch(()=>{});
+        // #endregion
+        // 圧縮に失敗しても元のファイルで続行
+        filesToUse = uploadedFiles;
+      } finally {
+        setIsCompressing(false);
+        setCompressionProgress(0);
+        setCompressionFileName('');
+      }
+    }
+
+    // 圧縮後のファイルサイズチェック（413エラー対策）
+    const totalFileSize = filesToUse.reduce((sum, file) => sum + file.size, 0);
+    const MAX_REQUEST_SIZE = 3.5 * 1024 * 1024; // 3.5MB（Vercelの制限4.5MBに安全マージン、FormDataのオーバーヘッドを考慮）
+    
+    // #region agent log
+    fetch('http://127.0.0.1:7242/ingest/e78e9fd7-3fa2-45c5-b036-a4f10b20798a',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'page.tsx:890',message:'OCR file size check',data:{totalFileSizeMB:(totalFileSize/1024/1024).toFixed(2),maxAllowedMB:(MAX_REQUEST_SIZE/1024/1024).toFixed(2),filesCount:filesToUse.length,exceedsLimit:totalFileSize>MAX_REQUEST_SIZE},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'G'})}).catch(()=>{});
+    // #endregion
+    
+    if (totalFileSize > MAX_REQUEST_SIZE) {
+      const totalMB = (totalFileSize / 1024 / 1024).toFixed(1);
+      const maxMB = (MAX_REQUEST_SIZE / 1024 / 1024).toFixed(1);
+      const fileCount = filesToUse.length;
+      setError(`ファイルの合計サイズが大きすぎます（${totalMB}MB、${fileCount}枚）。合計${maxMB}MB以下になるように、ファイルを分割するか、写真の枚数を減らしてください。`);
+      return;
     }
 
     setOcrFlowStep('ocr-loading');
@@ -888,14 +927,14 @@ export default function Home() {
       }
       formData.append('fileRoles', JSON.stringify(fileRoles));
       
-      let totalSize = 0;
-      uploadedFiles.forEach((file) => {
+      // 圧縮後のファイルを使用
+      filesToUse.forEach((file) => {
         formData.append('files', file);
-        totalSize += file.size;
       });
 
       // #region agent log
-      fetch('http://127.0.0.1:7242/ingest/e78e9fd7-3fa2-45c5-b036-a4f10b20798a',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'page.tsx:879',message:'OCR API request start',data:{label,targetLabelsCount:targetLabels.length,filesCount:uploadedFiles.length,totalSizeMB:(totalSize/1024/1024).toFixed(2),maxSizeMB:4.5,userAgent:navigator.userAgent},timestamp:Date.now(),sessionId:'debug-session',runId:'run2',hypothesisId:'F'})}).catch(()=>{});
+      const totalSize = filesToUse.reduce((sum, file) => sum + file.size, 0);
+      fetch('http://127.0.0.1:7242/ingest/e78e9fd7-3fa2-45c5-b036-a4f10b20798a',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'page.tsx:925',message:'OCR API request start',data:{label,targetLabelsCount:targetLabels.length,filesCount:filesToUse.length,totalSizeMB:(totalSize/1024/1024).toFixed(2),maxSizeMB:3.5,userAgent:navigator.userAgent},timestamp:Date.now(),sessionId:'debug-session',runId:'run2',hypothesisId:'F'})}).catch(()=>{});
       // #endregion
 
       try {
@@ -1145,22 +1184,6 @@ export default function Home() {
       return;
     }
 
-    // ファイルサイズチェック（Vercel Serverless Functions: 4.5MBペイロード上限）
-    const MAX_TOTAL_SIZE = 4 * 1024 * 1024; // 4MB（Vercelペイロード上限対応）
-    const MAX_SINGLE_FILE_SIZE = 4 * 1024 * 1024; // 4MB
-    const totalSize = uploadedFiles.reduce((sum, file) => sum + file.size, 0);
-    
-    const oversizedFile = uploadedFiles.find(file => file.size > MAX_SINGLE_FILE_SIZE);
-    if (oversizedFile) {
-      setError(`ファイル「${oversizedFile.name}」が大きすぎます（${(oversizedFile.size / 1024 / 1024).toFixed(1)}MB）。4MB以下のファイルをアップロードしてください。PDFを圧縮するか、ページを分割してください。`);
-      return;
-    }
-    
-    if (totalSize > MAX_TOTAL_SIZE) {
-      setError(`ファイルの合計サイズが大きすぎます（${(totalSize / 1024 / 1024).toFixed(1)}MB）。合計4MB以下になるようにしてください。`);
-      return;
-    }
-
     // If no problems are explicitly added to the list, use the currently selected one
     let targetLabels = selectedProblems;
     if (targetLabels.length === 0) {
@@ -1172,6 +1195,63 @@ export default function Home() {
       targetLabels = [currentLabel];
     }
 
+    // 画像ファイルを圧縮（10枚対応）
+    const hasImages = uploadedFiles.some(f => isImageFile(f));
+    let filesToUse = uploadedFiles;
+    
+    // #region agent log
+    fetch('http://127.0.0.1:7242/ingest/e78e9fd7-3fa2-45c5-b036-a4f10b20798a',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'page.tsx:1197',message:'Grading compression check',data:{totalFiles:uploadedFiles.length,hasImages,imageFiles:uploadedFiles.filter(f=>isImageFile(f)).length,originalTotalSizeMB:(uploadedFiles.reduce((s,f)=>s+f.size,0)/1024/1024).toFixed(2)},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'H'})}).catch(()=>{});
+    // #endregion
+    
+    if (hasImages) {
+      setIsCompressing(true);
+      setCompressionProgress(0);
+      setCompressionFileName('');
+      
+      try {
+        filesToUse = await compressMultipleImages(
+          uploadedFiles,
+          (progress, fileName) => {
+            setCompressionProgress(progress);
+            setCompressionFileName(fileName);
+          }
+        );
+      } catch (err) {
+        console.error('[Page] Grading compression error:', err);
+        // #region agent log
+        fetch('http://127.0.0.1:7242/ingest/e78e9fd7-3fa2-45c5-b036-a4f10b20798a',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'page.tsx:1215',message:'Grading compression error',data:{error:err instanceof Error?err.message:String(err)},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'I'})}).catch(()=>{});
+        // #endregion
+        // 圧縮に失敗しても元のファイルで続行
+        filesToUse = uploadedFiles;
+      } finally {
+        setIsCompressing(false);
+        setCompressionProgress(0);
+        setCompressionFileName('');
+      }
+    }
+
+    // 圧縮後のファイルサイズチェック（Vercel Serverless Functions: 4.5MBペイロード上限）
+    const MAX_TOTAL_SIZE = 3.5 * 1024 * 1024; // 3.5MB（Vercelペイロード上限対応、FormDataのオーバーヘッドを考慮）
+    const MAX_SINGLE_FILE_SIZE = 4 * 1024 * 1024; // 4MB
+    const totalSize = filesToUse.reduce((sum, file) => sum + file.size, 0);
+    
+    // #region agent log
+    fetch('http://127.0.0.1:7242/ingest/e78e9fd7-3fa2-45c5-b036-a4f10b20798a',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'page.tsx:1228',message:'Grading file size check',data:{totalSizeMB:(totalSize/1024/1024).toFixed(2),maxAllowedMB:(MAX_TOTAL_SIZE/1024/1024).toFixed(2),filesCount:filesToUse.length,exceedsLimit:totalSize>MAX_TOTAL_SIZE},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'J'})}).catch(()=>{});
+    // #endregion
+    
+    const oversizedFile = filesToUse.find(file => file.size > MAX_SINGLE_FILE_SIZE);
+    if (oversizedFile) {
+      setError(`ファイル「${oversizedFile.name}」が大きすぎます（${(oversizedFile.size / 1024 / 1024).toFixed(1)}MB）。4MB以下のファイルをアップロードしてください。PDFを圧縮するか、ページを分割してください。`);
+      return;
+    }
+    
+    if (totalSize > MAX_TOTAL_SIZE) {
+      const totalMB = (totalSize / 1024 / 1024).toFixed(1);
+      const maxMB = (MAX_TOTAL_SIZE / 1024 / 1024).toFixed(1);
+      setError(`ファイルの合計サイズが大きすぎます（${totalMB}MB）。合計${maxMB}MB以下になるように、ファイルを分割してください。`);
+      return;
+    }
+
     setIsLoading(true);
     setError(null);
     setRequirePlan(false);
@@ -1179,7 +1259,7 @@ export default function Home() {
 
     console.log('[Page] Starting grading process...');
     console.log('[Page] Target labels:', targetLabels);
-    console.log('[Page] Files count:', uploadedFiles.length);
+    console.log('[Page] Files count:', filesToUse.length);
 
     const formData = new FormData();
     formData.append('targetLabels', JSON.stringify(targetLabels));
@@ -1199,8 +1279,8 @@ export default function Home() {
     formData.append('fileRoles', JSON.stringify(fileRoles));
     console.log('[Page] File roles:', fileRoles);
 
-    // すべてのファイルを追加
-    uploadedFiles.forEach((file, idx) => {
+    // 圧縮後のファイルを使用
+    filesToUse.forEach((file, idx) => {
       formData.append(`files`, file);
       const role = fileRoles[idx] || 'other';
       console.log(`[Page] File ${idx}: ${file.name} (${(file.size / 1024).toFixed(1)} KB) - Role: ${role}`);

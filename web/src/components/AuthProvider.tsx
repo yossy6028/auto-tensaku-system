@@ -71,6 +71,7 @@ interface AuthContextType {
   signInWithEmail: (email: string) => Promise<{ error: Error | null }>;
   signInWithPassword: (email: string, password: string) => Promise<{ error: Error | null }>;
   signUp: (email: string, password: string) => Promise<{ error: Error | null }>;
+  resetPassword: (email: string) => Promise<{ error: Error | null }>;
   signOut: () => Promise<void>;
   refreshUsageInfo: () => Promise<void>;
 }
@@ -701,6 +702,8 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
           await fetchProfile(session.user.id).catch(() => {});
           await fetchSubscription(session.user.id).catch(() => {});
           await fetchFreeAccessInfo(session.user.id).catch(() => {});
+          // 利用可否情報を更新（認証イベント由来で更新することで、useEffect内の同期setState連鎖を避ける）
+          await refreshUsageInfo().catch(() => {});
           // デバイス登録処理
           handleDeviceRegistration(session.user.id).catch(() => {});
         } else {
@@ -721,49 +724,10 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     return () => {
       authSubscription.unsubscribe();
     };
-  }, [supabase, fetchProfile, fetchSubscription, fetchFreeAccessInfo, handleDeviceRegistration]);
+  }, [supabase, fetchProfile, fetchSubscription, fetchFreeAccessInfo, handleDeviceRegistration, refreshUsageInfo]);
 
-  useEffect(() => {
-    // セッションとユーザーの両方が存在する場合のみ利用情報を取得
-    // ただし、セッションがnullの場合は、userもnullにすべき（整合性を保つ）
-    if (!session) {
-      console.log('[AuthProvider] useEffect: session is null, clearing usageInfo and ensuring user is null');
-      setUsageInfo(null);
-      if (user) {
-        console.log('[AuthProvider] Warning: user exists but session is null, clearing user');
-        setUser(null);
-      }
-      return;
-    }
-    
-    if (user && session) {
-      // userとsessionのIDが一致することを確認
-      if (user.id !== session.user?.id) {
-        console.log('[AuthProvider] Warning: user ID and session user ID do not match, clearing user');
-        setUser(null);
-        setUsageInfo(null);
-        return;
-      }
-      console.log('[AuthProvider] useEffect: user and session exist, calling refreshUsageInfo');
-      refreshUsageInfo();
-    } else {
-      console.log('[AuthProvider] useEffect: user or session is null, not calling refreshUsageInfo', {
-        hasUser: !!user,
-        hasSession: !!session,
-        userId: user?.id,
-        sessionUserId: session?.user?.id
-      });
-      setUsageInfo(null);
-    }
-  }, [user, session, refreshUsageInfo]);
-
-  // プロファイルが変更されたときにも利用可否情報を更新（セッションがある場合のみ）
-  useEffect(() => {
-    if (user && session && profile) {
-      console.log('[AuthProvider] Profile updated, refreshing usage info.');
-      refreshUsageInfo();
-    }
-  }, [user, session, profile, refreshUsageInfo]);
+  // 利用可否情報（usageInfo）の更新は、認証イベント（onAuthStateChange）と明示操作（refreshUsageInfo）で行う。
+  // ※ useEffect内でrefreshUsageInfo/setStateを同期呼び出しすると、eslintのreact-hooks/set-state-in-effectに抵触するため。
 
   const signInWithEmail = async (email: string) => {
     if (!supabase) return { error: new Error('Supabase is not configured') };
@@ -812,6 +776,14 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     return { error };
   };
 
+  const resetPassword = async (email: string) => {
+    if (!supabase) return { error: new Error('Supabase is not configured') };
+    const { error } = await supabase.auth.resetPasswordForEmail(email, {
+      redirectTo: `${window.location.origin}/auth/callback?next=/auth/reset-password`,
+    });
+    return { error };
+  };
+
   const signOut = async () => {
     if (!supabase) return;
     await supabase.auth.signOut();
@@ -853,6 +825,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         signInWithEmail,
         signInWithPassword,
         signUp,
+        resetPassword,
         signOut,
         refreshUsageInfo,
       }}

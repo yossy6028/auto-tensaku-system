@@ -9,6 +9,40 @@ const OCR_TIMEOUT_MS = 250_000;     // 250秒（maxDuration=300秒に余裕を�
 const GRADING_TIMEOUT_MS = 250_000; // 250秒
 // 注: OCRと採点は別APIなので、それぞれ独立してタイムアウトを設定
 
+// 採点の厳しさ（3段階）
+export type GradingStrictness = "lenient" | "standard" | "strict";
+const DEFAULT_STRICTNESS: GradingStrictness = "standard";
+
+function buildStrictnessInstruction(strictness: GradingStrictness): string {
+    // 既存の採点基準・5大原則は維持しつつ、判断の「寄せ方」だけを変える
+    switch (strictness) {
+        case "lenient":
+            return [
+                "採点の厳しさ: 甘め（lenient）",
+                "- 減点は慎重に行い、明確な根拠がある場合のみ適用する",
+                "- 模範解答と完全一致でなくても、本文根拠に沿う言い換え・類義表現は積極的に正解扱いする",
+                "- 形式（文末・呼応）による減点は、意味が十分に合っている場合は最小限にする（ただし致命的な誤りは減点）",
+            ].join("\n");
+        case "strict":
+            return [
+                "採点の厳しさ: 厳しめ（strict）",
+                "- 設問の要求（要素・形式・文末）を満たしているかを厳格に確認し、不足があれば確実に減点する",
+                "- 要素不足・因果の欠落・対比の不均衡などは見逃さず、根拠に基づいて減点理由を分離して記載する",
+                "- 表現の曖昧さや論理の飛躍がある場合は、具体的に指摘し減点する（ただし本文根拠のない推測は禁止）",
+            ].join("\n");
+        case "standard":
+        default:
+            return [
+                "採点の厳しさ: 標準（standard）",
+                "- 既定の採点ルール（5大原則・減点基準）に従い、過不足のない減点を行う",
+            ].join("\n");
+    }
+}
+
+function buildGradingSystemInstruction(strictness: GradingStrictness): string {
+    return `${SYSTEM_INSTRUCTION}\n\n# Strictness (採点の厳しさ)\n${buildStrictnessInstruction(strictness)}\n`;
+}
+
 /**
  * タイムアウト付きでPromiseを実行
  */
@@ -175,7 +209,8 @@ export class EduShiftGrader {
         confirmedText: string,
         files: UploadedFilePart[],
         pdfPageInfo?: { answerPage?: string; problemPage?: string; modelAnswerPage?: string } | null,
-        fileRoles?: Record<string, FileRole>
+        fileRoles?: Record<string, FileRole>,
+        strictness: GradingStrictness = DEFAULT_STRICTNESS
     ) {
         try {
             // ファイルに役割情報を付与
@@ -192,7 +227,7 @@ export class EduShiftGrader {
             const sanitizedLabel = targetLabel.replace(/[<>\\\"'`]/g, '').trim();
             
             // Stage 2のみ実行（confirmedTextを使用）
-            return await this.executeGradingWithText(sanitizedLabel, confirmedText, imageParts, pdfPageInfo);
+            return await this.executeGradingWithText(sanitizedLabel, confirmedText, imageParts, pdfPageInfo, strictness);
         } catch (error: unknown) {
             return this.handleError(error);
         }
@@ -205,7 +240,8 @@ export class EduShiftGrader {
         targetLabel: string, 
         files: UploadedFilePart[],
         pdfPageInfo?: { answerPage?: string; problemPage?: string; modelAnswerPage?: string } | null,
-        fileRoles?: Record<string, FileRole>
+        fileRoles?: Record<string, FileRole>,
+        strictness: GradingStrictness = DEFAULT_STRICTNESS
     ) {
         try {
             // ファイルに役割情報がすでに付与されていない場合は付与
@@ -218,7 +254,7 @@ export class EduShiftGrader {
             }
             const categorizedFiles = this.categorizeFiles(files, pdfPageInfo);
             const imageParts = this.buildContentSequence(categorizedFiles);
-            return await this.executeTwoStageGrading(targetLabel, imageParts, pdfPageInfo, categorizedFiles);
+            return await this.executeTwoStageGrading(targetLabel, imageParts, pdfPageInfo, categorizedFiles, strictness);
         } catch (error: unknown) {
             return this.handleError(error);
         }
@@ -1179,7 +1215,8 @@ export class EduShiftGrader {
         targetLabel: string,
         confirmedText: string,
         imageParts: ContentPart[],
-        pdfPageInfo?: { answerPage?: string; problemPage?: string; modelAnswerPage?: string } | null
+        pdfPageInfo?: { answerPage?: string; problemPage?: string; modelAnswerPage?: string } | null,
+        strictness: GradingStrictness = DEFAULT_STRICTNESS
     ) {
         console.log("[Grader] 確認済みテキストで採点開始");
         
@@ -1227,7 +1264,7 @@ System Instructionに定義された以下のルールを厳密に適用して�
                 contents: [{ role: "user", parts: [{ text: prompt }, ...imageParts] }],
                 config: {
                     ...this.gradingConfig,
-                    systemInstruction: SYSTEM_INSTRUCTION
+                    systemInstruction: buildGradingSystemInstruction(strictness)
                 }
             }),
             GRADING_TIMEOUT_MS,
@@ -1278,7 +1315,8 @@ System Instructionに定義された以下のルールを厳密に適用して�
         targetLabel: string, 
         imageParts: ContentPart[],
         pdfPageInfo?: { answerPage?: string; problemPage?: string; modelAnswerPage?: string } | null,
-        categorizedFiles?: CategorizedFiles
+        categorizedFiles?: CategorizedFiles,
+        strictness: GradingStrictness = DEFAULT_STRICTNESS
     ) {
         const sanitizedLabel = targetLabel.replace(/[<>\\\"'`]/g, '').trim();
 
@@ -1374,7 +1412,7 @@ System Instructionに定義された以下のルールを厳密に適用して�
                 contents: [{ role: "user", parts: [{ text: prompt }, ...imageParts] }],
                 config: {
                     ...this.gradingConfig,
-                    systemInstruction: SYSTEM_INSTRUCTION
+                    systemInstruction: buildGradingSystemInstruction(strictness)
                 }
             }),
             GRADING_TIMEOUT_MS,

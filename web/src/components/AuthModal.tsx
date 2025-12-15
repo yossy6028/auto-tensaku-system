@@ -10,10 +10,10 @@ interface AuthModalProps {
   initialMode?: 'signin' | 'signup';
 }
 
-type AuthMode = 'signin' | 'signup' | 'magic';
+type AuthMode = 'signin' | 'signup' | 'magic' | 'reset';
 
 export function AuthModal({ isOpen, onClose, initialMode = 'signin' }: AuthModalProps) {
-  const { signInWithEmail, signInWithPassword, signUp, user } = useAuth();
+  const { signInWithEmail, signInWithPassword, signUp, resetPassword, user } = useAuth();
   const [mode, setMode] = useState<AuthMode>(initialMode);
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
@@ -41,6 +41,19 @@ export function AuthModal({ isOpen, onClose, initialMode = 'signin' }: AuthModal
     }
   }, [isOpen, initialMode]);
 
+  // パスワードリセット成功時にメッセージを表示
+  useEffect(() => {
+    if (mode === 'reset' && message?.type === 'success') {
+      // 成功メッセージ表示後、3秒後にログインモードに戻す
+      const timer = setTimeout(() => {
+        setMode('signin');
+        setMessage(null);
+        setEmail('');
+      }, 3000);
+      return () => clearTimeout(timer);
+    }
+  }, [mode, message]);
+
   if (!isOpen) return null;
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -55,6 +68,12 @@ export function AuthModal({ isOpen, onClose, initialMode = 'signin' }: AuthModal
         result = await signInWithEmail(email);
         if (!result.error) {
           setMessage({ type: 'success', text: 'ログインリンクをメールで送信しました。メールをご確認ください。' });
+          setEmail('');
+        }
+      } else if (mode === 'reset') {
+        result = await resetPassword(email);
+        if (!result.error) {
+          setMessage({ type: 'success', text: 'パスワードリセットリンクをメールで送信しました。メールをご確認ください。' });
           setEmail('');
         }
       } else if (mode === 'signin') {
@@ -99,11 +118,15 @@ export function AuthModal({ isOpen, onClose, initialMode = 'signin' }: AuthModal
             <X className="w-6 h-6" />
           </button>
           <h2 className="text-2xl font-bold">
-            {mode === 'signin' ? 'ログイン' : mode === 'signup' ? '新規登録' : 'マジックリンク'}
+            {mode === 'signin' ? 'ログイン' : 
+             mode === 'signup' ? '新規登録' : 
+             mode === 'reset' ? 'パスワードリセット' :
+             'マジックリンク'}
           </h2>
           <p className="text-indigo-100 mt-1">
             {mode === 'signin' ? 'アカウントにログインしてください' : 
              mode === 'signup' ? '新しいアカウントを作成' : 
+             mode === 'reset' ? 'メールアドレスを入力してパスワードリセットリンクを受け取る' :
              'メールでログインリンクを受け取る'}
           </p>
         </div>
@@ -143,7 +166,7 @@ export function AuthModal({ isOpen, onClose, initialMode = 'signin' }: AuthModal
               </div>
             </div>
 
-            {mode !== 'magic' && (
+            {mode !== 'magic' && mode !== 'reset' && (
               <div>
                 <label className="block text-sm font-medium text-slate-700 mb-1">
                   パスワード
@@ -174,7 +197,10 @@ export function AuthModal({ isOpen, onClose, initialMode = 'signin' }: AuthModal
                   処理中...
                 </>
               ) : (
-                mode === 'signin' ? 'ログイン' : mode === 'signup' ? '登録する' : 'リンクを送信'
+                mode === 'signin' ? 'ログイン' : 
+                mode === 'signup' ? '登録する' : 
+                mode === 'reset' ? 'リセットリンクを送信' :
+                'リンクを送信'
               )}
             </button>
           </form>
@@ -188,6 +214,12 @@ export function AuthModal({ isOpen, onClose, initialMode = 'signin' }: AuthModal
                   className="w-full text-center text-sm text-indigo-600 hover:text-indigo-800 font-medium"
                 >
                   パスワードなしでログイン（マジックリンク）
+                </button>
+                <button
+                  onClick={() => { setMode('reset'); setMessage(null); }}
+                  className="w-full text-center text-sm text-slate-600 hover:text-slate-800"
+                >
+                  パスワードを忘れた場合
                 </button>
                 <p className="text-center text-sm text-slate-600">
                   アカウントをお持ちでない方は{' '}
@@ -212,12 +244,30 @@ export function AuthModal({ isOpen, onClose, initialMode = 'signin' }: AuthModal
               </p>
             )}
             {mode === 'magic' && (
+              <>
+                <p className="text-center text-sm text-slate-600">
+                  <button
+                    onClick={() => { setMode('signin'); setMessage(null); }}
+                    className="text-indigo-600 hover:text-indigo-800 font-medium"
+                  >
+                    パスワードでログイン
+                  </button>
+                </p>
+                <button
+                  onClick={() => { setMode('reset'); setMessage(null); }}
+                  className="w-full text-center text-sm text-slate-600 hover:text-slate-800"
+                >
+                  パスワードを忘れた場合
+                </button>
+              </>
+            )}
+            {mode === 'reset' && (
               <p className="text-center text-sm text-slate-600">
                 <button
                   onClick={() => { setMode('signin'); setMessage(null); }}
                   className="text-indigo-600 hover:text-indigo-800 font-medium"
                 >
-                  パスワードでログイン
+                  ログインに戻る
                 </button>
               </p>
             )}

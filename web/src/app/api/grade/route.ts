@@ -1,10 +1,11 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { createServerClient } from '@supabase/ssr';
 import { cookies } from 'next/headers';
-import { EduShiftGrader, type FileRole } from '@/lib/core/grader';
+import { EduShiftGrader, type FileRole, type GradingStrictness } from '@/lib/core/grader';
 import type { Database } from '@/lib/supabase/types';
 import { checkRateLimit, GRADING_RATE_LIMIT } from '@/lib/security/rateLimit';
 import { logger } from '@/lib/security/logger';
+import { createRegradeToken, verifyRegradeToken } from '@/lib/security/regradeToken';
 
 // Force dynamic to prevent caching
 export const dynamic = 'force-dynamic';
@@ -93,6 +94,41 @@ const ALLOWED_MIME_TYPES = [
 const MAX_SINGLE_FILE_SIZE = 4 * 1024 * 1024; // 4MB
 const MAX_TOTAL_SIZE = 4 * 1024 * 1024; // 4MB（Vercelペイロード上限対応）
 const MAX_FILES_COUNT = 10; // 最大ファイル数
+
+// 無料再採点（もっと厳しく/甘く）用の設定
+const REGRADE_TOKEN_TTL_SECONDS = 60 * 60 * 24 * 7; // 7日
+const REGRADE_MAX_FREE_TIMES_PER_LABEL = 2; // 初回採点後に無料で再採点できる回数
+
+type RegradeInfo = {
+    token: string;
+    remaining: number;
+};
+
+type GradingApiResultItem = {
+    label: string;
+    result?: unknown;
+    error?: string;
+    status?: string;
+    strictness?: GradingStrictness;
+    regradeToken?: string | null;
+    regradeRemaining?: number | null;
+    regradeMode?: 'new' | 'free' | 'none';
+};
+
+function parseStrictness(value: unknown): GradingStrictness {
+    if (value === 'lenient' || value === 'standard' || value === 'strict') return value;
+    return 'standard';
+}
+
+function sanitizeDeviceFingerprint(value: unknown): string {
+    if (typeof value !== 'string') return '';
+    const trimmed = value.trim();
+    // 端末指紋（SHA-256など）の想定。過度に長いものは拒否。
+    if (trimmed.length < 8 || trimmed.length > 200) return '';
+    // 制御文字などは除外
+    if (/[\x00-\x1f]/.test(trimmed)) return '';
+    return trimmed;
+}
 
 /**
  * ファイルのセキュリティ検証
@@ -254,38 +290,51 @@ export async function POST(req: NextRequest) {
             );
         }
 
-        // 利用可否チェック
-        const { data: usageData, error: usageError } = await supabaseRpc
-            .rpc('can_use_service', { p_user_id: user.id });
-        const usageRows = usageData as CanUseServiceResult[] | null;
-        
-        if (usageError) {
-            logger.error('Usage check error:', usageError);
-            return NextResponse.json(
-                { status: 'error', message: '利用状況の確認中にエラーが発生しました。' },
-                { status: 500 }
-            );
-        }
-
-        if (!usageRows || usageRows.length === 0 || !usageRows[0].can_use) {
-            return NextResponse.json(
-                { 
-                    status: 'error', 
-                    message: usageRows?.[0]?.message || '利用可能なプランがありません。プランを購入してください。',
-                    requirePlan: true
-                },
-                { status: 403 }
-            );
-        }
-
         // フォームデータ解析
         const formData = await req.formData();
+        const deviceFingerprintRaw = formData.get('deviceFingerprint');
+        
+        // デバイス制限チェック（デバイスフィンガープリントが提供されている場合）
+        if (deviceFingerprintRaw && typeof deviceFingerprintRaw === 'string') {
+            const { data: deviceCheckData, error: deviceCheckError } = await supabaseRpc
+                .rpc('check_device_access', {
+                    p_user_id: user.id,
+                    p_device_fingerprint: deviceFingerprintRaw,
+                });
+            
+            if (deviceCheckError) {
+                logger.warn('Device access check error:', deviceCheckError);
+                // エラーが発生しても続行（後方互換性のため）
+            } else if (deviceCheckData && Array.isArray(deviceCheckData) && deviceCheckData.length > 0) {
+                const deviceCheck = deviceCheckData[0] as {
+                    has_access: boolean;
+                    message: string;
+                    device_count: number;
+                    max_devices: number | null;
+                };
+                
+                if (!deviceCheck.has_access) {
+                    return NextResponse.json(
+                        {
+                            status: 'error',
+                            message: deviceCheck.message || 'デバイス制限により利用できません。',
+                            deviceLimitReached: true,
+                            deviceCount: deviceCheck.device_count,
+                            maxDevices: deviceCheck.max_devices || 2,
+                        },
+                        { status: 403 }
+                    );
+                }
+            }
+        }
         const targetLabelsJson = formData.get('targetLabels') as string;
         const files = formData.getAll('files') as File[];
         const pdfPageInfoJson = formData.get('pdfPageInfo') as string | null;
         const fileRolesJson = formData.get('fileRoles') as string | null;
         // ユーザー確認済みテキスト（OCR結果をユーザーが修正した場合）
         const confirmedTextsJson = formData.get('confirmedTexts') as string | null;
+        const strictnessRaw = formData.get('strictness');
+        const regradeTokensJson = formData.get('regradeTokens') as string | null;
 
         if (!targetLabelsJson || !files || files.length === 0) {
             return NextResponse.json(
@@ -349,12 +398,84 @@ export async function POST(req: NextRequest) {
         // ラベルのサニタイズ
         const sanitizedLabels = targetLabels.map(sanitizeLabel);
 
+        // 採点の厳しさ（3段階）
+        const strictness = parseStrictness(strictnessRaw);
+
+        // 端末指紋（無料再採点トークンの紐付けに使用）
+        const deviceFingerprint = sanitizeDeviceFingerprint(deviceFingerprintRaw) || (req.headers.get('user-agent') || 'unknown');
+
+        // 再採点トークン（label -> token）
+        let regradeTokens: Record<string, string> = {};
+        if (regradeTokensJson) {
+            try {
+                const parsed = JSON.parse(regradeTokensJson) as Record<string, unknown>;
+                if (parsed && typeof parsed === 'object') {
+                    const next: Record<string, string> = {};
+                    for (const [k, v] of Object.entries(parsed)) {
+                        if (typeof v === 'string' && v.length < 5000) next[k] = v;
+                    }
+                    regradeTokens = next;
+                }
+            } catch {
+                // パース失敗時は無視
+            }
+        }
+
+        // 無料再採点として扱えるラベルを判定
+        const regradeSecret = process.env.REGRADE_TOKEN_SECRET || '';
+        const freeRegradeByLabel = new Map<string, RegradeInfo>();
+        if (regradeSecret) {
+            for (const label of sanitizedLabels) {
+                const token = regradeTokens[label];
+                if (!token) continue;
+                const verified = verifyRegradeToken({ secret: regradeSecret, token });
+                if (!verified.ok) continue;
+                const payload = verified.payload;
+                if (payload.sub !== user.id) continue;
+                if (payload.label !== label) continue;
+                if (payload.fp !== deviceFingerprint) continue;
+                if (payload.remaining <= 0) continue;
+                freeRegradeByLabel.set(label, { token, remaining: payload.remaining });
+            }
+        } else if (regradeTokensJson) {
+            // トークンが送られてきたのにサーバ側で検証用secretがない場合はログだけ残す
+            logger.warn('[API] REGRADE_TOKEN_SECRET is not set. Regrade tokens will be ignored.');
+        }
+
+        const requiresPaidUsage = sanitizedLabels.some((label) => !freeRegradeByLabel.has(label));
+
+        // 利用可否チェック（無料再採点のみの場合はスキップ）
+        if (requiresPaidUsage) {
+            const { data: usageData, error: usageError } = await supabaseRpc
+                .rpc('can_use_service', { p_user_id: user.id });
+            const usageRows = usageData as CanUseServiceResult[] | null;
+            
+            if (usageError) {
+                logger.error('Usage check error:', usageError);
+                return NextResponse.json(
+                    { status: 'error', message: '利用状況の確認中にエラーが発生しました。' },
+                    { status: 500 }
+                );
+            }
+
+            if (!usageRows || usageRows.length === 0 || !usageRows[0].can_use) {
+                return NextResponse.json(
+                    { 
+                        status: 'error', 
+                        message: usageRows?.[0]?.message || '利用可能なプランがありません。プランを購入してください。',
+                        requirePlan: true
+                    },
+                    { status: 403 }
+                );
+            }
+        }
+
         // ファイルをバッファに変換（役割情報を付与）
         const fileBuffers = await convertFilesToBuffers(files, pdfPageInfo, fileRoles);
 
         // 採点実行
         const grader = new EduShiftGrader();
-        const results: Array<{ label: string; result?: unknown; error?: string; status?: string }> = [];
+        const results: GradingApiResultItem[] = [];
 
         for (const label of sanitizedLabels) {
             try {
@@ -363,17 +484,17 @@ export async function POST(req: NextRequest) {
                 // 確認済みテキストがある場合はそれを使用（OCRスキップ）
                 if (confirmedTexts[label]) {
                     logger.info(`[API] Using confirmed text for ${label}: ${confirmedTexts[label].length} chars`);
-                    result = await grader.gradeWithConfirmedText(label, confirmedTexts[label], fileBuffers, pdfPageInfo, fileRoles);
+                    result = await grader.gradeWithConfirmedText(label, confirmedTexts[label], fileBuffers, pdfPageInfo, fileRoles, strictness);
                 } else {
                     // 従来通りOCR + 採点
-                    result = await grader.gradeAnswerFromMultipleFiles(label, fileBuffers, pdfPageInfo, fileRoles);
+                    result = await grader.gradeAnswerFromMultipleFiles(label, fileBuffers, pdfPageInfo, fileRoles, strictness);
                 }
                 
-                results.push({ label, result });
+                results.push({ label, result, strictness });
             } catch (error: unknown) {
                 const message = error instanceof Error ? error.message : 'Unknown error';
                 logger.error(`Error grading ${label}:`, error);
-                results.push({ label, error: message, status: 'error' });
+                results.push({ label, error: message, status: 'error', strictness });
             }
         }
 
@@ -381,11 +502,16 @@ export async function POST(req: NextRequest) {
         const successfulGradings = results.filter(r => r.result && !r.error);
         
         for (const grading of successfulGradings) {
+            // 無料再採点の場合は消費しない
+            if (freeRegradeByLabel.has(grading.label)) {
+                continue;
+            }
             const { error: incrementError } = await supabaseRpc
                 .rpc('increment_usage', { 
                     p_user_id: user.id,
                     p_metadata: { 
                         label: grading.label,
+                        strictness,
                         timestamp: new Date().toISOString()
                     }
                 });
@@ -396,9 +522,14 @@ export async function POST(req: NextRequest) {
         }
 
         // 更新後の利用情報を取得
-        const { data: updatedUsageData } = await supabaseRpc
-            .rpc('can_use_service', { p_user_id: user.id });
-        const updatedUsageRows = updatedUsageData as CanUseServiceResult[] | null;
+        let updatedUsageRows: CanUseServiceResult[] | null = null;
+        try {
+            const { data: updatedUsageData } = await supabaseRpc
+                .rpc('can_use_service', { p_user_id: user.id });
+            updatedUsageRows = updatedUsageData as CanUseServiceResult[] | null;
+        } catch {
+            // 無視（無料再採点のみでプランが無い等の場合に備える）
+        }
         
         const usageInfo = updatedUsageRows?.[0] ? {
             remainingCount: updatedUsageRows[0].remaining_count,
@@ -406,6 +537,54 @@ export async function POST(req: NextRequest) {
             usageLimit: updatedUsageRows[0].usage_limit,
             planName: updatedUsageRows[0].plan_name,
         } : null;
+
+        // 再採点トークンを発行／更新（成功したラベルのみ）
+        if (regradeSecret) {
+            for (const item of results) {
+                if (!item.result || item.error) continue;
+
+                // 無料再採点（トークン消費）
+                const existing = freeRegradeByLabel.get(item.label);
+                if (existing) {
+                    const verified = verifyRegradeToken({ secret: regradeSecret, token: existing.token });
+                    if (verified.ok) {
+                        const remaining = Math.max(0, verified.payload.remaining - 1);
+                        const nextToken = createRegradeToken({
+                            secret: regradeSecret,
+                            userId: user.id,
+                            label: item.label,
+                            fingerprint: deviceFingerprint,
+                            remaining,
+                            ttlSeconds: REGRADE_TOKEN_TTL_SECONDS,
+                        });
+                        item.regradeToken = nextToken;
+                        item.regradeRemaining = remaining;
+                        item.regradeMode = 'free';
+                        continue;
+                    }
+                }
+
+                // 初回（または有料）採点後に新規トークンを発行
+                const nextToken = createRegradeToken({
+                    secret: regradeSecret,
+                    userId: user.id,
+                    label: item.label,
+                    fingerprint: deviceFingerprint,
+                    remaining: REGRADE_MAX_FREE_TIMES_PER_LABEL,
+                    ttlSeconds: REGRADE_TOKEN_TTL_SECONDS,
+                });
+                item.regradeToken = nextToken;
+                item.regradeRemaining = REGRADE_MAX_FREE_TIMES_PER_LABEL;
+                item.regradeMode = 'new';
+            }
+        } else {
+            // secretが無い場合はトークンを返さない（再採点無料の保証ができないため）
+            for (const item of results) {
+                item.regradeToken = null;
+                item.regradeRemaining = null;
+                item.regradeMode = 'none';
+            }
+        }
 
         return NextResponse.json({ 
             status: 'success', 

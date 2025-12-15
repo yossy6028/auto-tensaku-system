@@ -1,5 +1,7 @@
 /* eslint-disable @next/next/no-img-element */
 import React from 'react';
+import Image from 'next/image';
+import logo from '@/../public/logo.jpg';
 
 interface DeductionDetail {
     reason?: string;
@@ -106,10 +108,13 @@ export const GradingReport = React.forwardRef<HTMLDivElement, GradingReportProps
             >
                 {/* Brand (small) */}
                 <div className="flex items-center gap-3 mb-4 print:mb-3">
-                    <img
-                        src="/logo.jpg"
+                    <Image
+                        src={logo}
                         alt="EduShift"
-                        className="w-10 h-10 rounded-lg border border-slate-200 shadow-sm object-cover print:w-8 print:h-8"
+                        className="rounded-lg border border-slate-200 shadow-sm object-cover print:w-8 print:h-8"
+                        width={40}
+                        height={40}
+                        priority
                     />
                     <div className="leading-tight">
                         <p className="text-xs text-slate-500 print:text-[11px]">auto-tensaku-system</p>

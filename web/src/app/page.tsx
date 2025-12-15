@@ -122,6 +122,9 @@ export default function Home() {
   const [confirmedTexts, setConfirmedTexts] = useState<Record<string, string>>({});
   const [currentOcrLabel, setCurrentOcrLabel] = useState<string>('');
 
+  // OCR手動修正モーダル
+  const [ocrEditModal, setOcrEditModal] = useState<{ label: string; text: string; strictness: GradingStrictness } | null>(null);
+
   // PDFページ番号指定（複数ページPDF対応）
   const [pdfPageInfo, setPdfPageInfo] = useState<{
     answerPage: string;      // 答案のあるページ番号
@@ -658,6 +661,123 @@ export default function Home() {
     } catch (err) {
       console.error('[Page] compressWithTimeout error:', err);
       return files;
+    }
+  };
+
+  const openOcrEditModal = (label: string, initialText: string, strictness: GradingStrictness) => {
+    setOcrEditModal({ label, text: initialText, strictness });
+  };
+
+  const runManualOcrRegrade = async () => {
+    if (!ocrEditModal) return;
+    const { label, text, strictness } = ocrEditModal;
+
+    if (!user || !session) {
+      openAuthModal('signin');
+      return;
+    }
+
+    if (uploadedFiles.length === 0) {
+      setError('ファイルをアップロードしてください。');
+      return;
+    }
+
+    const hasImages = uploadedFiles.some(f => isImageFile(f));
+    let filesToUse = uploadedFiles;
+
+    if (hasImages) {
+      setIsCompressing(true);
+      setCompressionProgress(0);
+      setCompressionFileName('');
+
+      try {
+        filesToUse = await compressWithTimeout(
+          uploadedFiles,
+          (progress, fileName) => {
+            setCompressionProgress(progress);
+            setCompressionFileName(fileName);
+          }
+        );
+      } catch (err) {
+        console.error('[Page] Manual regrade compression error:', err);
+        filesToUse = uploadedFiles;
+      } finally {
+        setIsCompressing(false);
+        setCompressionProgress(0);
+        setCompressionFileName('');
+      }
+    }
+
+    const MAX_TOTAL_SIZE = 3.5 * 1024 * 1024;
+    const MAX_SINGLE_FILE_SIZE = 4 * 1024 * 1024;
+    const totalSize = filesToUse.reduce((sum, file) => sum + file.size, 0);
+
+    const oversizedFile = filesToUse.find(file => file.size > MAX_SINGLE_FILE_SIZE);
+    if (oversizedFile) {
+      setError(`ファイル「${oversizedFile.name}」が大きすぎます（${(oversizedFile.size / 1024 / 1024).toFixed(1)}MB）。4MB以下のファイルをアップロードしてください。`);
+      return;
+    }
+
+    if (totalSize > MAX_TOTAL_SIZE) {
+      const totalMB = (totalSize / 1024 / 1024).toFixed(1);
+      const maxMB = (MAX_TOTAL_SIZE / 1024 / 1024).toFixed(1);
+      setError(`ファイルの合計サイズが大きすぎます（${totalMB}MB）。合計${maxMB}MB以下になるように、ファイルを分割してください。`);
+      return;
+    }
+
+    setIsLoading(true);
+    setError(null);
+    setRequirePlan(false);
+
+    const formData = new FormData();
+    formData.append('targetLabels', JSON.stringify([label]));
+    formData.append('confirmedTexts', JSON.stringify({ [label]: text }));
+    formData.append('strictness', strictness);
+    if (deviceInfo?.fingerprint) {
+      formData.append('deviceFingerprint', deviceInfo.fingerprint);
+    }
+    if (pdfPageInfo.answerPage || pdfPageInfo.problemPage || pdfPageInfo.modelAnswerPage) {
+      formData.append('pdfPageInfo', JSON.stringify(pdfPageInfo));
+    }
+    formData.append('fileRoles', JSON.stringify(fileRoles));
+
+    filesToUse.forEach((file) => {
+      formData.append('files', file);
+    });
+
+    try {
+      const controller = new AbortController();
+      const timeoutId = setTimeout(() => controller.abort(), 5 * 60 * 1000);
+
+      const res = await fetch('/api/grade', {
+        method: 'POST',
+        body: formData,
+        credentials: 'include',
+        signal: controller.signal,
+      });
+      clearTimeout(timeoutId);
+
+      const data = await res.json();
+      if (data.status === 'error') {
+        setError(data.message);
+        if (data.requirePlan) setRequirePlan(true);
+      } else {
+        setResults(data.results);
+        if (Array.isArray(data.results)) ingestRegradeInfo(data.results);
+        refreshUsageInfo().catch((err) => {
+          console.warn('Failed to refresh usage info:', err);
+        });
+        setOcrEditModal(null);
+      }
+    } catch (err) {
+      console.error('[Page] Manual regrade error:', err);
+      if (err instanceof Error && err.name === 'AbortError') {
+        setError('採点処理がタイムアウトしました（5分経過）。');
+      } else {
+        setError('採点処理中にエラーが発生しました。');
+      }
+    } finally {
+      setIsLoading(false);
     }
   };
 
@@ -2776,6 +2896,21 @@ export default function Home() {
                               className="px-3 py-2 rounded-lg text-xs font-bold bg-rose-600 text-white hover:bg-rose-700 disabled:opacity-50 disabled:cursor-not-allowed"
                             >
                               もっと厳しくで再採点（無料）
+                            </button>
+                            <button
+                              type="button"
+                              onClick={() => {
+                                const initialText =
+                                  res.result?.grading_result?.recognized_text_full ||
+                                  res.result?.grading_result?.recognized_text ||
+                                  confirmedTexts[res.label] ||
+                                  '';
+                                openOcrEditModal(res.label, initialText, res.strictness || gradingStrictness);
+                              }}
+                              disabled={isLoading}
+                              className="px-3 py-2 rounded-lg text-xs font-bold bg-slate-600 text-white hover:bg-slate-700 disabled:opacity-50 disabled:cursor-not-allowed"
+                            >
+                              AI読み取り結果を修正して再採点（無料）
                             </button>
                           </div>
                           {!regradeByLabel[res.label]?.token && (

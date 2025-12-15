@@ -652,27 +652,12 @@ export default function Home() {
             }
           );
           
-          // 圧縮後のサイズをチェック
+          // 圧縮結果をログ出力
           const totalSize = processedFiles.reduce((sum, f) => sum + f.size, 0);
-          const MAX_SIZE = 3.5 * 1024 * 1024; // 3.5MB
-          if (totalSize > MAX_SIZE) {
-            const sizeMB = (totalSize / 1024 / 1024).toFixed(1);
-            console.warn(`[Page] Files still too large after compression: ${sizeMB}MB`);
-            setError(`画像を圧縮しましたが、合計サイズが大きすぎます（${sizeMB}MB）。ファイル数を減らすか、より小さい画像をお使いください。`);
-            setIsCompressing(false);
-            return; // ファイル追加を中止
-          }
+          console.log(`[Page] Compression complete: ${(totalSize / 1024 / 1024).toFixed(2)}MB (${processedFiles.length} files)`);
         } catch (err) {
           console.error('[Page] Compression error:', err);
-          // 圧縮に失敗した場合、サイズをチェック
-          const totalSize = files.reduce((sum, f) => sum + f.size, 0);
-          const MAX_SIZE = 3.5 * 1024 * 1024;
-          if (totalSize > MAX_SIZE) {
-            const sizeMB = (totalSize / 1024 / 1024).toFixed(1);
-            setError(`画像の圧縮に失敗しました。ファイルサイズが大きすぎます（${sizeMB}MB）。より小さい画像をお使いください。`);
-            setIsCompressing(false);
-            return; // ファイル追加を中止
-          }
+          // 圧縮に失敗しても元のファイルで続行
           processedFiles = files;
         } finally {
           setIsCompressing(false);

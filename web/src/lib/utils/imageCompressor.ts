@@ -95,20 +95,14 @@ export async function compressImage(
     try {
         console.log(`[ImageCompressor] Starting compression: ${file.name} (${(file.size / 1024 / 1024).toFixed(2)}MB)`);
         
-        // タイムアウト付きで圧縮を実行（8秒）
-        const compressionPromise = imageCompression(file, {
+        // 圧縮を実行（タイムアウトなし - WebWorkerで処理されるため）
+        const compressedBlob = await imageCompression(file, {
             maxSizeMB: options.maxSizeMB,
             maxWidthOrHeight: options.maxWidthOrHeight,
             useWebWorker: options.useWebWorker,
             initialQuality: options.initialQuality,
             onProgress: onProgress,
         });
-
-        const timeoutPromise = new Promise<Blob>((_, reject) => {
-            setTimeout(() => reject(new Error(`Compression timeout for ${file.name}`)), 8000);
-        });
-
-        const compressedBlob = await Promise.race([compressionPromise, timeoutPromise]);
 
         // Blobを元のファイル名でFileに変換
         const compressedFile = new File(
@@ -173,7 +167,7 @@ export async function compressMultipleImages(
     const compressedFiles: File[] = [];
     let currentTotalSize = 0;
     const startTime = Date.now();
-    const MAX_COMPRESSION_TIME = 60000; // 60秒のタイムアウト
+    const MAX_COMPRESSION_TIME = 120000; // 120秒のタイムアウト（大きな画像対応）
     const originalSize = files.reduce((sum, f) => sum + f.size, 0);
 
     for (let i = 0; i < files.length; i++) {
@@ -208,8 +202,8 @@ export async function compressMultipleImages(
 
         let compressedFile: File;
         try {
-            // タイムアウト付きで圧縮を実行
-            const compressionPromise = compressImage(
+            // 圧縮を実行（タイムアウトなし - 大きな画像は時間がかかる）
+            compressedFile = await compressImage(
                 file,
                 dynamicOptions,
                 // 個別ファイルの進捗（全体進捗に加算）
@@ -222,13 +216,8 @@ export async function compressMultipleImages(
                     }
                 }
             );
-            
-            const timeoutPromise = new Promise<File>((_, reject) => {
-                setTimeout(() => reject(new Error('Compression timeout for single file')), 10000); // 10秒でタイムアウト
-            });
-            
-            compressedFile = await Promise.race([compressionPromise, timeoutPromise]);
         } catch (err) {
+            console.error(`[ImageCompressor] Error compressing ${file.name}:`, err);
             // エラー時は元のファイルを使用
             compressedFile = file;
         }

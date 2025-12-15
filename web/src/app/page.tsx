@@ -1428,12 +1428,12 @@ export default function Home() {
                   新規登録（無料）
                 </button>
 
-                <div className="pt-4 border-t border-slate-200 space-y-2">
+                <div className="pt-4 border-t border-slate-200 space-y-3">
                   <Link
                     href="/usage"
-                    className="flex items-center justify-center text-sm text-slate-600 hover:text-indigo-600 transition-colors"
+                    className="flex items-center justify-center w-full py-3 px-6 bg-gradient-to-r from-indigo-50 to-violet-50 text-indigo-700 font-bold rounded-xl border-2 border-indigo-200 hover:border-indigo-400 hover:from-indigo-100 hover:to-violet-100 transition-all shadow-sm hover:shadow-md"
                   >
-                    <BookOpen className="w-4 h-4 mr-1" />
+                    <BookOpen className="w-5 h-5 mr-2" />
                     使い方を見る
                   </Link>
                   <Link

@@ -72,7 +72,7 @@ export default function RootLayout({
                     href="/privacy"
                     className="hover:text-white transition-colors"
                   >
-                    プライバシーポリシー
+                    本アプリケーションについて（プライバシーポリシー他）
                   </Link>
                 </nav>
 

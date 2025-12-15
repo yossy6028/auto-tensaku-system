@@ -155,7 +155,7 @@ export default function PricingPage() {
               <p className="text-amber-700 leading-relaxed">
                 すべてのプランにおいて、<strong className="text-amber-900 border-b border-amber-300">1アカウントあたり最大2台のデバイス</strong>でのみご利用いただけます。
                 塾や学校で複数の教室でアカウントを共有することは利用規約で禁止されています。
-                <span className="block mt-2 text-sm opacity-80">※ デバイス制限の詳細については、<Link href="/privacy" className="underline hover:text-amber-900">プライバシーポリシー</Link>をご確認ください。</span>
+                <span className="block mt-2 text-sm opacity-80">※ デバイス制限の詳細については、<Link href="/privacy" className="underline hover:text-amber-900">本アプリケーションについて（プライバシーポリシー他）</Link>をご確認ください。</span>
               </p>
             </div>
           </div>

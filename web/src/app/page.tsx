@@ -3255,6 +3255,52 @@ export default function Home() {
         />
       )}
 
+      {/* OCR Edit Modal */}
+      {ocrEditModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50 backdrop-blur-sm">
+          <div className="bg-white rounded-2xl shadow-2xl max-w-2xl w-full max-h-[90vh] overflow-y-auto border border-slate-200">
+            <div className="flex items-center justify-between px-6 py-4 border-b border-slate-200">
+              <div>
+                <p className="text-xs text-slate-500">ラベル: {ocrEditModal.label}</p>
+                <h2 className="text-lg font-bold text-slate-800">AI読み取り結果を修正して再採点</h2>
+              </div>
+              <button
+                onClick={() => setOcrEditModal(null)}
+                className="text-slate-400 hover:text-slate-600 p-2 rounded-lg hover:bg-slate-100 transition-colors"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+            <div className="p-6 space-y-4">
+              <p className="text-sm text-slate-600">
+                読み取り結果に誤りがある場合、ここで修正して再採点できます（無料）。
+              </p>
+              <textarea
+                value={ocrEditModal.text}
+                onChange={(e) => setOcrEditModal(prev => prev ? { ...prev, text: e.target.value } : prev)}
+                className="w-full min-h-[220px] p-4 border border-slate-300 rounded-xl focus:outline-none focus:ring-2 focus:ring-indigo-500 bg-white text-slate-800 leading-relaxed font-mono"
+                placeholder="ここに読み取り結果を修正してください"
+              />
+            </div>
+            <div className="px-6 py-4 border-t border-slate-200 flex items-center justify-end gap-3">
+              <button
+                onClick={() => setOcrEditModal(null)}
+                className="px-4 py-2 text-slate-600 hover:text-slate-800 font-medium transition-colors"
+              >
+                キャンセル
+              </button>
+              <button
+                onClick={runManualOcrRegrade}
+                disabled={isLoading || !ocrEditModal.text.trim()}
+                className="px-6 py-2 bg-indigo-600 text-white rounded-lg font-bold hover:bg-indigo-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+              >
+                修正して再採点する
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* File Role Selection Modal */}
       {showFileRoleModal && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50 backdrop-blur-sm">

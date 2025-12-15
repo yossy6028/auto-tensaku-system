@@ -104,6 +104,19 @@ export const GradingReport = React.forwardRef<HTMLDivElement, GradingReportProps
                 ref={ref}
                 className="p-8 bg-white text-slate-800 font-sans max-w-[210mm] mx-auto print:max-w-none print:p-4 h-full"
             >
+                {/* Brand (small) */}
+                <div className="flex items-center gap-3 mb-4 print:mb-3">
+                    <img
+                        src="/logo.jpg"
+                        alt="EduShift"
+                        className="w-10 h-10 rounded-lg border border-slate-200 shadow-sm object-cover print:w-8 print:h-8"
+                    />
+                    <div className="leading-tight">
+                        <p className="text-xs text-slate-500 print:text-[11px]">auto-tensaku-system</p>
+                        <p className="text-sm font-bold text-slate-800 print:text-xs">EduShift</p>
+                    </div>
+                </div>
+
                 {/* 問題番号を最上部に大きく表示 */}
                 <div className="mb-6 pb-4 border-b-2 border-indigo-500 print:break-after-avoid print:mb-4 print:pb-3">
                     <div className="inline-block bg-indigo-600 text-white px-6 py-3 rounded-lg shadow-md print:bg-indigo-600 print:text-white">

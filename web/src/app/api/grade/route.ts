@@ -141,7 +141,7 @@ function validateFile(file: File): void {
     
     // ファイルサイズ検証
     if (file.size > MAX_SINGLE_FILE_SIZE) {
-        throw new Error(`ファイル「${file.name}」が大きすぎます（${(file.size / 1024 / 1024).toFixed(1)}MB）。4MB以下のファイルをアップロードしてください。`);
+        throw new Error(`ファイル「${file.name}」が大きすぎます（${(file.size / 1024 / 1024).toFixed(1)}MB）。スマホで撮影した画像は自動圧縮されますが、圧縮に失敗した可能性があります。画像を小さくするか、別のファイル形式でお試しください。`);
     }
     
     // ファイル名検証（パストラバーサル防止）

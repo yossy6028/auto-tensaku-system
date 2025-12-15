@@ -651,9 +651,28 @@ export default function Home() {
               setCompressionFileName(fileName);
             }
           );
+          
+          // 圧縮後のサイズをチェック
+          const totalSize = processedFiles.reduce((sum, f) => sum + f.size, 0);
+          const MAX_SIZE = 3.5 * 1024 * 1024; // 3.5MB
+          if (totalSize > MAX_SIZE) {
+            const sizeMB = (totalSize / 1024 / 1024).toFixed(1);
+            console.warn(`[Page] Files still too large after compression: ${sizeMB}MB`);
+            setError(`画像を圧縮しましたが、合計サイズが大きすぎます（${sizeMB}MB）。ファイル数を減らすか、より小さい画像をお使いください。`);
+            setIsCompressing(false);
+            return; // ファイル追加を中止
+          }
         } catch (err) {
           console.error('[Page] Compression error:', err);
-          // 圧縮に失敗しても元のファイルで続行
+          // 圧縮に失敗した場合、サイズをチェック
+          const totalSize = files.reduce((sum, f) => sum + f.size, 0);
+          const MAX_SIZE = 3.5 * 1024 * 1024;
+          if (totalSize > MAX_SIZE) {
+            const sizeMB = (totalSize / 1024 / 1024).toFixed(1);
+            setError(`画像の圧縮に失敗しました。ファイルサイズが大きすぎます（${sizeMB}MB）。より小さい画像をお使いください。`);
+            setIsCompressing(false);
+            return; // ファイル追加を中止
+          }
           processedFiles = files;
         } finally {
           setIsCompressing(false);
@@ -1102,11 +1121,19 @@ export default function Home() {
 
     try {
       console.log('[Page] Sending request to /api/grade...');
+      
+      // 5分のタイムアウトを設定
+      const controller = new AbortController();
+      const timeoutId = setTimeout(() => controller.abort(), 5 * 60 * 1000);
+      
       const res = await fetch('/api/grade', {
         method: 'POST',
         body: formData,
         credentials: 'include',
+        signal: controller.signal,
       });
+      clearTimeout(timeoutId);
+      
       console.log('[Page] Response status:', res.status);
 
       const data = await res.json();
@@ -1126,7 +1153,11 @@ export default function Home() {
       }
     } catch (err) {
       console.error('[Page] Grading error:', err);
-      setError('採点処理中にエラーが発生しました。');
+      if (err instanceof Error && err.name === 'AbortError') {
+        setError('採点処理がタイムアウトしました（5分経過）。画像ファイルのサイズが大きい場合、圧縮してから再度お試しください。');
+      } else {
+        setError('採点処理中にエラーが発生しました。ネットワーク接続を確認し、再度お試しください。');
+      }
     } finally {
       setIsLoading(false);
       setOcrFlowStep('idle');
@@ -1270,11 +1301,19 @@ export default function Home() {
 
     try {
       console.log('[Page] Sending request to /api/grade...');
+      
+      // 5分のタイムアウトを設定
+      const controller = new AbortController();
+      const timeoutId = setTimeout(() => controller.abort(), 5 * 60 * 1000);
+      
       const res = await fetch('/api/grade', {
         method: 'POST',
         body: formData,
         credentials: 'include',
+        signal: controller.signal,
       });
+      clearTimeout(timeoutId);
+      
       console.log('[Page] Response status:', res.status);
 
       // レスポンスをテキストで取得してからJSONパース（エラー時のデバッグ用）
@@ -1318,8 +1357,12 @@ export default function Home() {
       }
     } catch (err: unknown) {
       console.error('[Page] Grading error:', err);
-      const message = err instanceof Error ? err.message : '通信エラーが発生しました。';
-      setError(message);
+      if (err instanceof Error && err.name === 'AbortError') {
+        setError('採点処理がタイムアウトしました（5分経過）。画像ファイルのサイズが大きい場合、圧縮してから再度お試しください。');
+      } else {
+        const message = err instanceof Error ? err.message : '通信エラーが発生しました。';
+        setError(message);
+      }
     } finally {
       console.log('[Page] Grading process complete, clearing loading state');
       setIsLoading(false);
@@ -3069,7 +3112,7 @@ export default function Home() {
 
             <div className="p-6 space-y-4">
               <p className="text-sm text-slate-600 mb-4">
-                各ファイルが「答案」「問題」「解答」のどれに該当するか選択してください。
+                各ファイルが「答案」「問題」「模範解答」のどれに該当するか選択してください。
               </p>
 
               {pendingFiles.map((file, index) => {
@@ -3077,8 +3120,8 @@ export default function Home() {
                 const roleOptions: { value: FileRole; label: string; icon: string }[] = [
                   { value: 'answer', label: '答案', icon: '📝' },
                   { value: 'problem', label: '問題', icon: '📄' },
-                  { value: 'model', label: '解答', icon: '✅' },
-                  { value: 'problem_model', label: '問題+解答', icon: '📄✅' },
+                  { value: 'model', label: '模範解答', icon: '✅' },
+                  { value: 'problem_model', label: '問題+模範解答', icon: '📄✅' },
                   { value: 'answer_problem', label: '答案+問題', icon: '📝📄' },
                   { value: 'all', label: '全部', icon: '📚' },
                   { value: 'other', label: 'その他', icon: '📎' },

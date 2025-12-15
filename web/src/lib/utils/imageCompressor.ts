@@ -93,13 +93,22 @@ export async function compressImage(
     }
 
     try {
-        const compressedBlob = await imageCompression(file, {
+        console.log(`[ImageCompressor] Starting compression: ${file.name} (${(file.size / 1024 / 1024).toFixed(2)}MB)`);
+        
+        // タイムアウト付きで圧縮を実行（8秒）
+        const compressionPromise = imageCompression(file, {
             maxSizeMB: options.maxSizeMB,
             maxWidthOrHeight: options.maxWidthOrHeight,
             useWebWorker: options.useWebWorker,
             initialQuality: options.initialQuality,
             onProgress: onProgress,
         });
+
+        const timeoutPromise = new Promise<Blob>((_, reject) => {
+            setTimeout(() => reject(new Error(`Compression timeout for ${file.name}`)), 8000);
+        });
+
+        const compressedBlob = await Promise.race([compressionPromise, timeoutPromise]);
 
         // Blobを元のファイル名でFileに変換
         const compressedFile = new File(
@@ -115,7 +124,8 @@ export async function compressImage(
         return compressedFile;
     } catch (error) {
         console.error('[ImageCompressor] Compression failed:', error);
-        // 圧縮失敗時は元のファイルを返す
+        // 圧縮失敗時は元のファイルを返す（ただしログを出力）
+        console.warn(`[ImageCompressor] Using original file: ${file.name} (${(file.size / 1024 / 1024).toFixed(2)}MB)`);
         return file;
     }
 }

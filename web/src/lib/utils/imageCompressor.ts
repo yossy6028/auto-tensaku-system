@@ -27,7 +27,7 @@ export type CompressionOptions = {
  * WebWorkerを無効化（一部のブラウザ/環境で動作しないため）
  */
 export const DEFAULT_COMPRESSION_OPTIONS: CompressionOptions = {
-    maxSizeMB: 0.8,              // 800KB以下に圧縮（複数ファイル対応）
+    maxSizeMB: 0.6,              // 600KB以下に圧縮（複数ファイル対応）
     maxWidthOrHeight: 2048,      // 2048px以下にリサイズ（テキスト可読性維持）
     useWebWorker: false,         // メインスレッドで処理（WebWorker問題回避）
     initialQuality: 0.8,         // 80%品質
@@ -37,7 +37,7 @@ export const DEFAULT_COMPRESSION_OPTIONS: CompressionOptions = {
  * 高品質圧縮設定（文字の多い資料向け）
  */
 export const HIGH_QUALITY_OPTIONS: CompressionOptions = {
-    maxSizeMB: 1.2,
+    maxSizeMB: 0.85,
     maxWidthOrHeight: 2560,
     useWebWorker: false,         // メインスレッドで処理
     initialQuality: 0.85,
@@ -140,16 +140,9 @@ export async function compressImage(
  * ファイル数に応じて最適な圧縮設定を選択
  */
 export function getOptimalCompressionOptions(fileCount: number): CompressionOptions {
-    if (fileCount <= 3) {
-        // 少数ファイル: 高品質
-        return HIGH_QUALITY_OPTIONS;
-    } else if (fileCount <= 7) {
-        // 中程度: デフォルト
-        return DEFAULT_COMPRESSION_OPTIONS;
-    } else {
-        // 多数ファイル（8枚以上）: 低品質（合計サイズ制限対応、10枚でも処理可能）
-        return LOW_QUALITY_OPTIONS;
-    }
+    if (fileCount <= 2) return HIGH_QUALITY_OPTIONS;        // 少数は少し緩め
+    if (fileCount <= 7) return DEFAULT_COMPRESSION_OPTIONS;  // 中程度
+    return LOW_QUALITY_OPTIONS;                              // 多数（8枚以上）
 }
 
 /**

@@ -30,16 +30,14 @@ const plans = [
   },
   {
     name: 'スタンダード',
-    originalPrice: 2980,
-    price: 1980,
+    originalPrice: 3980,
+    price: 2980,
     period: '月額',
     description: '定期的に学習したい方に',
     features: [
       '月30回まで採点可能',
       '詳細なフィードバック',
       '書き直し例の提示',
-      'メールサポート',
-      '優先サポート',
     ],
     limit: '30回/月',
     icon: Sparkles,
@@ -54,16 +52,15 @@ const plans = [
   },
   {
     name: '無制限',
-    originalPrice: 5980,
-    price: 3980,
+    originalPrice: 9800,
+    price: 5980,
     period: '月額',
-    description: '本格的に受験対策したい方に',
+    description: '塾・講師向け（2デバイスでのみ使用可）',
     features: [
       '採点回数無制限',
       '詳細なフィードバック',
       '書き直し例の提示',
-      '優先サポート',
-      '専用サポートライン',
+      'メールサポート',
     ],
     limit: '無制限',
     icon: Crown,
@@ -126,7 +123,7 @@ export default function PricingPage() {
             <div className="absolute inset-0 bg-gradient-to-r from-yellow-400/40 to-orange-500/40 blur-xl rounded-2xl transform group-hover:scale-110 transition-transform duration-500"></div>
             <div className="relative bg-white/80 backdrop-blur-xl border border-yellow-400 rounded-2xl px-8 py-4 shadow-xl">
               <p className="text-yellow-800 font-bold text-lg">
-                ✨ 今だけ全プラン <span className="text-transparent bg-clip-text bg-gradient-to-r from-red-500 to-orange-600 text-2xl font-black">最大34%OFF</span> でご提供中！ ✨
+                ✨ 今だけ全プラン <span className="text-transparent bg-clip-text bg-gradient-to-r from-red-500 to-orange-600 text-2xl font-black">期間限定特価</span> でご提供中！ ✨
               </p>
             </div>
           </div>

@@ -37,8 +37,9 @@ export function PricingPlans({ onSelectPlan, showCurrent = true }: PricingPlansP
     features.push('改善アドバイス付き');
     features.push('模範解答の提示');
     
-    if (plan.usage_limit === null || plan.usage_limit >= 100) {
-      features.push('優先サポート');
+    // メールサポートは無制限プランのみ
+    if (plan.usage_limit === null) {
+      features.push('メールサポート');
     }
     
     return features;

@@ -1428,7 +1428,14 @@ export default function Home() {
                   新規登録（無料）
                 </button>
 
-                <div className="pt-4 border-t border-slate-200">
+                <div className="pt-4 border-t border-slate-200 space-y-2">
+                  <Link
+                    href="/usage"
+                    className="flex items-center justify-center text-sm text-slate-600 hover:text-indigo-600 transition-colors"
+                  >
+                    <BookOpen className="w-4 h-4 mr-1" />
+                    使い方を見る
+                  </Link>
                   <Link
                     href="/pricing"
                     className="flex items-center justify-center text-sm text-slate-600 hover:text-indigo-600 transition-colors"
@@ -1486,6 +1493,15 @@ export default function Home() {
           <div className="flex items-center gap-4">
             {user && session && usageInfo && (
               <UsageStatus compact className="hidden md:flex" />
+            )}
+            {user && (
+              <Link
+                href="/usage"
+                className="flex items-center text-sm font-medium text-slate-600 hover:text-indigo-600 transition-colors px-3 py-2 rounded-lg hover:bg-indigo-50/50"
+              >
+                <BookOpen className="w-4 h-4 mr-2" />
+                <span className="hidden sm:inline">使い方</span>
+              </Link>
             )}
             <Link
               href="/pricing"

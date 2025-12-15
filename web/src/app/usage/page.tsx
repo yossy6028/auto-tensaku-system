@@ -1,21 +1,12 @@
 'use client';
 
-import React, { useEffect } from 'react';
-import { useRouter } from 'next/navigation';
+import React from 'react';
 import Link from 'next/link';
 import { ArrowLeft, BookOpen, Upload, FileText, CheckCircle, Image, FileCheck, Lightbulb } from 'lucide-react';
 import { useAuth } from '@/components/AuthProvider';
 
 export default function UsagePage() {
   const { user, isLoading } = useAuth();
-  const router = useRouter();
-
-  useEffect(() => {
-    if (!isLoading && !user) {
-      // ログインしていない場合はトップページにリダイレクト
-      router.push('/');
-    }
-  }, [user, isLoading, router]);
 
   if (isLoading) {
     return (
@@ -26,10 +17,6 @@ export default function UsagePage() {
         </div>
       </main>
     );
-  }
-
-  if (!user) {
-    return null; // リダイレクト中
   }
 
   return (

@@ -190,7 +190,7 @@ export class EduShiftGrader {
             const imageParts = this.buildContentSequence(categorizedFiles);
             
             const sanitizedLabel = targetLabel.replace(/[<>\\\"'`]/g, '').trim();
-            const ocrResult = await this.performOcr(sanitizedLabel, imageParts, categorizedFiles);
+            const ocrResult = await this.performOcr(sanitizedLabel, imageParts, categorizedFiles, pdfPageInfo);
             const text = (ocrResult.text || ocrResult.fullText).trim();
             const charCount = text.replace(/\s+/g, "").length;
             
@@ -264,19 +264,29 @@ export class EduShiftGrader {
      * Stage 1: OCR専用（JSON強制なし）
      * 答案ファイルからテキストを高精度で読み取る
      */
-    private async performOcr(targetLabel: string, imageParts: ContentPart[], categorizedFiles?: CategorizedFiles): Promise<{ text: string; fullText: string; matchedTarget: boolean }> {
+    private async performOcr(
+        targetLabel: string,
+        imageParts: ContentPart[],
+        categorizedFiles?: CategorizedFiles,
+        pdfPageInfo?: { answerPage?: string; problemPage?: string; modelAnswerPage?: string } | null
+    ): Promise<{ text: string; fullText: string; matchedTarget: boolean }> {
         console.log("[Grader] Stage 1: OCR開始");
 
         // OCR対象を選択（答案優先、なければ全画像）
         let targetParts: ContentPart[];
         if (categorizedFiles && categorizedFiles.studentFiles.length > 0) {
             console.log(`[Grader] 答案ファイル数: ${categorizedFiles.studentFiles.length}`);
-            // タイムアウト回避のため、答案ファイルが複数ある場合は最小サイズのものを1件だけ採用
-            const selectedAnswers = [...categorizedFiles.studentFiles]
-                .sort((a, b) => a.buffer.length - b.buffer.length)
-                .slice(0, 1);
+            const answerPages = this.parsePageRange(pdfPageInfo?.answerPage);
+            const MAX_ANSWER_PAGES = 10;
+
+            // ページ指定がある場合は該当ページのみ優先（pageNumber付きファイルが対象）
+            const prioritized = answerPages.size > 0
+                ? categorizedFiles.studentFiles.filter(f => f.pageNumber !== undefined && answerPages.has(f.pageNumber))
+                : categorizedFiles.studentFiles;
+
+            const selectedAnswers = (prioritized.length > 0 ? prioritized : categorizedFiles.studentFiles).slice(0, MAX_ANSWER_PAGES);
             if (selectedAnswers.length < categorizedFiles.studentFiles.length) {
-                console.warn("[Grader] 複数の答案が指定されたため、最小サイズの1件に絞り込んでOCRを実行します");
+                console.warn(`[Grader] 複数の答案が指定されたため、先頭から最大${MAX_ANSWER_PAGES}件を使用してOCRを実行します`);
             }
             targetParts = selectedAnswers.map(file => this.toGenerativePart(file));
         } else {
@@ -1324,7 +1334,7 @@ System Instructionに定義された以下のルールを厳密に適用して�
         // Stage 1: OCR（JSON強制なし）
         // 答案ファイルのみを使用して高精度読み取り
         // ========================================
-        const ocrResult = await this.performOcr(sanitizedLabel, imageParts, categorizedFiles);
+        const ocrResult = await this.performOcr(sanitizedLabel, imageParts, categorizedFiles, pdfPageInfo);
         const ocrText = (ocrResult.text || ocrResult.fullText).trim();
         
         // ========================================

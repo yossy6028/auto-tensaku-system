@@ -208,6 +208,10 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         .eq('id', userId)
         .single();
 
+      // #region agent log
+      fetch('http://127.0.0.1:7242/ingest/e78e9fd7-3fa2-45c5-b036-a4f10b20798a',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'AuthProvider.tsx:fetchProfile',message:'Profile query result',data:{userId,profileData:data,profileError:error?.message||null},timestamp:Date.now(),sessionId:'debug-session',hypothesisId:'E'})}).catch(()=>{});
+      // #endregion
+
       if (error) {
         // テーブルが存在しない、またはRLSポリシーでアクセスできない場合
         console.warn('[AuthProvider] Failed to fetch user profile:', error.message);
@@ -253,6 +257,10 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         .limit(1)
         .maybeSingle();
 
+      // #region agent log
+      fetch('http://127.0.0.1:7242/ingest/e78e9fd7-3fa2-45c5-b036-a4f10b20798a',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'AuthProvider.tsx:fetchSubscription',message:'Subscription query result',data:{userId,subscriptionData:data,subscriptionError:error?.message||null},timestamp:Date.now(),sessionId:'debug-session',hypothesisId:'C'})}).catch(()=>{});
+      // #endregion
+
       if (error) {
         // テーブルが存在しない、またはRLSポリシーでアクセスできない場合
         console.warn('[AuthProvider] Failed to fetch subscription:', error.message);
@@ -281,6 +289,10 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       };
       const { data, error } = await rpcClient.rpc('check_free_access', { p_user_id: userId });
 
+      // #region agent log
+      fetch('http://127.0.0.1:7242/ingest/e78e9fd7-3fa2-45c5-b036-a4f10b20798a',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'AuthProvider.tsx:fetchFreeAccessInfo',message:'check_free_access RPC result',data:{userId,rpcData:data,rpcError:(error as {message?:string})?.message||null},timestamp:Date.now(),sessionId:'debug-session',hypothesisId:'A,D'})}).catch(()=>{});
+      // #endregion
+
       if (error) {
         console.warn('[AuthProvider] Failed to fetch free access info:', error);
         setFreeAccessInfo(null);
@@ -298,6 +310,10 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
           promoEndDate: info.promo_end_date,
         };
         setFreeAccessInfo(freeInfo);
+
+        // #region agent log
+        fetch('http://127.0.0.1:7242/ingest/e78e9fd7-3fa2-45c5-b036-a4f10b20798a',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'AuthProvider.tsx:fetchFreeAccessInfo:modal-check',message:'Checking if modal should show',data:{freeAccessType:info.free_access_type,willShowModal:info.free_access_type==='expired'},timestamp:Date.now(),sessionId:'debug-session',hypothesisId:'A,D'})}).catch(()=>{});
+        // #endregion
 
         // 無料体験終了時にモーダル表示
         if (info.free_access_type === 'expired') {
@@ -529,6 +545,10 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
       const { data, error } = await rpcClient.rpc('can_use_service', { p_user_id: user.id });
 
+      // #region agent log
+      fetch('http://127.0.0.1:7242/ingest/e78e9fd7-3fa2-45c5-b036-a4f10b20798a',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'AuthProvider.tsx:refreshUsageInfo:can_use_service',message:'can_use_service RPC result',data:{userId:user.id,rpcData:data,rpcError:(error as {message?:string})?.message||null},timestamp:Date.now(),sessionId:'debug-session',hypothesisId:'B'})}).catch(()=>{});
+      // #endregion
+
       if (error) {
         console.warn('[AuthProvider] Failed to fetch usage info:', error);
         setUsageInfo({
@@ -554,6 +574,10 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
           planName: info.plan_name,
           accessType: info.access_type || 'none',
         });
+
+        // #region agent log
+        fetch('http://127.0.0.1:7242/ingest/e78e9fd7-3fa2-45c5-b036-a4f10b20798a',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'AuthProvider.tsx:refreshUsageInfo:usageResult',message:'Usage info set, checking if should call fetchFreeAccessInfo',data:{canUse:info.can_use,accessType:info.access_type,willCallFreeAccessInfo:!info.can_use&&info.access_type==='none'},timestamp:Date.now(),sessionId:'debug-session',hypothesisId:'B'})}).catch(()=>{});
+        // #endregion
 
         // 無料体験終了チェック
         if (!info.can_use && info.access_type === 'none') {
@@ -662,10 +686,14 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         // ユーザー固有のデータ取得（セッションがある場合のみ）
         if (session?.user && isMounted) {
           console.log('[AuthProvider] Fetching user specific data in background...');
+          // #region agent log
+          fetch('http://127.0.0.1:7242/ingest/e78e9fd7-3fa2-45c5-b036-a4f10b20798a',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'AuthProvider.tsx:initAuth:backgroundFetch',message:'Starting background data fetch for user',data:{userId:session.user.id,email:session.user.email},timestamp:Date.now(),sessionId:'debug-session',hypothesisId:'A'})}).catch(()=>{});
+          // #endregion
+          // 注意: fetchFreeAccessInfo は refreshUsageInfo 内でのみ呼ぶ（サブスクリプション確認後）
+          // 無条件で呼ぶと、有料プランユーザーにも「無料期間終了」モーダルが表示されてしまう
           Promise.all([
             fetchProfile(session.user.id).catch(() => {}),
             fetchSubscription(session.user.id).catch(() => {}),
-            fetchFreeAccessInfo(session.user.id).catch(() => {}),
             handleDeviceRegistration(session.user.id).catch(() => {})
           ]).catch(() => {});
         }
@@ -684,7 +712,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     return () => {
       isMounted = false;
     };
-  }, [supabase, fetchSystemSettings, fetchPlans, fetchProfile, fetchSubscription, fetchFreeAccessInfo, handleDeviceRegistration]);
+  }, [supabase, fetchSystemSettings, fetchPlans, fetchProfile, fetchSubscription, handleDeviceRegistration]);
 
   // 認証状態の変更を監視
   useEffect(() => {
@@ -701,7 +729,8 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
           // エラーは各関数内で処理されるため、ここでは静かに失敗させる
           await fetchProfile(session.user.id).catch(() => {});
           await fetchSubscription(session.user.id).catch(() => {});
-          await fetchFreeAccessInfo(session.user.id).catch(() => {});
+          // 注意: fetchFreeAccessInfo は refreshUsageInfo 内でのみ呼ぶ（サブスクリプション確認後）
+          // 無条件で呼ぶと、有料プランユーザーにも「無料期間終了」モーダルが表示されてしまう
           // 利用可否情報を更新（認証イベント由来で更新することで、useEffect内の同期setState連鎖を避ける）
           await refreshUsageInfo().catch(() => {});
           // デバイス登録処理
@@ -724,7 +753,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     return () => {
       authSubscription.unsubscribe();
     };
-  }, [supabase, fetchProfile, fetchSubscription, fetchFreeAccessInfo, handleDeviceRegistration, refreshUsageInfo]);
+  }, [supabase, fetchProfile, fetchSubscription, handleDeviceRegistration, refreshUsageInfo]);
 
   // 利用可否情報（usageInfo）の更新は、認証イベント（onAuthStateChange）と明示操作（refreshUsageInfo）で行う。
   // ※ useEffect内でrefreshUsageInfo/setStateを同期呼び出しすると、eslintのreact-hooks/set-state-in-effectに抵触するため。

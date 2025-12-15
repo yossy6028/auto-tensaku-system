@@ -3084,7 +3084,10 @@ export default function Home() {
                   const startIndex = uploadedFiles.length;
                   setUploadedFiles(prev => {
                     const next = [...prev, ...pendingFiles];
-                    setAnswerFileIndex(detectAnswerIndex(next, answerFileIndex));
+                    // 答案ファイルのインデックスを更新
+                    const currentAnswerIdx = answerFileIndex;
+                    const newAnswerIdx = detectAnswerIndex(next, currentAnswerIdx);
+                    setAnswerFileIndex(newAnswerIdx);
                     return next;
                   });
 

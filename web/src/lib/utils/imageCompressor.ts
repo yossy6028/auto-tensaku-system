@@ -20,11 +20,12 @@ export type CompressionOptions = {
 /**
  * デフォルトの圧縮設定
  * スマホ写真を効率的に圧縮しつつ、テキストの可読性を維持
+ * WebWorkerを無効化（一部のブラウザ/環境で動作しないため）
  */
 export const DEFAULT_COMPRESSION_OPTIONS: CompressionOptions = {
     maxSizeMB: 0.8,              // 800KB以下に圧縮（複数ファイル対応）
     maxWidthOrHeight: 2048,      // 2048px以下にリサイズ（テキスト可読性維持）
-    useWebWorker: true,          // バックグラウンド処理
+    useWebWorker: false,         // メインスレッドで処理（WebWorker問題回避）
     initialQuality: 0.8,         // 80%品質
 };
 
@@ -34,7 +35,7 @@ export const DEFAULT_COMPRESSION_OPTIONS: CompressionOptions = {
 export const HIGH_QUALITY_OPTIONS: CompressionOptions = {
     maxSizeMB: 1.2,
     maxWidthOrHeight: 2560,
-    useWebWorker: true,
+    useWebWorker: false,         // メインスレッドで処理
     initialQuality: 0.85,
 };
 
@@ -44,7 +45,7 @@ export const HIGH_QUALITY_OPTIONS: CompressionOptions = {
 export const LOW_QUALITY_OPTIONS: CompressionOptions = {
     maxSizeMB: 0.18,             // 10枚対応: 0.18MB × 10 = 1.8MB（3.5MB制限内、より安全なマージン）
     maxWidthOrHeight: 1100,       // さらに小さくリサイズ（テキスト可読性を維持しつつ）
-    useWebWorker: true,
+    useWebWorker: false,         // メインスレッドで処理
     initialQuality: 0.5,         // 品質を下げてサイズ削減
 };
 
@@ -95,14 +96,21 @@ export async function compressImage(
     try {
         console.log(`[ImageCompressor] Starting compression: ${file.name} (${(file.size / 1024 / 1024).toFixed(2)}MB)`);
         
-        // 圧縮を実行（タイムアウトなし - WebWorkerで処理されるため）
-        const compressedBlob = await imageCompression(file, {
+        // 圧縮を実行（30秒タイムアウト付き）
+        const compressionPromise = imageCompression(file, {
             maxSizeMB: options.maxSizeMB,
             maxWidthOrHeight: options.maxWidthOrHeight,
             useWebWorker: options.useWebWorker,
             initialQuality: options.initialQuality,
             onProgress: onProgress,
         });
+
+        // 30秒のタイムアウト
+        const timeoutPromise = new Promise<never>((_, reject) => {
+            setTimeout(() => reject(new Error('Compression timeout')), 30000);
+        });
+
+        const compressedBlob = await Promise.race([compressionPromise, timeoutPromise]);
 
         // Blobを元のファイル名でFileに変換
         const compressedFile = new File(

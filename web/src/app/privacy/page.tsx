@@ -32,10 +32,10 @@ export default function PrivacyPolicy() {
             </div>
           </div>
           <h1 className="text-4xl md:text-5xl font-black text-slate-800 tracking-tight mb-4">
-            プライバシーポリシー
+            本アプリケーションについて
           </h1>
           <p className="text-lg text-slate-600 max-w-2xl mx-auto">
-            EduShift 自動添削システムにおける個人情報の取り扱いについて
+            プライバシーポリシー、デバイス制限、その他の重要な情報
           </p>
           <p className="text-sm text-slate-500 mt-4">
             最終更新日: 2025年11月25日

@@ -15,7 +15,6 @@ const plans = [
       '月10回まで採点可能',
       '詳細なフィードバック',
       '書き直し例の提示',
-      'メールサポート',
     ],
     limit: '10回/月',
     icon: Zap,
@@ -224,7 +223,7 @@ export default function PricingPage() {
                   {/* Limit Badge */}
                   <div className={`${plan.badge} rounded-xl px-5 py-3 text-sm font-bold inline-flex items-center mb-8 w-full justify-center`}>
                     <span className="mr-2 opacity-80">採点回数:</span>
-                    <span className="text-lg">{plan.limit}</span>
+                    <span className={`text-2xl font-black ${plan.text} drop-shadow-sm`}>{plan.limit}</span>
                   </div>
 
                   {/* Features */}

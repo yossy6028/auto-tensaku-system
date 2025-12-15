@@ -163,6 +163,10 @@ export async function compressMultipleImages(
     const MAX_TOTAL_SIZE = 3.5 * 1024 * 1024; // 3.5MB制限
     let baseOptions = getOptimalCompressionOptions(totalFiles);
     
+    // #region agent log
+    fetch('http://127.0.0.1:7242/ingest/e78e9fd7-3fa2-45c5-b036-a4f10b20798a',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'imageCompressor.ts:165',message:'compressMultipleImages START',data:{totalFiles,originalSizes:files.map(f=>({name:f.name,size:f.size}))},timestamp:Date.now(),sessionId:'debug-session',hypothesisId:'A'})}).catch(()=>{});
+    // #endregion
+    
     // 10枚以上の場合、合計サイズを考慮して目標サイズを動的に調整
     if (totalFiles >= 10) {
         const targetSizePerFile = (MAX_TOTAL_SIZE * 0.8) / totalFiles; // 80%の安全マージン（より厳しく）
@@ -232,9 +236,16 @@ export async function compressMultipleImages(
 
         currentTotalSize += compressedFile.size;
         
+        // #region agent log
+        fetch('http://127.0.0.1:7242/ingest/e78e9fd7-3fa2-45c5-b036-a4f10b20798a',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'imageCompressor.ts:240',message:'File compressed',data:{index:i,fileName:file.name,originalSize:file.size,compressedSize:compressedFile.size,currentTotalSize,maxTotalSize:MAX_TOTAL_SIZE,willExceed:currentTotalSize>MAX_TOTAL_SIZE},timestamp:Date.now(),sessionId:'debug-session',hypothesisId:'A'})}).catch(()=>{});
+        // #endregion
+        
         // サイズ制限を超えた場合の警告と処理
         if (currentTotalSize > MAX_TOTAL_SIZE) {
             console.warn(`[ImageCompressor] Warning: Total size exceeded after ${i + 1} files: ${(currentTotalSize / 1024 / 1024).toFixed(2)}MB`);
+            // #region agent log
+            fetch('http://127.0.0.1:7242/ingest/e78e9fd7-3fa2-45c5-b036-a4f10b20798a',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'imageCompressor.ts:248',message:'SIZE LIMIT EXCEEDED - RETURNING EARLY',data:{processedCount:compressedFiles.length,totalFiles,currentTotalSize},timestamp:Date.now(),sessionId:'debug-session',hypothesisId:'A'})}).catch(()=>{});
+            // #endregion
             // 残りのファイルは圧縮せずにスキップ
             // ただし、既に圧縮済みのファイルだけを返す（元のファイルは含めない）
             return compressedFiles;

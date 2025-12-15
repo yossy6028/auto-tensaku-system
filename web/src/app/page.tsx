@@ -836,6 +836,10 @@ export default function Home() {
   const handleOcrStart = async (e: React.FormEvent) => {
     e.preventDefault();
 
+    // #region agent log
+    fetch('http://127.0.0.1:7242/ingest/e78e9fd7-3fa2-45c5-b036-a4f10b20798a',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'page.tsx:handleOcrStart',message:'OCR START',data:{selectedProblems,uploadedFilesCount:uploadedFiles.length},timestamp:Date.now(),sessionId:'debug-session',hypothesisId:'C'})}).catch(()=>{});
+    // #endregion
+
     if (!user) {
       openAuthModal('signin');
       return;
@@ -860,6 +864,9 @@ export default function Home() {
       }
       targetLabels = [currentLabel];
     }
+    
+    // #region agent log
+    fetch('http://127.0.0.1:7242/ingest/e78e9fd7-3fa2-45c5-b036-a4f10b20798a',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'page.tsx:handleOcrStart:targetLabels',message:'targetLabels determined',data:{targetLabels,count:targetLabels.length},timestamp:Date.now(),sessionId:'debug-session',hypothesisId:'C'})}).catch(()=>{});
 
     // 画像ファイルを圧縮（10枚対応）
     const hasImages = uploadedFiles.some(f => isImageFile(f));
@@ -909,7 +916,14 @@ export default function Home() {
     // 各ラベルに対してOCRを実行
     const newOcrResults: Record<string, { text: string; charCount: number }> = {};
 
+    // #region agent log
+    fetch('http://127.0.0.1:7242/ingest/e78e9fd7-3fa2-45c5-b036-a4f10b20798a',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'page.tsx:OCRLoop:start',message:'Starting OCR loop',data:{targetLabels,filesToUseCount:filesToUse.length},timestamp:Date.now(),sessionId:'debug-session',hypothesisId:'B'})}).catch(()=>{});
+    // #endregion
+
     for (const label of targetLabels) {
+      // #region agent log
+      fetch('http://127.0.0.1:7242/ingest/e78e9fd7-3fa2-45c5-b036-a4f10b20798a',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'page.tsx:OCRLoop:iteration',message:'Processing label',data:{label,currentResultsCount:Object.keys(newOcrResults).length},timestamp:Date.now(),sessionId:'debug-session',hypothesisId:'B'})}).catch(()=>{});
+      // #endregion
       setCurrentOcrLabel(label);
       
       const formData = new FormData();
@@ -987,6 +1001,10 @@ export default function Home() {
           charCount: data.ocrResult.charCount
         };
         
+        // #region agent log
+        fetch('http://127.0.0.1:7242/ingest/e78e9fd7-3fa2-45c5-b036-a4f10b20798a',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'page.tsx:OCRLoop:success',message:'OCR success for label',data:{label,charCount:data.ocrResult.charCount,newOcrResultsKeys:Object.keys(newOcrResults)},timestamp:Date.now(),sessionId:'debug-session',hypothesisId:'B'})}).catch(()=>{});
+        // #endregion
+        
         // 初期値として確認済みテキストにも設定
         setConfirmedTexts(prev => ({
           ...prev,
@@ -994,11 +1012,18 @@ export default function Home() {
         }));
       } catch (err) {
         console.error('OCR error:', err);
+        // #region agent log
+        fetch('http://127.0.0.1:7242/ingest/e78e9fd7-3fa2-45c5-b036-a4f10b20798a',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'page.tsx:OCRLoop:error',message:'OCR FAILED',data:{label,error:String(err)},timestamp:Date.now(),sessionId:'debug-session',hypothesisId:'B'})}).catch(()=>{});
+        // #endregion
         setError('OCR処理中にエラーが発生しました。');
         setOcrFlowStep('idle');
         return;
       }
     }
+
+    // #region agent log
+    fetch('http://127.0.0.1:7242/ingest/e78e9fd7-3fa2-45c5-b036-a4f10b20798a',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'page.tsx:OCRLoop:complete',message:'OCR loop COMPLETE',data:{newOcrResultsKeys:Object.keys(newOcrResults),targetLabelsCount:targetLabels.length,matchCount:Object.keys(newOcrResults).length===targetLabels.length},timestamp:Date.now(),sessionId:'debug-session',hypothesisId:'B,D'})}).catch(()=>{});
+    // #endregion
 
     setOcrResults(newOcrResults);
     setOcrFlowStep('confirm');
@@ -3170,6 +3195,9 @@ export default function Home() {
               <button
                 type="button"
                 onClick={() => {
+                  // #region agent log
+                  fetch('http://127.0.0.1:7242/ingest/e78e9fd7-3fa2-45c5-b036-a4f10b20798a',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'page.tsx:FileRoleModal:confirm',message:'Files confirmed',data:{pendingFilesCount:pendingFiles.length,pendingFileSizes:pendingFiles.map(f=>({name:f.name,size:f.size})),existingUploadedFilesCount:uploadedFiles.length},timestamp:Date.now(),sessionId:'debug-session',hypothesisId:'E'})}).catch(()=>{});
+                  // #endregion
                   // ファイルを追加
                   const startIndex = uploadedFiles.length;
                   setUploadedFiles(prev => {

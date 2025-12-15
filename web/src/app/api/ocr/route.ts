@@ -221,11 +221,6 @@ export async function POST(req: NextRequest) {
             );
         }
         
-        // #region agent log
-        const totalFileSize = files.reduce((sum, f) => sum + f.size, 0);
-        fetch('http://127.0.0.1:7242/ingest/e78e9fd7-3fa2-45c5-b036-a4f10b20798a',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'ocr/route.ts:218',message:'OCR API formData received',data:{targetLabel,filesCount:files.length,totalFileSizeMB:(totalFileSize/1024/1024).toFixed(2),maxAllowedMB:4.5,contentLength:req.headers.get('content-length')},timestamp:Date.now(),sessionId:'debug-session',runId:'run2',hypothesisId:'F'})}).catch(()=>{});
-        // #endregion
-
         if (!targetLabel || !files || files.length === 0) {
             // #region agent log
             fetch('http://127.0.0.1:7242/ingest/e78e9fd7-3fa2-45c5-b036-a4f10b20798a',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'ocr/route.ts:225',message:'OCR API validation failed',data:{hasTargetLabel:!!targetLabel,filesCount:files?.length||0},timestamp:Date.now(),sessionId:'debug-session',runId:'run2',hypothesisId:'F'})}).catch(()=>{});
@@ -241,6 +236,10 @@ export async function POST(req: NextRequest) {
         // フロントエンドで既にチェックしているが、念のためサーバー側でもチェック
         const totalFileSize = files.reduce((sum, f) => sum + f.size, 0);
         const MAX_REQUEST_SIZE = 3.5 * 1024 * 1024; // 3.5MB（Vercelの制限4.5MBに安全マージン）
+        
+        // #region agent log
+        fetch('http://127.0.0.1:7242/ingest/e78e9fd7-3fa2-45c5-b036-a4f10b20798a',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'ocr/route.ts:218',message:'OCR API formData received',data:{targetLabel,filesCount:files.length,totalFileSizeMB:(totalFileSize/1024/1024).toFixed(2),maxAllowedMB:4.5,contentLength:req.headers.get('content-length')},timestamp:Date.now(),sessionId:'debug-session',runId:'run2',hypothesisId:'F'})}).catch(()=>{});
+        // #endregion
         
         if (totalFileSize > MAX_REQUEST_SIZE) {
             // #region agent log

@@ -203,6 +203,7 @@ export class EduShiftGrader {
 
     /**
      * 確認済みテキストで採点を実行（OCR結果の修正後）
+     * @param problemCondition 問題条件オーバーライド（AIが誤読した字数制限などを手動で指定）
      */
     async gradeWithConfirmedText(
         targetLabel: string, 
@@ -210,7 +211,8 @@ export class EduShiftGrader {
         files: UploadedFilePart[],
         pdfPageInfo?: { answerPage?: string; problemPage?: string; modelAnswerPage?: string } | null,
         fileRoles?: Record<string, FileRole>,
-        strictness: GradingStrictness = DEFAULT_STRICTNESS
+        strictness: GradingStrictness = DEFAULT_STRICTNESS,
+        problemCondition?: string
     ) {
         try {
             // ファイルに役割情報を付与
@@ -227,7 +229,7 @@ export class EduShiftGrader {
             const sanitizedLabel = targetLabel.replace(/[<>\\\"'`]/g, '').trim();
             
             // Stage 2のみ実行（confirmedTextを使用）
-            return await this.executeGradingWithText(sanitizedLabel, confirmedText, imageParts, pdfPageInfo, strictness);
+            return await this.executeGradingWithText(sanitizedLabel, confirmedText, imageParts, pdfPageInfo, strictness, problemCondition);
         } catch (error: unknown) {
             return this.handleError(error);
         }
@@ -1220,15 +1222,20 @@ export class EduShiftGrader {
 
     /**
      * 確認済みテキストで採点のみ実行（Stage 2のみ）
+     * @param problemCondition 問題条件オーバーライド（AIが誤読した字数制限などを手動で指定）
      */
     private async executeGradingWithText(
         targetLabel: string,
         confirmedText: string,
         imageParts: ContentPart[],
         pdfPageInfo?: { answerPage?: string; problemPage?: string; modelAnswerPage?: string } | null,
-        strictness: GradingStrictness = DEFAULT_STRICTNESS
+        strictness: GradingStrictness = DEFAULT_STRICTNESS,
+        problemCondition?: string
     ) {
         console.log("[Grader] 確認済みテキストで採点開始");
+        if (problemCondition) {
+            console.log("[Grader] 問題条件オーバーライド:", problemCondition);
+        }
         
         // PDFページ指定ヒントを構築
         let pdfPageHint = '';
@@ -1249,9 +1256,19 @@ export class EduShiftGrader {
 
         const charCount = confirmedText.replace(/\s+/g, "").length;
         
+        // 問題条件オーバーライドセクション
+        const problemConditionSection = problemCondition ? `
+【重要：ユーザーが指定した問題条件】
+以下の条件はユーザーが手動で指定したものです。画像から読み取った条件よりも**こちらを優先**してください。
+---
+${problemCondition}
+---
+※ この条件に基づいて字数制限や形式要件を判定してください。
+` : '';
+        
         const prompt = `Target Problem Label: ${targetLabel}
 ${pdfPageHint}
-
+${problemConditionSection}
 【ユーザーが確認・修正した生徒の答案テキスト】（${charCount}文字）
 ---
 ${confirmedText}
@@ -1260,7 +1277,12 @@ ${confirmedText}
 上記のテキストを recognized_text として使用してください（これはユーザーが確認済みです）。
 
 添付された画像（問題文、模範解答）を参照し、「${targetLabel}」の採点を行ってください。
-
+${problemCondition ? `
+**採点時の注意:** ユーザーが問題条件（字数制限など）を手動で指定しています。
+画像から読み取った条件ではなく、上記の【ユーザーが指定した問題条件】に従って採点してください。
+例えば「40字以上50字以内」と指定されている場合、生徒の答案が${charCount}文字であれば、
+${charCount >= 40 && charCount <= 50 ? '字数条件を満たしています。' : '字数条件を満たしていません。'}
+` : ''}
 System Instructionに定義された以下のルールを厳密に適用してください：
 - Global Rules: 5大原則に基づく採点
 - 採点基準: 減点基準リファレンステーブルに従う

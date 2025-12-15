@@ -354,6 +354,18 @@ export async function POST(req: NextRequest) {
             }
         }
 
+        // 問題条件オーバーライドを解析（AIが誤読した字数制限などを手動で指定）
+        const problemConditionsJson = formData.get('problemConditions') as string | null;
+        let problemConditions: Record<string, string> = {};
+        if (problemConditionsJson) {
+            try {
+                problemConditions = JSON.parse(problemConditionsJson);
+                logger.debug('[API] Problem conditions override provided:', problemConditions);
+            } catch {
+                // パース失敗時は無視
+            }
+        }
+
         // ファイルのセキュリティ検証
         try {
             validateFiles(files);
@@ -484,7 +496,12 @@ export async function POST(req: NextRequest) {
                 // 確認済みテキストがある場合はそれを使用（OCRスキップ）
                 if (confirmedTexts[label]) {
                     logger.info(`[API] Using confirmed text for ${label}: ${confirmedTexts[label].length} chars`);
-                    result = await grader.gradeWithConfirmedText(label, confirmedTexts[label], fileBuffers, pdfPageInfo, fileRoles, strictness);
+                    // 問題条件オーバーライドがある場合は渡す
+                    const problemCondition = problemConditions[label] || undefined;
+                    if (problemCondition) {
+                        logger.info(`[API] Problem condition override for ${label}: ${problemCondition}`);
+                    }
+                    result = await grader.gradeWithConfirmedText(label, confirmedTexts[label], fileBuffers, pdfPageInfo, fileRoles, strictness, problemCondition);
                 } else {
                     // 従来通りOCR + 採点
                     result = await grader.gradeAnswerFromMultipleFiles(label, fileBuffers, pdfPageInfo, fileRoles, strictness);

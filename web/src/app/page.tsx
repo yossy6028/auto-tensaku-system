@@ -122,8 +122,13 @@ export default function Home() {
   const [confirmedTexts, setConfirmedTexts] = useState<Record<string, string>>({});
   const [currentOcrLabel, setCurrentOcrLabel] = useState<string>('');
 
-  // OCR手動修正モーダル
-  const [ocrEditModal, setOcrEditModal] = useState<{ label: string; text: string; strictness: GradingStrictness } | null>(null);
+  // OCR手動修正モーダル（問題条件オーバーライド対応）
+  const [ocrEditModal, setOcrEditModal] = useState<{ 
+    label: string; 
+    text: string; 
+    strictness: GradingStrictness;
+    problemCondition: string;  // 字数制限などの問題条件（例: "40字以上50字以内"）
+  } | null>(null);
 
   // PDFページ番号指定（複数ページPDF対応）
   const [pdfPageInfo, setPdfPageInfo] = useState<{
@@ -664,13 +669,13 @@ export default function Home() {
     }
   };
 
-  const openOcrEditModal = (label: string, initialText: string, strictness: GradingStrictness) => {
-    setOcrEditModal({ label, text: initialText, strictness });
+  const openOcrEditModal = (label: string, initialText: string, strictness: GradingStrictness, problemCondition = '') => {
+    setOcrEditModal({ label, text: initialText, strictness, problemCondition });
   };
 
   const runManualOcrRegrade = async () => {
     if (!ocrEditModal) return;
-    const { label, text, strictness } = ocrEditModal;
+    const { label, text, strictness, problemCondition } = ocrEditModal;
 
     if (!user || !session) {
       openAuthModal('signin');
@@ -740,6 +745,10 @@ export default function Home() {
       formData.append('pdfPageInfo', JSON.stringify(pdfPageInfo));
     }
     formData.append('fileRoles', JSON.stringify(fileRoles));
+    // 問題条件のオーバーライド（AIが誤読した字数制限などを手動で指定）
+    if (problemCondition.trim()) {
+      formData.append('problemConditions', JSON.stringify({ [label]: problemCondition.trim() }));
+    }
 
     filesToUse.forEach((file) => {
       formData.append('files', file);
@@ -3275,16 +3284,48 @@ export default function Home() {
                 <X className="w-5 h-5" />
               </button>
             </div>
-            <div className="p-6 space-y-4">
+            <div className="p-6 space-y-5">
               <p className="text-sm text-slate-600">
                 読み取り結果に誤りがある場合、ここで修正して再採点できます（無料）。
               </p>
-              <textarea
-                value={ocrEditModal.text}
-                onChange={(e) => setOcrEditModal(prev => prev ? { ...prev, text: e.target.value } : prev)}
-                className="w-full min-h-[220px] p-4 border border-slate-300 rounded-xl focus:outline-none focus:ring-2 focus:ring-indigo-500 bg-white text-slate-800 leading-relaxed font-mono"
-                placeholder="ここに読み取り結果を修正してください"
-              />
+              
+              {/* 生徒の答案テキスト入力 */}
+              <div>
+                <label className="block text-sm font-medium text-slate-700 mb-2">
+                  生徒の答案テキスト
+                </label>
+                <textarea
+                  value={ocrEditModal.text}
+                  onChange={(e) => setOcrEditModal(prev => prev ? { ...prev, text: e.target.value } : prev)}
+                  className="w-full min-h-[180px] p-4 border border-slate-300 rounded-xl focus:outline-none focus:ring-2 focus:ring-indigo-500 bg-white text-slate-800 leading-relaxed font-mono"
+                  placeholder="ここに読み取り結果を修正してください"
+                />
+                <p className="mt-1 text-xs text-slate-500">
+                  現在の文字数: {ocrEditModal.text.replace(/\s+/g, '').length}文字
+                </p>
+              </div>
+
+              {/* 問題条件（字数制限など）のオーバーライド */}
+              <div className="bg-amber-50 border border-amber-200 rounded-xl p-4">
+                <label className="block text-sm font-bold text-amber-800 mb-2 flex items-center">
+                  <span className="mr-2">📏</span>
+                  問題条件の修正（オプション）
+                </label>
+                <p className="text-xs text-amber-700 mb-3">
+                  AIが字数制限などの問題条件を誤読した場合、ここで正しい条件を入力してください。
+                  空欄の場合は画像から読み取った条件をそのまま使用します。
+                </p>
+                <input
+                  type="text"
+                  value={ocrEditModal.problemCondition}
+                  onChange={(e) => setOcrEditModal(prev => prev ? { ...prev, problemCondition: e.target.value } : prev)}
+                  className="w-full p-3 border border-amber-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-amber-500 bg-white text-slate-800"
+                  placeholder="例: 40字以上50字以内、〜から始め〜で終わる形式"
+                />
+                <p className="mt-2 text-xs text-amber-600">
+                  ※ 字数制限、形式要件、開始・終了の指定など、AIに採点時に適用してほしい条件を入力
+                </p>
+              </div>
             </div>
             <div className="px-6 py-4 border-t border-slate-200 flex items-center justify-end gap-3">
               <button

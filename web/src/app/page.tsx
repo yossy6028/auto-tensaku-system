@@ -861,10 +861,6 @@ export default function Home() {
     const hasImages = uploadedFiles.some(f => isImageFile(f));
     let filesToUse = uploadedFiles;
     
-    // #region agent log
-    fetch('http://127.0.0.1:7242/ingest/e78e9fd7-3fa2-45c5-b036-a4f10b20798a',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'page.tsx:860',message:'OCR compression check',data:{totalFiles:uploadedFiles.length,hasImages,imageFiles:uploadedFiles.filter(f=>isImageFile(f)).length,originalTotalSizeMB:(uploadedFiles.reduce((s,f)=>s+f.size,0)/1024/1024).toFixed(2)},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'E'})}).catch(()=>{});
-    // #endregion
-    
     if (hasImages) {
       setIsCompressing(true);
       setCompressionProgress(0);
@@ -880,9 +876,6 @@ export default function Home() {
         );
       } catch (err) {
         console.error('[Page] OCR compression error:', err);
-        // #region agent log
-        fetch('http://127.0.0.1:7242/ingest/e78e9fd7-3fa2-45c5-b036-a4f10b20798a',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'page.tsx:878',message:'OCR compression error',data:{error:err instanceof Error?err.message:String(err)},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'F'})}).catch(()=>{});
-        // #endregion
         // 圧縮に失敗しても元のファイルで続行
         filesToUse = uploadedFiles;
       } finally {
@@ -895,10 +888,6 @@ export default function Home() {
     // 圧縮後のファイルサイズチェック（413エラー対策）
     const totalFileSize = filesToUse.reduce((sum, file) => sum + file.size, 0);
     const MAX_REQUEST_SIZE = 3.5 * 1024 * 1024; // 3.5MB（Vercelの制限4.5MBに安全マージン、FormDataのオーバーヘッドを考慮）
-    
-    // #region agent log
-    fetch('http://127.0.0.1:7242/ingest/e78e9fd7-3fa2-45c5-b036-a4f10b20798a',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'page.tsx:890',message:'OCR file size check',data:{totalFileSizeMB:(totalFileSize/1024/1024).toFixed(2),maxAllowedMB:(MAX_REQUEST_SIZE/1024/1024).toFixed(2),filesCount:filesToUse.length,exceedsLimit:totalFileSize>MAX_REQUEST_SIZE},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'G'})}).catch(()=>{});
-    // #endregion
     
     if (totalFileSize > MAX_REQUEST_SIZE) {
       const totalMB = (totalFileSize / 1024 / 1024).toFixed(1);
@@ -932,43 +921,21 @@ export default function Home() {
         formData.append('files', file);
       });
 
-      // #region agent log
-      const totalSize = filesToUse.reduce((sum, file) => sum + file.size, 0);
-      fetch('http://127.0.0.1:7242/ingest/e78e9fd7-3fa2-45c5-b036-a4f10b20798a',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'page.tsx:925',message:'OCR API request start',data:{label,targetLabelsCount:targetLabels.length,filesCount:filesToUse.length,totalSizeMB:(totalSize/1024/1024).toFixed(2),maxSizeMB:3.5,userAgent:navigator.userAgent},timestamp:Date.now(),sessionId:'debug-session',runId:'run2',hypothesisId:'F'})}).catch(()=>{});
-      // #endregion
-
       try {
-        
         const res = await fetch('/api/ocr', {
           method: 'POST',
           body: formData,
           credentials: 'include',
         });
 
-        // #region agent log
-        fetch('http://127.0.0.1:7242/ingest/e78e9fd7-3fa2-45c5-b036-a4f10b20798a',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'page.tsx:886',message:'OCR API response received',data:{status:res.status,statusText:res.statusText,ok:res.ok,contentType:res.headers.get('content-type')},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'D'})}).catch(()=>{});
-        // #endregion
-
         const responseText = await res.text();
-        
-        // #region agent log
-        fetch('http://127.0.0.1:7242/ingest/e78e9fd7-3fa2-45c5-b036-a4f10b20798a',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'page.tsx:890',message:'OCR response text received',data:{responseTextLength:responseText.length,responseTextPreview:responseText.substring(0,200),isEmpty:responseText.length===0,startsWithBrace:responseText.trim().startsWith('{')},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'A'})}).catch(()=>{});
-        // #endregion
         
         let data: OcrResponseData;
 
         // JSON以外（504など）のレスポンスも安全に扱う
         try {
           data = JSON.parse(responseText || '{}') as OcrResponseData;
-          
-          // #region agent log
-          fetch('http://127.0.0.1:7242/ingest/e78e9fd7-3fa2-45c5-b036-a4f10b20798a',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'page.tsx:894',message:'OCR response parsed successfully',data:{status:data.status,hasOcrResult:!!data.ocrResult,hasError:data.status==='error',message:data.message},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'C'})}).catch(()=>{});
-          // #endregion
         } catch (parseError) {
-          // #region agent log
-          fetch('http://127.0.0.1:7242/ingest/e78e9fd7-3fa2-45c5-b036-a4f10b20798a',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'page.tsx:896',message:'OCR response parse error',data:{parseError:parseError instanceof Error?parseError.message:String(parseError),responseTextPreview:responseText.substring(0,500),responseStatus:res.status},timestamp:Date.now(),sessionId:'debug-session',runId:'run2',hypothesisId:'A'})}).catch(()=>{});
-          // #endregion
-          
           console.error('OCR response parse error:', parseError, responseText);
           let fallbackMessage: string;
           if (res.status === 413) {
@@ -984,10 +951,6 @@ export default function Home() {
         }
 
         if (!res.ok) {
-          // #region agent log
-          fetch('http://127.0.0.1:7242/ingest/e78e9fd7-3fa2-45c5-b036-a4f10b20798a',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'page.tsx:905',message:'OCR response not ok',data:{status:res.status,dataStatus:data.status,dataMessage:data.message},timestamp:Date.now(),sessionId:'debug-session',runId:'run2',hypothesisId:'D'})}).catch(()=>{});
-          // #endregion
-          
           let message: string;
           if (data?.message) {
             message = data.message;
@@ -1004,20 +967,12 @@ export default function Home() {
         }
 
         if (data.status === 'error') {
-          // #region agent log
-          fetch('http://127.0.0.1:7242/ingest/e78e9fd7-3fa2-45c5-b036-a4f10b20798a',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'page.tsx:916',message:'OCR response status error',data:{message:data.message,status:data.status},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'C'})}).catch(()=>{});
-          // #endregion
-          
           setError(data.message ?? 'OCR処理中にエラーが発生しました');
           setOcrFlowStep('idle');
           return;
         }
 
         if (!data.ocrResult) {
-          // #region agent log
-          fetch('http://127.0.0.1:7242/ingest/e78e9fd7-3fa2-45c5-b036-a4f10b20798a',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'page.tsx:922',message:'OCR result missing',data:{dataKeys:Object.keys(data),dataStatus:data.status},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'E'})}).catch(()=>{});
-          // #endregion
-          
           setError('OCR結果が取得できませんでした');
           setOcrFlowStep('idle');
           return;
@@ -1034,10 +989,6 @@ export default function Home() {
           [label]: data.ocrResult!.text
         }));
       } catch (err) {
-        // #region agent log
-        fetch('http://127.0.0.1:7242/ingest/e78e9fd7-3fa2-45c5-b036-a4f10b20798a',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'page.tsx:936',message:'OCR catch block error',data:{error:err instanceof Error?err.message:String(err),errorStack:err instanceof Error?err.stack:undefined,label},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'C'})}).catch(()=>{});
-        // #endregion
-        
         console.error('OCR error:', err);
         setError('OCR処理中にエラーが発生しました。');
         setOcrFlowStep('idle');
@@ -1090,18 +1041,9 @@ export default function Home() {
     const targetLabels = Object.keys(confirmedTexts);
     console.log('[Page] Starting grading with labels:', targetLabels);
 
-    // #region agent log
-    const originalTotalSize = uploadedFiles.reduce((sum, f) => sum + f.size, 0);
-    fetch('http://127.0.0.1:7242/ingest/e78e9fd7-3fa2-45c5-b036-a4f10b20798a',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'page.tsx:handleGradeWithConfirmed:start',message:'Grading with confirmed text - before compression',data:{uploadedFilesCount:uploadedFiles.length,originalTotalSizeMB:(originalTotalSize/1024/1024).toFixed(2),fileDetails:uploadedFiles.map(f=>({name:f.name,sizeMB:(f.size/1024/1024).toFixed(2),type:f.type}))},timestamp:Date.now(),sessionId:'debug-session',runId:'run3',hypothesisId:'A'})}).catch(()=>{});
-    // #endregion
-
     // 画像ファイルを圧縮（OCR時と同様）
     const hasImages = uploadedFiles.some(f => isImageFile(f));
     let filesToUse = uploadedFiles;
-    
-    // #region agent log
-    fetch('http://127.0.0.1:7242/ingest/e78e9fd7-3fa2-45c5-b036-a4f10b20798a',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'page.tsx:handleGradeWithConfirmed:hasImages',message:'Checking if compression needed',data:{hasImages,imageCount:uploadedFiles.filter(f=>isImageFile(f)).length},timestamp:Date.now(),sessionId:'debug-session',runId:'run3',hypothesisId:'A'})}).catch(()=>{});
-    // #endregion
     
     if (hasImages) {
       setIsCompressing(true);
@@ -1109,10 +1051,6 @@ export default function Home() {
       setCompressionFileName('');
       
       try {
-        // #region agent log
-        fetch('http://127.0.0.1:7242/ingest/e78e9fd7-3fa2-45c5-b036-a4f10b20798a',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'page.tsx:handleGradeWithConfirmed:compressionStart',message:'Starting compression for grading',data:{filesCount:uploadedFiles.length},timestamp:Date.now(),sessionId:'debug-session',runId:'run3',hypothesisId:'B'})}).catch(()=>{});
-        // #endregion
-        
         filesToUse = await compressMultipleImages(
           uploadedFiles,
           (progress, fileName) => {
@@ -1120,16 +1058,8 @@ export default function Home() {
             setCompressionFileName(fileName);
           }
         );
-        
-        // #region agent log
-        const compressedTotalSize = filesToUse.reduce((sum, f) => sum + f.size, 0);
-        fetch('http://127.0.0.1:7242/ingest/e78e9fd7-3fa2-45c5-b036-a4f10b20798a',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'page.tsx:handleGradeWithConfirmed:compressionComplete',message:'Compression completed for grading',data:{originalSizeMB:(originalTotalSize/1024/1024).toFixed(2),compressedSizeMB:(compressedTotalSize/1024/1024).toFixed(2),reductionPercent:Math.round((1-compressedTotalSize/originalTotalSize)*100),filesCount:filesToUse.length},timestamp:Date.now(),sessionId:'debug-session',runId:'run3',hypothesisId:'C'})}).catch(()=>{});
-        // #endregion
       } catch (err) {
         console.error('[Page] Grading compression error:', err);
-        // #region agent log
-        fetch('http://127.0.0.1:7242/ingest/e78e9fd7-3fa2-45c5-b036-a4f10b20798a',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'page.tsx:handleGradeWithConfirmed:compressionError',message:'Compression failed for grading',data:{error:err instanceof Error?err.message:String(err)},timestamp:Date.now(),sessionId:'debug-session',runId:'run3',hypothesisId:'D'})}).catch(()=>{});
-        // #endregion
         // 圧縮に失敗しても元のファイルで続行
         filesToUse = uploadedFiles;
       } finally {
@@ -1142,10 +1072,6 @@ export default function Home() {
     // 圧縮後のファイルサイズチェック
     const MAX_TOTAL_SIZE = 3.5 * 1024 * 1024;
     const totalSize = filesToUse.reduce((sum, file) => sum + file.size, 0);
-    
-    // #region agent log
-    fetch('http://127.0.0.1:7242/ingest/e78e9fd7-3fa2-45c5-b036-a4f10b20798a',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'page.tsx:handleGradeWithConfirmed:sizeCheck',message:'File size check before API call',data:{totalSizeMB:(totalSize/1024/1024).toFixed(2),maxAllowedMB:(MAX_TOTAL_SIZE/1024/1024).toFixed(2),exceedsLimit:totalSize>MAX_TOTAL_SIZE},timestamp:Date.now(),sessionId:'debug-session',runId:'run3',hypothesisId:'E'})}).catch(()=>{});
-    // #endregion
     
     if (totalSize > MAX_TOTAL_SIZE) {
       const totalMB = (totalSize / 1024 / 1024).toFixed(1);
@@ -1266,10 +1192,6 @@ export default function Home() {
     const hasImages = uploadedFiles.some(f => isImageFile(f));
     let filesToUse = uploadedFiles;
     
-    // #region agent log
-    fetch('http://127.0.0.1:7242/ingest/e78e9fd7-3fa2-45c5-b036-a4f10b20798a',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'page.tsx:1197',message:'Grading compression check',data:{totalFiles:uploadedFiles.length,hasImages,imageFiles:uploadedFiles.filter(f=>isImageFile(f)).length,originalTotalSizeMB:(uploadedFiles.reduce((s,f)=>s+f.size,0)/1024/1024).toFixed(2)},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'H'})}).catch(()=>{});
-    // #endregion
-    
     if (hasImages) {
       setIsCompressing(true);
       setCompressionProgress(0);
@@ -1285,9 +1207,6 @@ export default function Home() {
         );
       } catch (err) {
         console.error('[Page] Grading compression error:', err);
-        // #region agent log
-        fetch('http://127.0.0.1:7242/ingest/e78e9fd7-3fa2-45c5-b036-a4f10b20798a',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'page.tsx:1215',message:'Grading compression error',data:{error:err instanceof Error?err.message:String(err)},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'I'})}).catch(()=>{});
-        // #endregion
         // 圧縮に失敗しても元のファイルで続行
         filesToUse = uploadedFiles;
       } finally {
@@ -1301,10 +1220,6 @@ export default function Home() {
     const MAX_TOTAL_SIZE = 3.5 * 1024 * 1024; // 3.5MB（Vercelペイロード上限対応、FormDataのオーバーヘッドを考慮）
     const MAX_SINGLE_FILE_SIZE = 4 * 1024 * 1024; // 4MB
     const totalSize = filesToUse.reduce((sum, file) => sum + file.size, 0);
-    
-    // #region agent log
-    fetch('http://127.0.0.1:7242/ingest/e78e9fd7-3fa2-45c5-b036-a4f10b20798a',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'page.tsx:1228',message:'Grading file size check',data:{totalSizeMB:(totalSize/1024/1024).toFixed(2),maxAllowedMB:(MAX_TOTAL_SIZE/1024/1024).toFixed(2),filesCount:filesToUse.length,exceedsLimit:totalSize>MAX_TOTAL_SIZE},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'J'})}).catch(()=>{});
-    // #endregion
     
     const oversizedFile = filesToUse.find(file => file.size > MAX_SINGLE_FILE_SIZE);
     if (oversizedFile) {

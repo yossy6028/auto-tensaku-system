@@ -210,11 +210,7 @@ export async function POST(req: NextRequest) {
             files = formData.getAll('files') as File[];
             pdfPageInfoJson = formData.get('pdfPageInfo') as string | null;
             fileRolesJson = formData.get('fileRoles') as string | null;
-        } catch (formDataError) {
-            // #region agent log
-            fetch('http://127.0.0.1:7242/ingest/e78e9fd7-3fa2-45c5-b036-a4f10b20798a',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'ocr/route.ts:204',message:'OCR API formData parse error',data:{error:formDataError instanceof Error?formDataError.message:String(formDataError),contentLength:req.headers.get('content-length')},timestamp:Date.now(),sessionId:'debug-session',runId:'run2',hypothesisId:'F'})}).catch(()=>{});
-            // #endregion
-            
+        } catch {
             return NextResponse.json(
                 { status: 'error', message: 'リクエストサイズが大きすぎます。ファイルを圧縮するか、分割してください。' },
                 { status: 413 }
@@ -222,10 +218,6 @@ export async function POST(req: NextRequest) {
         }
         
         if (!targetLabel || !files || files.length === 0) {
-            // #region agent log
-            fetch('http://127.0.0.1:7242/ingest/e78e9fd7-3fa2-45c5-b036-a4f10b20798a',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'ocr/route.ts:225',message:'OCR API validation failed',data:{hasTargetLabel:!!targetLabel,filesCount:files?.length||0},timestamp:Date.now(),sessionId:'debug-session',runId:'run2',hypothesisId:'F'})}).catch(()=>{});
-            // #endregion
-            
             return NextResponse.json(
                 { status: 'error', message: 'ファイルと問題番号を指定してください。' },
                 { status: 400 }
@@ -237,15 +229,7 @@ export async function POST(req: NextRequest) {
         const totalFileSize = files.reduce((sum, f) => sum + f.size, 0);
         const MAX_REQUEST_SIZE = 3.5 * 1024 * 1024; // 3.5MB（Vercelの制限4.5MBに安全マージン）
         
-        // #region agent log
-        fetch('http://127.0.0.1:7242/ingest/e78e9fd7-3fa2-45c5-b036-a4f10b20798a',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'ocr/route.ts:218',message:'OCR API formData received',data:{targetLabel,filesCount:files.length,totalFileSizeMB:(totalFileSize/1024/1024).toFixed(2),maxAllowedMB:4.5,contentLength:req.headers.get('content-length')},timestamp:Date.now(),sessionId:'debug-session',runId:'run2',hypothesisId:'F'})}).catch(()=>{});
-        // #endregion
-        
         if (totalFileSize > MAX_REQUEST_SIZE) {
-            // #region agent log
-            fetch('http://127.0.0.1:7242/ingest/e78e9fd7-3fa2-45c5-b036-a4f10b20798a',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'ocr/route.ts:244',message:'OCR API file size exceeded',data:{totalFileSizeMB:(totalFileSize/1024/1024).toFixed(2),maxAllowedMB:(MAX_REQUEST_SIZE/1024/1024).toFixed(2),filesCount:files.length},timestamp:Date.now(),sessionId:'debug-session',runId:'run2',hypothesisId:'F'})}).catch(()=>{});
-            // #endregion
-            
             const totalMB = (totalFileSize / 1024 / 1024).toFixed(1);
             const maxMB = (MAX_REQUEST_SIZE / 1024 / 1024).toFixed(1);
             return NextResponse.json(
@@ -299,23 +283,7 @@ export async function POST(req: NextRequest) {
         // OCRのみ実行
         const grader = new EduShiftGrader();
         
-        // #region agent log
-        fetch('http://127.0.0.1:7242/ingest/e78e9fd7-3fa2-45c5-b036-a4f10b20798a',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'ocr/route.ts:258',message:'Starting OCR processing',data:{label:sanitizedLabel,fileBuffersCount:fileBuffers.length},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'B'})}).catch(()=>{});
-        // #endregion
-        
-        let ocrResult;
-        try {
-            ocrResult = await grader.performOcrOnly(sanitizedLabel, fileBuffers, pdfPageInfo, fileRoles);
-            
-            // #region agent log
-            fetch('http://127.0.0.1:7242/ingest/e78e9fd7-3fa2-45c5-b036-a4f10b20798a',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'ocr/route.ts:263',message:'OCR processing completed',data:{charCount:ocrResult.charCount,hasText:!!ocrResult.text,textLength:ocrResult.text?.length||0},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'B'})}).catch(()=>{});
-            // #endregion
-        } catch (ocrError) {
-            // #region agent log
-            fetch('http://127.0.0.1:7242/ingest/e78e9fd7-3fa2-45c5-b036-a4f10b20798a',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'ocr/route.ts:267',message:'OCR processing error',data:{error:ocrError instanceof Error?ocrError.message:String(ocrError),errorStack:ocrError instanceof Error?ocrError.stack:undefined},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'C'})}).catch(()=>{});
-            // #endregion
-            throw ocrError;
-        }
+        const ocrResult = await grader.performOcrOnly(sanitizedLabel, fileBuffers, pdfPageInfo, fileRoles);
 
         logger.info(`[OCR API] OCR完了: ${sanitizedLabel} - ${ocrResult.charCount}文字`);
 
@@ -327,18 +295,10 @@ export async function POST(req: NextRequest) {
                 label: sanitizedLabel
             }
         };
-        
-        // #region agent log
-        fetch('http://127.0.0.1:7242/ingest/e78e9fd7-3fa2-45c5-b036-a4f10b20798a',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'ocr/route.ts:280',message:'Sending OCR response',data:{status:responseData.status,hasOcrResult:!!responseData.ocrResult,ocrResultKeys:responseData.ocrResult?Object.keys(responseData.ocrResult):[]},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'E'})}).catch(()=>{});
-        // #endregion
 
         return NextResponse.json(responseData);
 
     } catch (error: unknown) {
-        // #region agent log
-        fetch('http://127.0.0.1:7242/ingest/e78e9fd7-3fa2-45c5-b036-a4f10b20798a',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'ocr/route.ts:275',message:'OCR API catch block error',data:{error:error instanceof Error?error.message:String(error),errorStack:error instanceof Error?error.stack:undefined},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'C'})}).catch(()=>{});
-        // #endregion
-        
         logger.error('OCR API Error:', error);
         const message = error instanceof Error ? error.message : 'OCRエラーが発生しました。';
         return NextResponse.json(
@@ -347,4 +307,3 @@ export async function POST(req: NextRequest) {
         );
     }
 }
-

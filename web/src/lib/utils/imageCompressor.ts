@@ -93,10 +93,6 @@ export async function compressImage(
     }
 
     try {
-        // #region agent log
-        fetch('http://127.0.0.1:7242/ingest/e78e9fd7-3fa2-45c5-b036-a4f10b20798a',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'imageCompressor.ts:96',message:'Starting image compression',data:{fileName:file.name,originalSizeMB:(file.size/1024/1024).toFixed(2),maxSizeMB:options.maxSizeMB,maxWidthOrHeight:options.maxWidthOrHeight,initialQuality:options.initialQuality},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'E'})}).catch(()=>{});
-        // #endregion
-
         const compressedBlob = await imageCompression(file, {
             maxSizeMB: options.maxSizeMB,
             maxWidthOrHeight: options.maxWidthOrHeight,
@@ -112,10 +108,6 @@ export async function compressImage(
             { type: compressedBlob.type || file.type }
         );
 
-        // #region agent log
-        fetch('http://127.0.0.1:7242/ingest/e78e9fd7-3fa2-45c5-b036-a4f10b20798a',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'imageCompressor.ts:115',message:'Image compression completed',data:{fileName:file.name,originalSizeMB:(file.size/1024/1024).toFixed(2),compressedSizeMB:(compressedFile.size/1024/1024).toFixed(2),reductionPercent:Math.round((1-compressedFile.size/file.size)*100),targetMaxSizeMB:options.maxSizeMB,withinTarget:compressedFile.size<=options.maxSizeMB*1024*1024},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'F'})}).catch(()=>{});
-        // #endregion
-
         console.log(
             `[ImageCompressor] ${file.name}: ${(file.size / 1024 / 1024).toFixed(2)}MB → ${(compressedFile.size / 1024 / 1024).toFixed(2)}MB`
         );
@@ -123,9 +115,6 @@ export async function compressImage(
         return compressedFile;
     } catch (error) {
         console.error('[ImageCompressor] Compression failed:', error);
-        // #region agent log
-        fetch('http://127.0.0.1:7242/ingest/e78e9fd7-3fa2-45c5-b036-a4f10b20798a',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'imageCompressor.ts:120',message:'Image compression failed',data:{fileName:file.name,error:error instanceof Error?error.message:String(error),errorStack:error instanceof Error?error.stack:undefined},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'G'})}).catch(()=>{});
-        // #endregion
         // 圧縮失敗時は元のファイルを返す
         return file;
     }
@@ -175,19 +164,12 @@ export async function compressMultipleImages(
     let currentTotalSize = 0;
     const startTime = Date.now();
     const MAX_COMPRESSION_TIME = 60000; // 60秒のタイムアウト
-
-    // #region agent log
     const originalSize = files.reduce((sum, f) => sum + f.size, 0);
-    fetch('http://127.0.0.1:7242/ingest/e78e9fd7-3fa2-45c5-b036-a4f10b20798a',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'imageCompressor.ts:150',message:'Compression start',data:{totalFiles,options:JSON.stringify(baseOptions),originalSizeMB:(originalSize/1024/1024).toFixed(2),targetMaxSizeMB:baseOptions.maxSizeMB,targetTotalMB:(baseOptions.maxSizeMB*totalFiles).toFixed(2),maxAllowedMB:3.5},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'A'})}).catch(()=>{});
-    // #endregion
 
     for (let i = 0; i < files.length; i++) {
         // タイムアウトチェック
         const elapsedTime = Date.now() - startTime;
         if (elapsedTime > MAX_COMPRESSION_TIME) {
-            // #region agent log
-            fetch('http://127.0.0.1:7242/ingest/e78e9fd7-3fa2-45c5-b036-a4f10b20798a',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'imageCompressor.ts:186',message:'Compression timeout',data:{index:i+1,totalFiles,elapsedSeconds:(elapsedTime/1000).toFixed(1),maxSeconds:MAX_COMPRESSION_TIME/1000},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'J'})}).catch(()=>{});
-            // #endregion
             console.warn(`[ImageCompressor] Compression timeout after ${(elapsedTime / 1000).toFixed(1)}s, using compressed files so far`);
             // 圧縮済みのファイルと残りの元のファイルを結合
             const remainingFiles = files.slice(i);
@@ -214,10 +196,6 @@ export async function compressMultipleImages(
             maxSizeMB: Math.max(0.08, dynamicMaxSizeMB), // 最小0.08MBを保証（より厳しく）
         };
 
-        // #region agent log
-        fetch('http://127.0.0.1:7242/ingest/e78e9fd7-3fa2-45c5-b036-a4f10b20798a',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'imageCompressor.ts:205',message:'Compressing file',data:{index:i+1,totalFiles,fileName:file.name,fileSizeMB:(file.size/1024/1024).toFixed(2),isImage:file.type.startsWith('image/'),dynamicMaxSizeMB:dynamicOptions.maxSizeMB.toFixed(3),currentTotalMB:(currentTotalSize/1024/1024).toFixed(2),remainingBudgetMB:(remainingSizeBudget/1024/1024).toFixed(2),elapsedSeconds:((Date.now()-startTime)/1000).toFixed(1)},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'B'})}).catch(()=>{});
-        // #endregion
-
         let compressedFile: File;
         try {
             // タイムアウト付きで圧縮を実行
@@ -241,9 +219,6 @@ export async function compressMultipleImages(
             
             compressedFile = await Promise.race([compressionPromise, timeoutPromise]);
         } catch (err) {
-            // #region agent log
-            fetch('http://127.0.0.1:7242/ingest/e78e9fd7-3fa2-45c5-b036-a4f10b20798a',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'imageCompressor.ts:230',message:'CompressImage error in loop',data:{index:i+1,fileName:file.name,error:err instanceof Error?err.message:String(err)},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'H'})}).catch(()=>{});
-            // #endregion
             // エラー時は元のファイルを使用
             compressedFile = file;
         }
@@ -252,18 +227,11 @@ export async function compressMultipleImages(
         
         // サイズ制限を超えた場合の警告と処理
         if (currentTotalSize > MAX_TOTAL_SIZE) {
-            // #region agent log
-            fetch('http://127.0.0.1:7242/ingest/e78e9fd7-3fa2-45c5-b036-a4f10b20798a',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'imageCompressor.ts:252',message:'Total size exceeded during compression',data:{index:i+1,currentTotalMB:(currentTotalSize/1024/1024).toFixed(2),maxAllowedMB:3.5,remainingFiles:totalFiles-i-1,compressedFilesCount:compressedFiles.length},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'I'})}).catch(()=>{});
-            // #endregion
             console.warn(`[ImageCompressor] Warning: Total size exceeded after ${i + 1} files: ${(currentTotalSize / 1024 / 1024).toFixed(2)}MB`);
             // 残りのファイルは圧縮せずにスキップ
             // ただし、既に圧縮済みのファイルだけを返す（元のファイルは含めない）
             return compressedFiles;
         }
-
-        // #region agent log
-        fetch('http://127.0.0.1:7242/ingest/e78e9fd7-3fa2-45c5-b036-a4f10b20798a',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'imageCompressor.ts:250',message:'File compressed',data:{index:i+1,fileName:compressedFile.name,originalSizeMB:(file.size/1024/1024).toFixed(2),compressedSizeMB:(compressedFile.size/1024/1024).toFixed(2),reductionPercent:Math.round((1-compressedFile.size/file.size)*100),currentTotalMB:(currentTotalSize/1024/1024).toFixed(2),remainingFiles:totalFiles-i-1,elapsedSeconds:((Date.now()-startTime)/1000).toFixed(1)},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'C'})}).catch(()=>{});
-        // #endregion
 
         compressedFiles.push(compressedFile);
     }
@@ -277,10 +245,6 @@ export async function compressMultipleImages(
     console.log(
         `[ImageCompressor] Total: ${(originalSize / 1024 / 1024).toFixed(2)}MB → ${(compressedSize / 1024 / 1024).toFixed(2)}MB (${Math.round((1 - compressedSize / originalSize) * 100)}% reduced)`
     );
-
-    // #region agent log
-    fetch('http://127.0.0.1:7242/ingest/e78e9fd7-3fa2-45c5-b036-a4f10b20798a',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'imageCompressor.ts:220',message:'Compression complete',data:{totalFiles,originalSizeMB:(originalSize/1024/1024).toFixed(2),compressedSizeMB:(compressedSize/1024/1024).toFixed(2),reductionPercent:Math.round((1-compressedSize/originalSize)*100),averageSizeMB:(compressedSize/totalFiles/1024/1024).toFixed(2),maxAllowedMB:3.5,withinLimit:compressedSize<=3.5*1024*1024},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'D'})}).catch(()=>{});
-    // #endregion
 
     return compressedFiles;
 }
@@ -297,4 +261,3 @@ export function formatFileSize(bytes: number): string {
         return `${(bytes / 1024 / 1024).toFixed(1)}MB`;
     }
 }
-

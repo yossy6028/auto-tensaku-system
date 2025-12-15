@@ -630,6 +630,25 @@ export default function Home() {
     return foundIndex >= 0 ? foundIndex : 0;
   };
 
+  const COMPRESSION_TIMEOUT_MS = 20000; // 20秒でフォールバック（モバイルでの固まり対策）
+  const compressWithTimeout = async (
+    files: File[],
+    onProgress?: (progress: number, currentFile: string) => void
+  ): Promise<File[]> => {
+    try {
+      const timeoutPromise = new Promise<File[]>((resolve) =>
+        setTimeout(() => resolve(files), COMPRESSION_TIMEOUT_MS)
+      );
+      return await Promise.race([
+        compressMultipleImages(files, onProgress),
+        timeoutPromise,
+      ]);
+    } catch (err) {
+      console.error('[Page] compressWithTimeout error:', err);
+      return files;
+    }
+  };
+
   const handleFileChange = useCallback(async (e: React.ChangeEvent<HTMLInputElement>) => {
     if (e.target.files && e.target.files.length > 0) {
       const files = Array.from(e.target.files);
@@ -644,7 +663,7 @@ export default function Home() {
         setCompressionFileName('');
         
         try {
-          processedFiles = await compressMultipleImages(
+          processedFiles = await compressWithTimeout(
             files,
             (progress, fileName) => {
               setCompressionProgress(progress);
@@ -878,7 +897,7 @@ export default function Home() {
       setCompressionFileName('');
       
       try {
-        filesToUse = await compressMultipleImages(
+        filesToUse = await compressWithTimeout(
           uploadedFiles,
           (progress, fileName) => {
             setCompressionProgress(progress);
@@ -1080,7 +1099,7 @@ export default function Home() {
       setCompressionFileName('');
       
       try {
-        filesToUse = await compressMultipleImages(
+        filesToUse = await compressWithTimeout(
           uploadedFiles,
           (progress, fileName) => {
             setCompressionProgress(progress);
@@ -1239,7 +1258,7 @@ export default function Home() {
       setCompressionFileName('');
       
       try {
-        filesToUse = await compressMultipleImages(
+        filesToUse = await compressWithTimeout(
           uploadedFiles,
           (progress, fileName) => {
             setCompressionProgress(progress);

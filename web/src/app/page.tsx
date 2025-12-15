@@ -2396,6 +2396,10 @@ export default function Home() {
                         <span className="text-amber-500 mr-2">📷</span>
                         <span><strong>文字がはっきりと読み取れる</strong>画質であること</span>
                       </li>
+                      <li className="flex items-start mt-2 pt-2 border-t border-amber-200">
+                        <span className="text-amber-500 mr-2">⏱️</span>
+                        <span><strong>ファイルの読み込みに時間がかかる場合は複数回に分けて処理してください</strong></span>
+                      </li>
                     </ul>
                   </div>
 
@@ -3326,14 +3330,20 @@ export default function Home() {
               <p className="text-sm text-slate-600 mb-4">
                 各ファイルが「答案」「問題」「模範解答」のどれに該当するか選択してください。
               </p>
+              <div className="bg-blue-50 border border-blue-200 rounded-lg p-3 mb-4">
+                <p className="text-xs text-blue-700 flex items-start">
+                  <span className="mr-2">💡</span>
+                  <span><strong>注意：</strong>ファイルの読み込みに時間がかかる場合は、複数回に分けて処理してください。</span>
+                </p>
+              </div>
 
               {pendingFiles.map((file, index) => {
                 const role = pendingFileRoles[index] || 'other';
                 const roleOptions: { value: FileRole; label: string; icon: string }[] = [
                   { value: 'answer', label: '答案', icon: '📝' },
                   { value: 'problem', label: '問題', icon: '📄' },
-                  { value: 'model', label: '模範解答', icon: '✅' },
-                  { value: 'problem_model', label: '問題+模範解答', icon: '📄✅' },
+                  { value: 'model', label: '模範解答', icon: '⭐' },
+                  { value: 'problem_model', label: '問題+模範解答', icon: '📄⭐' },
                   { value: 'answer_problem', label: '答案+問題', icon: '📝📄' },
                   { value: 'all', label: '全部', icon: '📚' },
                   { value: 'other', label: 'その他', icon: '📎' },

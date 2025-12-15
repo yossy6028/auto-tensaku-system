@@ -94,6 +94,11 @@ export default function Home() {
   // answer=答案, problem=問題, model=模範解答, problem_model=問題+模範解答, all=全部, other=その他
   type FileRole = 'answer' | 'problem' | 'model' | 'problem_model' | 'answer_problem' | 'all' | 'other';
   const [fileRoles, setFileRoles] = useState<Record<number, FileRole>>({});
+  
+  // ファイル役割選択ポップアップ用の状態
+  const [showFileRoleModal, setShowFileRoleModal] = useState(false);
+  const [pendingFiles, setPendingFiles] = useState<File[]>([]);
+  const [pendingFileRoles, setPendingFileRoles] = useState<Record<number, FileRole>>({});
 
   // 採点の厳しさ（3段階）
   const [gradingStrictness, setGradingStrictness] = useState<GradingStrictness>('standard');
@@ -657,35 +662,35 @@ export default function Home() {
         }
       }
       
-      setUploadedFiles(prev => {
-        const next = [...prev, ...processedFiles];
-        setAnswerFileIndex(detectAnswerIndex(next, answerFileIndex));
-        
-        // 新しいファイルに対して役割を自動推定
-        const newRoles: Record<number, FileRole> = { ...fileRoles };
-        const startIndex = prev.length;
-        processedFiles.forEach((file, i) => {
-          const idx = startIndex + i;
-          const name = file.name.toLowerCase();
-          if (/(answer|ans|student|解答|答案|生徒)/.test(name)) {
-            newRoles[idx] = 'answer';
-          } else if (/(problem|question|課題|設問|問題|本文)/.test(name)) {
-            newRoles[idx] = 'problem';
-          } else if (/(model|key|模範|解説|正解|解答例)/.test(name)) {
-            newRoles[idx] = 'model';
-          } else {
-            // デフォルト: 1つ目は答案、2つ目以降は問題+模範解答
-            const existingAnswers = Object.values(newRoles).filter(r => r === 'answer' || r === 'answer_problem' || r === 'all').length;
-            if (existingAnswers === 0) newRoles[idx] = 'answer';
-            else newRoles[idx] = 'problem_model';  // 問題と模範解答が一緒のケースが多い
-          }
-        });
-        setFileRoles(newRoles);
-        
-        return next;
+      // 新しいファイルに対して役割を自動推定（初期値として）
+      const startIndex = uploadedFiles.length;
+      const initialRoles: Record<number, FileRole> = {};
+      processedFiles.forEach((file, i) => {
+        const idx = i; // モーダル内でのインデックス
+        const name = file.name.toLowerCase();
+        if (/(answer|ans|student|解答|答案|生徒)/.test(name)) {
+          initialRoles[idx] = 'answer';
+        } else if (/(problem|question|課題|設問|問題|本文)/.test(name)) {
+          initialRoles[idx] = 'problem';
+        } else if (/(model|key|模範|解説|正解|解答例)/.test(name)) {
+          initialRoles[idx] = 'model';
+        } else {
+          // デフォルト: 1つ目は答案、2つ目以降は問題+模範解答
+          const existingAnswers = Object.values(initialRoles).filter(r => r === 'answer' || r === 'answer_problem' || r === 'all').length;
+          if (existingAnswers === 0) initialRoles[idx] = 'answer';
+          else initialRoles[idx] = 'problem_model';  // 問題と模範解答が一緒のケースが多い
+        }
       });
+      
+      // ポップアップを表示
+      setPendingFiles(processedFiles);
+      setPendingFileRoles(initialRoles);
+      setShowFileRoleModal(true);
+      
+      // ファイル入力の値をクリア（同じファイルを再度選択できるように）
+      e.target.value = '';
     }
-  }, [answerFileIndex, fileRoles]);
+  }, [uploadedFiles.length]);
 
   const removeFile = (index: number) => {
     // 役割情報も更新（インデックスをずらす）
@@ -842,6 +847,18 @@ export default function Home() {
       return;
     }
 
+    // ファイルサイズチェック（413エラー対策）
+    // FormDataのオーバーヘッド（約10-20%）を考慮して、3MBに制限
+    const totalFileSize = uploadedFiles.reduce((sum, file) => sum + file.size, 0);
+    const MAX_REQUEST_SIZE = 3 * 1024 * 1024; // 3MB（Vercelの制限4.5MBに安全マージン、FormDataのオーバーヘッドを考慮）
+    
+    if (totalFileSize > MAX_REQUEST_SIZE) {
+      const totalMB = (totalFileSize / 1024 / 1024).toFixed(1);
+      const maxMB = (MAX_REQUEST_SIZE / 1024 / 1024).toFixed(0);
+      setError(`ファイルの合計サイズが大きすぎます（${totalMB}MB）。合計${maxMB}MB以下になるように、ファイルを圧縮するか分割してください。`);
+      return;
+    }
+
     let targetLabels = selectedProblems;
     if (targetLabels.length === 0) {
       const currentLabel = generateProblemLabel();
@@ -871,52 +888,97 @@ export default function Home() {
       }
       formData.append('fileRoles', JSON.stringify(fileRoles));
       
+      let totalSize = 0;
       uploadedFiles.forEach((file) => {
         formData.append('files', file);
+        totalSize += file.size;
       });
 
+      // #region agent log
+      fetch('http://127.0.0.1:7242/ingest/e78e9fd7-3fa2-45c5-b036-a4f10b20798a',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'page.tsx:879',message:'OCR API request start',data:{label,targetLabelsCount:targetLabels.length,filesCount:uploadedFiles.length,totalSizeMB:(totalSize/1024/1024).toFixed(2),maxSizeMB:4.5,userAgent:navigator.userAgent},timestamp:Date.now(),sessionId:'debug-session',runId:'run2',hypothesisId:'F'})}).catch(()=>{});
+      // #endregion
+
       try {
+        
         const res = await fetch('/api/ocr', {
           method: 'POST',
           body: formData,
           credentials: 'include',
         });
 
+        // #region agent log
+        fetch('http://127.0.0.1:7242/ingest/e78e9fd7-3fa2-45c5-b036-a4f10b20798a',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'page.tsx:886',message:'OCR API response received',data:{status:res.status,statusText:res.statusText,ok:res.ok,contentType:res.headers.get('content-type')},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'D'})}).catch(()=>{});
+        // #endregion
+
         const responseText = await res.text();
+        
+        // #region agent log
+        fetch('http://127.0.0.1:7242/ingest/e78e9fd7-3fa2-45c5-b036-a4f10b20798a',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'page.tsx:890',message:'OCR response text received',data:{responseTextLength:responseText.length,responseTextPreview:responseText.substring(0,200),isEmpty:responseText.length===0,startsWithBrace:responseText.trim().startsWith('{')},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'A'})}).catch(()=>{});
+        // #endregion
+        
         let data: OcrResponseData;
 
         // JSON以外（504など）のレスポンスも安全に扱う
         try {
           data = JSON.parse(responseText || '{}') as OcrResponseData;
+          
+          // #region agent log
+          fetch('http://127.0.0.1:7242/ingest/e78e9fd7-3fa2-45c5-b036-a4f10b20798a',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'page.tsx:894',message:'OCR response parsed successfully',data:{status:data.status,hasOcrResult:!!data.ocrResult,hasError:data.status==='error',message:data.message},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'C'})}).catch(()=>{});
+          // #endregion
         } catch (parseError) {
+          // #region agent log
+          fetch('http://127.0.0.1:7242/ingest/e78e9fd7-3fa2-45c5-b036-a4f10b20798a',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'page.tsx:896',message:'OCR response parse error',data:{parseError:parseError instanceof Error?parseError.message:String(parseError),responseTextPreview:responseText.substring(0,500),responseStatus:res.status},timestamp:Date.now(),sessionId:'debug-session',runId:'run2',hypothesisId:'A'})}).catch(()=>{});
+          // #endregion
+          
           console.error('OCR response parse error:', parseError, responseText);
-          const fallbackMessage =
-            res.status === 504
-              ? 'OCRサーバーがタイムアウトしました。時間をおいて再試行してください。'
-              : `OCRサーバーの応答が不正です（status ${res.status}）。`;
+          let fallbackMessage: string;
+          if (res.status === 413) {
+            fallbackMessage = 'ファイルの合計サイズが大きすぎます。ファイルを圧縮するか、分割してください。';
+          } else if (res.status === 504) {
+            fallbackMessage = 'OCRサーバーがタイムアウトしました。時間をおいて再試行してください。';
+          } else {
+            fallbackMessage = `OCRサーバーの応答が不正です（status ${res.status}）。`;
+          }
           setError(fallbackMessage);
           setOcrFlowStep('idle');
           return;
         }
 
         if (!res.ok) {
-          const message =
-            data?.message ||
-            (res.status === 504
-              ? 'OCRサーバーがタイムアウトしました。時間をおいて再試行してください。'
-              : `OCRリクエストが失敗しました（status ${res.status}）。`);
+          // #region agent log
+          fetch('http://127.0.0.1:7242/ingest/e78e9fd7-3fa2-45c5-b036-a4f10b20798a',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'page.tsx:905',message:'OCR response not ok',data:{status:res.status,dataStatus:data.status,dataMessage:data.message},timestamp:Date.now(),sessionId:'debug-session',runId:'run2',hypothesisId:'D'})}).catch(()=>{});
+          // #endregion
+          
+          let message: string;
+          if (data?.message) {
+            message = data.message;
+          } else if (res.status === 413) {
+            message = 'ファイルの合計サイズが大きすぎます。ファイルを圧縮するか、分割してください。';
+          } else if (res.status === 504) {
+            message = 'OCRサーバーがタイムアウトしました。時間をおいて再試行してください。';
+          } else {
+            message = `OCRリクエストが失敗しました（status ${res.status}）。`;
+          }
           setError(message);
           setOcrFlowStep('idle');
           return;
         }
 
         if (data.status === 'error') {
+          // #region agent log
+          fetch('http://127.0.0.1:7242/ingest/e78e9fd7-3fa2-45c5-b036-a4f10b20798a',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'page.tsx:916',message:'OCR response status error',data:{message:data.message,status:data.status},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'C'})}).catch(()=>{});
+          // #endregion
+          
           setError(data.message ?? 'OCR処理中にエラーが発生しました');
           setOcrFlowStep('idle');
           return;
         }
 
         if (!data.ocrResult) {
+          // #region agent log
+          fetch('http://127.0.0.1:7242/ingest/e78e9fd7-3fa2-45c5-b036-a4f10b20798a',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'page.tsx:922',message:'OCR result missing',data:{dataKeys:Object.keys(data),dataStatus:data.status},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'E'})}).catch(()=>{});
+          // #endregion
+          
           setError('OCR結果が取得できませんでした');
           setOcrFlowStep('idle');
           return;
@@ -933,6 +995,10 @@ export default function Home() {
           [label]: data.ocrResult!.text
         }));
       } catch (err) {
+        // #region agent log
+        fetch('http://127.0.0.1:7242/ingest/e78e9fd7-3fa2-45c5-b036-a4f10b20798a',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'page.tsx:936',message:'OCR catch block error',data:{error:err instanceof Error?err.message:String(err),errorStack:err instanceof Error?err.stack:undefined,label},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'C'})}).catch(()=>{});
+        // #endregion
+        
         console.error('OCR error:', err);
         setError('OCR処理中にエラーが発生しました。');
         setOcrFlowStep('idle');
@@ -2916,6 +2982,131 @@ export default function Home() {
           onRemoveDevice={removeDevice}
           onRetryRegistration={retryDeviceRegistration}
         />
+      )}
+
+      {/* File Role Selection Modal */}
+      {showFileRoleModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50 backdrop-blur-sm">
+          <div className="bg-white rounded-2xl shadow-2xl max-w-2xl w-full max-h-[90vh] overflow-y-auto">
+            <div className="sticky top-0 bg-white border-b border-slate-200 px-6 py-4 flex items-center justify-between z-10">
+              <h2 className="text-xl font-bold text-slate-800 flex items-center">
+                <FileText className="w-5 h-5 mr-2 text-indigo-500" />
+                ファイルの種類を選択
+              </h2>
+              <button
+                onClick={() => {
+                  setShowFileRoleModal(false);
+                  setPendingFiles([]);
+                  setPendingFileRoles({});
+                }}
+                className="text-slate-400 hover:text-slate-600 transition-colors p-2"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            <div className="p-6 space-y-4">
+              <p className="text-sm text-slate-600 mb-4">
+                各ファイルが「答案」「問題」「解答」のどれに該当するか選択してください。
+              </p>
+
+              {pendingFiles.map((file, index) => {
+                const role = pendingFileRoles[index] || 'other';
+                const roleOptions: { value: FileRole; label: string; icon: string }[] = [
+                  { value: 'answer', label: '答案', icon: '📝' },
+                  { value: 'problem', label: '問題', icon: '📄' },
+                  { value: 'model', label: '解答', icon: '✅' },
+                  { value: 'problem_model', label: '問題+解答', icon: '📄✅' },
+                  { value: 'answer_problem', label: '答案+問題', icon: '📝📄' },
+                  { value: 'all', label: '全部', icon: '📚' },
+                  { value: 'other', label: 'その他', icon: '📎' },
+                ];
+
+                return (
+                  <div key={index} className="border border-slate-200 rounded-xl p-4 bg-slate-50">
+                    <div className="flex items-center justify-between mb-3">
+                      <div className="flex items-center space-x-2 flex-1 min-w-0">
+                        <FileText className="w-4 h-4 text-indigo-500 flex-shrink-0" />
+                        <span className="text-sm font-medium text-slate-700 truncate">
+                          {file.name}
+                        </span>
+                        <span className="text-xs text-slate-500 flex-shrink-0">
+                          ({formatFileSize(file.size)})
+                        </span>
+                      </div>
+                    </div>
+
+                    <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
+                      {roleOptions.map((option) => (
+                        <button
+                          key={option.value}
+                          type="button"
+                          onClick={() => {
+                            setPendingFileRoles(prev => ({
+                              ...prev,
+                              [index]: option.value,
+                            }));
+                          }}
+                          className={clsx(
+                            'px-3 py-2.5 rounded-lg text-sm font-medium transition-all',
+                            'border-2 flex items-center justify-center space-x-1.5',
+                            role === option.value
+                              ? 'bg-indigo-500 text-white border-indigo-600 shadow-md'
+                              : 'bg-white text-slate-700 border-slate-300 hover:border-indigo-400 hover:bg-indigo-50'
+                          )}
+                        >
+                          <span className="text-base">{option.icon}</span>
+                          <span>{option.label}</span>
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+
+            <div className="sticky bottom-0 bg-white border-t border-slate-200 px-6 py-4 flex items-center justify-end space-x-3">
+              <button
+                type="button"
+                onClick={() => {
+                  setShowFileRoleModal(false);
+                  setPendingFiles([]);
+                  setPendingFileRoles({});
+                }}
+                className="px-4 py-2 text-slate-600 hover:text-slate-800 font-medium transition-colors"
+              >
+                キャンセル
+              </button>
+              <button
+                type="button"
+                onClick={() => {
+                  // ファイルを追加
+                  const startIndex = uploadedFiles.length;
+                  setUploadedFiles(prev => {
+                    const next = [...prev, ...pendingFiles];
+                    setAnswerFileIndex(detectAnswerIndex(next, answerFileIndex));
+                    return next;
+                  });
+
+                  // 役割情報を追加
+                  const newRoles: Record<number, FileRole> = { ...fileRoles };
+                  pendingFiles.forEach((_, i) => {
+                    newRoles[startIndex + i] = pendingFileRoles[i] || 'other';
+                  });
+                  setFileRoles(newRoles);
+
+                  // モーダルを閉じる
+                  setShowFileRoleModal(false);
+                  setPendingFiles([]);
+                  setPendingFileRoles({});
+                }}
+                className="px-6 py-2 bg-indigo-500 text-white rounded-lg font-bold hover:bg-indigo-600 transition-colors shadow-md"
+              >
+                確定
+              </button>
+            </div>
+          </div>
+        </div>
       )}
     </main>
   );

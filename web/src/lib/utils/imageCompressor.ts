@@ -47,7 +47,7 @@ export const HIGH_QUALITY_OPTIONS: CompressionOptions = {
  * 低品質圧縮設定（ファイル数が多い場合）
  */
 export const LOW_QUALITY_OPTIONS: CompressionOptions = {
-    maxSizeMB: 0.18,             // 10枚対応: 0.18MB × 10 = 1.8MB（3.5MB制限内、より安全なマージン）
+    maxSizeMB: 0.25,             // 10枚対応: 0.25MB × 10 = 2.5MB（4.2MB制限内、より安全なマージン）
     maxWidthOrHeight: 1100,       // さらに小さくリサイズ（テキスト可読性を維持しつつ）
     useWebWorker: false,         // メインスレッドで処理
     initialQuality: 0.5,         // 品質を下げてサイズ削減
@@ -157,12 +157,8 @@ export async function compressMultipleImages(
     onProgress?: (progress: number, currentFile: string) => void
 ): Promise<File[]> {
     const totalFiles = files.length;
-    const MAX_TOTAL_SIZE = 3.5 * 1024 * 1024; // 3.5MB制限
+    const MAX_TOTAL_SIZE = 4.2 * 1024 * 1024; // 4.2MB制限（Vercel 4.5MB上限に対してFormDataオーバーヘッドを考慮）
     let baseOptions = getOptimalCompressionOptions(totalFiles);
-    
-    // #region agent log
-    fetch('http://127.0.0.1:7242/ingest/e78e9fd7-3fa2-45c5-b036-a4f10b20798a',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'imageCompressor.ts:165',message:'compressMultipleImages START',data:{totalFiles,originalSizes:files.map(f=>({name:f.name,size:f.size}))},timestamp:Date.now(),sessionId:'debug-session',hypothesisId:'A'})}).catch(()=>{});
-    // #endregion
     
     // 10枚以上の場合、合計サイズを考慮して目標サイズを動的に調整
     if (totalFiles >= 10) {
@@ -246,16 +242,9 @@ export async function compressMultipleImages(
 
         currentTotalSize += compressedFile.size;
         
-        // #region agent log
-        fetch('http://127.0.0.1:7242/ingest/e78e9fd7-3fa2-45c5-b036-a4f10b20798a',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'imageCompressor.ts:240',message:'File compressed',data:{index:i,fileName:file.name,originalSize:file.size,compressedSize:compressedFile.size,currentTotalSize,maxTotalSize:MAX_TOTAL_SIZE,willExceed:currentTotalSize>MAX_TOTAL_SIZE},timestamp:Date.now(),sessionId:'debug-session',hypothesisId:'A'})}).catch(()=>{});
-        // #endregion
-        
         // サイズ制限を超えた場合の警告と処理
         if (currentTotalSize > MAX_TOTAL_SIZE) {
             console.warn(`[ImageCompressor] Warning: Total size exceeded after ${i + 1} files: ${(currentTotalSize / 1024 / 1024).toFixed(2)}MB`);
-            // #region agent log
-            fetch('http://127.0.0.1:7242/ingest/e78e9fd7-3fa2-45c5-b036-a4f10b20798a',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'imageCompressor.ts:248',message:'SIZE LIMIT EXCEEDED - RETURNING EARLY',data:{processedCount:compressedFiles.length,totalFiles,currentTotalSize},timestamp:Date.now(),sessionId:'debug-session',hypothesisId:'A'})}).catch(()=>{});
-            // #endregion
             // 残りのファイルは元のまま返す（欠落させない）
             compressedFiles.push(compressedFile);
             const remainingFiles = files.slice(i + 1);

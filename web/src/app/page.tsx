@@ -641,7 +641,9 @@ export default function Home() {
     const priority: FileRole[] = ['answer', 'answer_problem', 'all', 'problem_model'];
     for (const role of priority) {
       const idx = files.findIndex((_, i) => roles[i] === role);
-      if (idx >= 0) return idx;
+      if (idx >= 0) {
+        return idx;
+      }
     }
 
     // 役割で見つからない場合はファイル名ヒューリスティック
@@ -713,20 +715,24 @@ export default function Home() {
       }
     }
 
-    const MAX_TOTAL_SIZE = 3.5 * 1024 * 1024;
-    const MAX_SINGLE_FILE_SIZE = 4 * 1024 * 1024;
+    const MAX_TOTAL_SIZE = 4.2 * 1024 * 1024; // 4.2MB（Vercel 4.5MB上限に対してFormDataオーバーヘッドを考慮）
+    const MAX_SINGLE_FILE_SIZE = 4.3 * 1024 * 1024; // 4.3MB
     const totalSize = filesToUse.reduce((sum, file) => sum + file.size, 0);
 
     const oversizedFile = filesToUse.find(file => file.size > MAX_SINGLE_FILE_SIZE);
     if (oversizedFile) {
-      setError(`ファイル「${oversizedFile.name}」が大きすぎます（${(oversizedFile.size / 1024 / 1024).toFixed(1)}MB）。4MB以下のファイルをアップロードしてください。`);
+      const isPdf = oversizedFile.type === 'application/pdf';
+      const advice = isPdf 
+        ? 'PDFはオンライン圧縮ツール（iLovePDF等）で圧縮してください。'
+        : '4.3MB以下のファイルをアップロードしてください。';
+      setError(`ファイル「${oversizedFile.name}」が大きすぎます（${(oversizedFile.size / 1024 / 1024).toFixed(1)}MB）。${advice}`);
       return;
     }
 
     if (totalSize > MAX_TOTAL_SIZE) {
       const totalMB = (totalSize / 1024 / 1024).toFixed(1);
       const maxMB = (MAX_TOTAL_SIZE / 1024 / 1024).toFixed(1);
-      setError(`ファイルの合計サイズが大きすぎます（${totalMB}MB）。合計${maxMB}MB以下になるように、ファイルを分割してください。`);
+      setError(`ファイルの合計サイズが大きすぎます（${totalMB}MB）。合計${maxMB}MB以下になるように、ファイルを分割するか、PDFの場合はオンライン圧縮ツールで圧縮してください。`);
       return;
     }
 
@@ -986,10 +992,6 @@ export default function Home() {
   const handleOcrStart = async (e: React.FormEvent) => {
     e.preventDefault();
 
-    // #region agent log
-    fetch('http://127.0.0.1:7242/ingest/e78e9fd7-3fa2-45c5-b036-a4f10b20798a',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'page.tsx:handleOcrStart',message:'OCR START',data:{selectedProblems,uploadedFilesCount:uploadedFiles.length},timestamp:Date.now(),sessionId:'debug-session',hypothesisId:'C'})}).catch(()=>{});
-    // #endregion
-
     if (!user) {
       openAuthModal('signin');
       return;
@@ -1015,9 +1017,6 @@ export default function Home() {
       targetLabels = [currentLabel];
     }
     
-    // #region agent log
-    fetch('http://127.0.0.1:7242/ingest/e78e9fd7-3fa2-45c5-b036-a4f10b20798a',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'page.tsx:handleOcrStart:targetLabels',message:'targetLabels determined',data:{targetLabels,count:targetLabels.length},timestamp:Date.now(),sessionId:'debug-session',hypothesisId:'C'})}).catch(()=>{});
-
     // 画像ファイルを圧縮（10枚対応）
     const hasImages = uploadedFiles.some(f => isImageFile(f));
     let filesToUse = uploadedFiles;
@@ -1048,13 +1047,17 @@ export default function Home() {
 
     // 圧縮後のファイルサイズチェック（413エラー対策）
     const totalFileSize = filesToUse.reduce((sum, file) => sum + file.size, 0);
-    const MAX_REQUEST_SIZE = 3.5 * 1024 * 1024; // 3.5MB（Vercelの制限4.5MBに安全マージン、FormDataのオーバーヘッドを考慮）
+    const MAX_REQUEST_SIZE = 4.2 * 1024 * 1024; // 4.2MB（Vercel 4.5MB上限に対してFormDataオーバーヘッドを考慮）
     
     if (totalFileSize > MAX_REQUEST_SIZE) {
       const totalMB = (totalFileSize / 1024 / 1024).toFixed(1);
       const maxMB = (MAX_REQUEST_SIZE / 1024 / 1024).toFixed(1);
       const fileCount = filesToUse.length;
-      setError(`ファイルの合計サイズが大きすぎます（${totalMB}MB、${fileCount}枚）。合計${maxMB}MB以下になるように、ファイルを分割するか、写真の枚数を減らしてください。`);
+      const hasPdf = filesToUse.some(f => f.type === 'application/pdf');
+      const advice = hasPdf 
+        ? 'PDFの場合はオンライン圧縮ツール（iLovePDF等）で圧縮するか、'
+        : '';
+      setError(`ファイルの合計サイズが大きすぎます（${totalMB}MB、${fileCount}枚）。合計${maxMB}MB以下になるように、${advice}ファイルを分割するか、写真の枚数を減らしてください。`);
       return;
     }
 
@@ -1066,14 +1069,7 @@ export default function Home() {
     // 各ラベルに対してOCRを実行
     const newOcrResults: Record<string, { text: string; charCount: number }> = {};
 
-    // #region agent log
-    fetch('http://127.0.0.1:7242/ingest/e78e9fd7-3fa2-45c5-b036-a4f10b20798a',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'page.tsx:OCRLoop:start',message:'Starting OCR loop',data:{targetLabels,filesToUseCount:filesToUse.length},timestamp:Date.now(),sessionId:'debug-session',hypothesisId:'B'})}).catch(()=>{});
-    // #endregion
-
     for (const label of targetLabels) {
-      // #region agent log
-      fetch('http://127.0.0.1:7242/ingest/e78e9fd7-3fa2-45c5-b036-a4f10b20798a',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'page.tsx:OCRLoop:iteration',message:'Processing label',data:{label,currentResultsCount:Object.keys(newOcrResults).length},timestamp:Date.now(),sessionId:'debug-session',hypothesisId:'B'})}).catch(()=>{});
-      // #endregion
       setCurrentOcrLabel(label);
       
       const formData = new FormData();
@@ -1151,10 +1147,6 @@ export default function Home() {
           charCount: data.ocrResult.charCount
         };
         
-        // #region agent log
-        fetch('http://127.0.0.1:7242/ingest/e78e9fd7-3fa2-45c5-b036-a4f10b20798a',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'page.tsx:OCRLoop:success',message:'OCR success for label',data:{label,charCount:data.ocrResult.charCount,newOcrResultsKeys:Object.keys(newOcrResults)},timestamp:Date.now(),sessionId:'debug-session',hypothesisId:'B'})}).catch(()=>{});
-        // #endregion
-        
         // 初期値として確認済みテキストにも設定
         setConfirmedTexts(prev => ({
           ...prev,
@@ -1162,18 +1154,11 @@ export default function Home() {
         }));
       } catch (err) {
         console.error('OCR error:', err);
-        // #region agent log
-        fetch('http://127.0.0.1:7242/ingest/e78e9fd7-3fa2-45c5-b036-a4f10b20798a',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'page.tsx:OCRLoop:error',message:'OCR FAILED',data:{label,error:String(err)},timestamp:Date.now(),sessionId:'debug-session',hypothesisId:'B'})}).catch(()=>{});
-        // #endregion
         setError('OCR処理中にエラーが発生しました。');
         setOcrFlowStep('idle');
         return;
       }
     }
-
-    // #region agent log
-    fetch('http://127.0.0.1:7242/ingest/e78e9fd7-3fa2-45c5-b036-a4f10b20798a',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'page.tsx:OCRLoop:complete',message:'OCR loop COMPLETE',data:{newOcrResultsKeys:Object.keys(newOcrResults),targetLabelsCount:targetLabels.length,matchCount:Object.keys(newOcrResults).length===targetLabels.length},timestamp:Date.now(),sessionId:'debug-session',hypothesisId:'B,D'})}).catch(()=>{});
-    // #endregion
 
     setOcrResults(newOcrResults);
     setOcrFlowStep('confirm');
@@ -1249,13 +1234,17 @@ export default function Home() {
     }
 
     // 圧縮後のファイルサイズチェック
-    const MAX_TOTAL_SIZE = 3.5 * 1024 * 1024;
+    const MAX_TOTAL_SIZE = 4.2 * 1024 * 1024; // 4.2MB（Vercel 4.5MB上限に対してFormDataオーバーヘッドを考慮）
     const totalSize = filesToUse.reduce((sum, file) => sum + file.size, 0);
     
     if (totalSize > MAX_TOTAL_SIZE) {
       const totalMB = (totalSize / 1024 / 1024).toFixed(1);
       const maxMB = (MAX_TOTAL_SIZE / 1024 / 1024).toFixed(1);
-      setError(`ファイルの合計サイズが大きすぎます（${totalMB}MB）。合計${maxMB}MB以下になるように、ファイルを圧縮するか分割してください。`);
+      const hasPdf = filesToUse.some(f => f.type === 'application/pdf');
+      const advice = hasPdf 
+        ? 'PDFの場合はオンライン圧縮ツール（iLovePDF等）で圧縮してください。'
+        : 'ファイルを圧縮するか分割してください。';
+      setError(`ファイルの合計サイズが大きすぎます（${totalMB}MB）。合計${maxMB}MB以下になるように、${advice}`);
       setIsLoading(false);
       setOcrFlowStep('idle');
       return;
@@ -1408,20 +1397,28 @@ export default function Home() {
     }
 
     // 圧縮後のファイルサイズチェック（Vercel Serverless Functions: 4.5MBペイロード上限）
-    const MAX_TOTAL_SIZE = 3.5 * 1024 * 1024; // 3.5MB（Vercelペイロード上限対応、FormDataのオーバーヘッドを考慮）
-    const MAX_SINGLE_FILE_SIZE = 4 * 1024 * 1024; // 4MB
+    const MAX_TOTAL_SIZE = 4.2 * 1024 * 1024; // 4.2MB（Vercel 4.5MB上限に対してFormDataオーバーヘッドを考慮）
+    const MAX_SINGLE_FILE_SIZE = 4.3 * 1024 * 1024; // 4.3MB
     const totalSize = filesToUse.reduce((sum, file) => sum + file.size, 0);
     
     const oversizedFile = filesToUse.find(file => file.size > MAX_SINGLE_FILE_SIZE);
     if (oversizedFile) {
-      setError(`ファイル「${oversizedFile.name}」が大きすぎます（${(oversizedFile.size / 1024 / 1024).toFixed(1)}MB）。4MB以下のファイルをアップロードしてください。PDFを圧縮するか、ページを分割してください。`);
+      const isPdf = oversizedFile.type === 'application/pdf';
+      const advice = isPdf 
+        ? 'PDFはオンライン圧縮ツール（iLovePDF等）で圧縮するか、画像として撮影し直してください。'
+        : '4.3MB以下のファイルをアップロードしてください。';
+      setError(`ファイル「${oversizedFile.name}」が大きすぎます（${(oversizedFile.size / 1024 / 1024).toFixed(1)}MB）。${advice}`);
       return;
     }
     
     if (totalSize > MAX_TOTAL_SIZE) {
       const totalMB = (totalSize / 1024 / 1024).toFixed(1);
       const maxMB = (MAX_TOTAL_SIZE / 1024 / 1024).toFixed(1);
-      setError(`ファイルの合計サイズが大きすぎます（${totalMB}MB）。合計${maxMB}MB以下になるように、ファイルを分割してください。`);
+      const hasPdf = filesToUse.some(f => f.type === 'application/pdf');
+      const advice = hasPdf 
+        ? 'PDFの場合はオンライン圧縮ツール（iLovePDF等）で圧縮するか、'
+        : '';
+      setError(`ファイルの合計サイズが大きすぎます（${totalMB}MB）。合計${maxMB}MB以下になるように、${advice}ファイルを分割してください。`);
       return;
     }
 
@@ -3448,9 +3445,6 @@ export default function Home() {
               <button
                 type="button"
                 onClick={() => {
-                  // #region agent log
-                  fetch('http://127.0.0.1:7242/ingest/e78e9fd7-3fa2-45c5-b036-a4f10b20798a',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'page.tsx:FileRoleModal:confirm',message:'Files confirmed',data:{pendingFilesCount:pendingFiles.length,pendingFileSizes:pendingFiles.map(f=>({name:f.name,size:f.size})),existingUploadedFilesCount:uploadedFiles.length},timestamp:Date.now(),sessionId:'debug-session',hypothesisId:'E'})}).catch(()=>{});
-                  // #endregion
                   // ファイルを追加
                   const startIndex = uploadedFiles.length;
                   setUploadedFiles(prev => {

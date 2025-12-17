@@ -27,8 +27,6 @@ const mapStripeStatus = (stripeStatus?: string | null): SubscriptionStatus => {
 export async function POST(request: NextRequest) {
   try {
     const supabase = await createClient();
-    type ProfileRow = Database['public']['Tables']['user_profiles']['Row'];
-    type ProfileStripeId = Pick<ProfileRow, 'stripe_customer_id'>;
     const {
       data: { user },
       error: authError,
@@ -45,7 +43,10 @@ export async function POST(request: NextRequest) {
       .eq('id', user.id)
       .maybeSingle();
 
-    const stripeCustomerId = (profileData as ProfileStripeId | null)?.stripe_customer_id ?? null;
+    // 明示キャストで型崩れを回避
+    const stripeCustomerId = (
+      profileData as { stripe_customer_id: string | null } | null
+    )?.stripe_customer_id ?? null;
 
     if (profileError || !stripeCustomerId) {
       return NextResponse.json({ error: 'Stripe顧客IDが見つかりません' }, { status: 404 });

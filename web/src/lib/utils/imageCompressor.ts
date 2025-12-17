@@ -11,10 +11,12 @@
  */
 
 // タイムアウト設定
-const PER_FILE_TIMEOUT_MS = 5000;         // 1ファイルあたり最大5秒
+const IS_MOBILE = typeof navigator !== 'undefined' && /iPhone|iPad|Android/i.test(navigator.userAgent);
+const PER_FILE_TIMEOUT_MS = 4000;         // 1ファイルあたり最大4秒（短縮）
 const MAX_TOTAL_COMPRESSION_MS = 30000;   // 全体で30秒
 const INTER_FILE_DELAY_MS = 500;          // ファイル間の遅延（メモリ解放用）★500msに増加
-const CAN_USE_IMAGE_BITMAP = typeof createImageBitmap === 'function';
+// iOS Safari で createImageBitmap がハングする事例があるためモバイルでは無効化
+const CAN_USE_IMAGE_BITMAP = typeof createImageBitmap === 'function' && !IS_MOBILE;
 const TOBLOB_TIMEOUT_MS = 1500;
 
 /**

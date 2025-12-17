@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
+import { NextRequest, NextResponse } from 'next/server';
 import { stripe, getPlanIdFromStripePriceId } from '@/lib/stripe/config';
 import { createClient } from '@/lib/supabase/server';
 import type { Database } from '@/lib/supabase/types';
@@ -27,6 +28,7 @@ export async function POST(request: NextRequest) {
   try {
     const supabase = await createClient();
     type ProfileRow = Database['public']['Tables']['user_profiles']['Row'];
+    type ProfileStripeId = Pick<ProfileRow, 'stripe_customer_id'>;
     const {
       data: { user },
       error: authError,
@@ -37,15 +39,13 @@ export async function POST(request: NextRequest) {
     }
 
     // プロファイルからStripe顧客IDを取得
-    const { data: profile, error: profileError } = await supabase
+    const { data: profileData, error: profileError } = await supabase
       .from('user_profiles')
       .select('stripe_customer_id')
       .eq('id', user.id)
-      .maybeSingle<Pick<ProfileRow, 'stripe_customer_id'>>();
+      .maybeSingle();
 
-    // 型推論が崩れるケースに備えて明示的に取り出す
-    const stripeCustomerId =
-      (profile as Pick<ProfileRow, 'stripe_customer_id'> | null)?.stripe_customer_id ?? null;
+    const stripeCustomerId = (profileData as ProfileStripeId | null)?.stripe_customer_id ?? null;
 
     if (profileError || !stripeCustomerId) {
       return NextResponse.json({ error: 'Stripe顧客IDが見つかりません' }, { status: 404 });

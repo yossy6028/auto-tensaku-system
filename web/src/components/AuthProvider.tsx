@@ -271,6 +271,29 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         setSubscription(data as Subscription);
       } else {
         console.log('[AuthProvider] No active subscription found');
+        // フォールバック: Stripeから同期を試みる
+        try {
+          console.log('[AuthProvider] Trying Stripe sync fallback...');
+          const res = await fetch('/api/stripe/sync', { method: 'POST' });
+          const json = await res.json();
+          console.log('[AuthProvider] Stripe sync response:', res.status, json);
+          if (res.ok) {
+            const { data: synced } = await supabaseClient
+              .from('subscriptions')
+              .select('*')
+              .eq('user_id', userId)
+              .eq('status', 'active')
+              .order('purchased_at', { ascending: false })
+              .limit(1)
+              .maybeSingle();
+            if (synced) {
+              console.log('[AuthProvider] Setting subscription after sync:', synced);
+              setSubscription(synced as Subscription);
+            }
+          }
+        } catch (syncError) {
+          console.warn('[AuthProvider] Stripe sync fallback failed:', syncError);
+        }
         setSubscription(null);
       }
     } catch (error) {

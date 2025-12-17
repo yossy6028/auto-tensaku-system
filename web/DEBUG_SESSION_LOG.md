@@ -62,6 +62,7 @@
   - `createImageBitmap`を使ってデコードとリサイズを同時実行（成功時は1回のデコードで完結）
   - `withTimeout`ユーティリティで`createImageBitmap`/`toBlob`の両方に外部タイムアウトを付与
   - `drawToCanvas`が事前デコード済みの`ImageBitmap`/`HTMLImageElement`を再利用して余計なデコードを回避
+- **追加緩和**: `toBlob`非対応・失敗時は圧縮をスキップし、同期`toDataURL`フォールバックをやめてUIブロックを防止
 - **目的**: メインスレッドのブロッキング削減とメモリ削減で「画像最適化0%フリーズ」を潰す
 
 ### 修正内容の詳細

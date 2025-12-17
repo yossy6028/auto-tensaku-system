@@ -190,7 +190,7 @@ function loadImage(file: File, timeoutMs: number = 3000): Promise<HTMLImageEleme
 async function canvasToJpegBlob(
     canvas: HTMLCanvasElement,
     quality: number
-): Promise<Blob> {
+): Promise<Blob | null> {
     const toBlobPromise = new Promise<Blob | null>((resolve, reject) => {
         if (!canvas.toBlob) {
             resolve(null);
@@ -198,10 +198,6 @@ async function canvasToJpegBlob(
         }
         canvas.toBlob(
             (blob) => {
-                if (!blob) {
-                    reject(new Error('canvas.toBlob returned null'));
-                    return;
-                }
                 resolve(blob);
             },
             'image/jpeg',
@@ -216,13 +212,12 @@ async function canvasToJpegBlob(
             () => Promise.resolve<Blob | null>(null)
         );
         if (blob) return blob;
-        console.warn('[Compress] canvas.toBlob unavailable or returned null, falling back to toDataURL');
+        console.warn('[Compress] canvas.toBlob unavailable or returned null');
     } catch (err) {
-        console.warn('[Compress] canvas.toBlob failed, falling back to toDataURL', err);
+        console.warn('[Compress] canvas.toBlob failed', err);
     }
 
-    const dataURL = canvas.toDataURL('image/jpeg', quality);
-    return dataURLtoBlob(dataURL);
+    return null;
 }
 
 /**
@@ -375,6 +370,12 @@ export async function compressImage(
         // メモリ解放
         canvas.width = 0;
         canvas.height = 0;
+
+        if (!jpegBlob) {
+            console.warn(`[Compress] Skip toDataURL fallback for ${file.name}, returning original file to avoid UI block`);
+            if (onProgress) onProgress(100);
+            return file;
+        }
 
         // Blob変換
         const compressedFile = new File([jpegBlob], file.name, { type: 'image/jpeg' });

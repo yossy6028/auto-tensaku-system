@@ -43,7 +43,9 @@ export async function POST(request: NextRequest) {
       .eq('id', user.id)
       .maybeSingle<Pick<ProfileRow, 'stripe_customer_id'>>();
 
-    const stripeCustomerId = profile?.stripe_customer_id ?? null;
+    // 型推論が崩れるケースに備えて明示的に取り出す
+    const stripeCustomerId =
+      (profile as Pick<ProfileRow, 'stripe_customer_id'> | null)?.stripe_customer_id ?? null;
 
     if (profileError || !stripeCustomerId) {
       return NextResponse.json({ error: 'Stripe顧客IDが見つかりません' }, { status: 404 });

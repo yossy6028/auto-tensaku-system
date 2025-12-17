@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { stripe, getPlanIdFromStripePriceId } from '@/lib/stripe/config';
 import { createClient } from '@/lib/supabase/server';
 import type { Database } from '@/lib/supabase/types';
+import Stripe from 'stripe';
 
 const PLAN_LIMITS: Record<string, number> = {
   light: 10,
@@ -25,7 +26,8 @@ const mapStripeStatus = (stripeStatus?: string | null): SubscriptionStatus => {
 
 export async function POST(request: NextRequest) {
   try {
-    const supabase = await createClient();
+    // 型衝突を避けるためゆるくキャスト
+    const supabase = (await createClient()) as any;
     const {
       data: { user },
       error: authError,
@@ -66,7 +68,9 @@ export async function POST(request: NextRequest) {
 
     // createdの新しい順にソートして最新を取得
     const sorted = [...subscriptions.data].sort((a, b) => b.created - a.created);
-    const subscription = sorted[0];
+    // Stripe型が環境依存で解決しない場合に備えてゆるくキャスト
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const subscription = sorted[0] as any;
 
     const priceId = subscription.items.data[0]?.price?.id || null;
     const planId = getPlanIdFromStripePriceId(priceId || '') || 'light';

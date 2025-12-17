@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { stripe, getPlanIdFromStripePriceId } from '@/lib/stripe/config';
 import { createClient } from '@/lib/supabase/server';
+import type { Database } from '@/lib/supabase/types';
 
 const PLAN_LIMITS: Record<string, number> = {
   light: 10,
@@ -25,6 +26,7 @@ const mapStripeStatus = (stripeStatus?: string | null): SubscriptionStatus => {
 export async function POST(request: NextRequest) {
   try {
     const supabase = await createClient();
+    type ProfileRow = Database['public']['Tables']['user_profiles']['Row'];
     const {
       data: { user },
       error: authError,
@@ -39,13 +41,15 @@ export async function POST(request: NextRequest) {
       .from('user_profiles')
       .select('stripe_customer_id')
       .eq('id', user.id)
-      .maybeSingle();
+      .maybeSingle<Pick<ProfileRow, 'stripe_customer_id'>>();
 
-    if (profileError || !profile?.stripe_customer_id) {
+    const stripeCustomerId = profile?.stripe_customer_id ?? null;
+
+    if (profileError || !stripeCustomerId) {
       return NextResponse.json({ error: 'Stripe顧客IDが見つかりません' }, { status: 404 });
     }
 
-    const customerId = profile.stripe_customer_id as string;
+    const customerId = stripeCustomerId;
 
     // 最新のサブスクリプションをStripeから取得
     const subscriptions = await stripe.subscriptions.list({

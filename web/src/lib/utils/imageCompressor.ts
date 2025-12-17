@@ -4,15 +4,16 @@
  * スマホで撮影した大きな画像を自動的に圧縮し、
  * Vercelのペイロード制限（4.5MB）内に収める
  * 
- * 安定性向上: Canvas APIベースのフォールバック圧縮を追加
+ * 安定性重視: Canvas APIのみ使用（browser-image-compressionは不安定なため廃止）
+ * - 外部ライブラリなし、シンプルなCanvas API
+ * - ファイル間に遅延を入れてリソース解放を促す
+ * - 各処理にタイムアウトを設けてハング防止
  */
 
-import imageCompression from 'browser-image-compression';
-
-// 圧縮が固まらないようにするためのタイムアウト（短縮して早めにフォールバック）
-const PER_FILE_TIMEOUT_MS = 8000;         // 1ファイルあたり最大8秒で打ち切り（15秒→8秒に短縮）
-const MAX_TOTAL_COMPRESSION_MS = 30000;   // 全体で30秒を超えたら打ち切り（45秒→30秒に短縮）
-const CANVAS_FALLBACK_TIMEOUT_MS = 5000;  // Canvas APIフォールバックのタイムアウト
+// 圧縮タイムアウト設定
+const PER_FILE_TIMEOUT_MS = 6000;         // 1ファイルあたり最大6秒
+const MAX_TOTAL_COMPRESSION_MS = 25000;   // 全体で25秒を超えたら打ち切り
+const INTER_FILE_DELAY_MS = 100;          // ファイル間の遅延（リソース解放用）
 
 /**
  * 圧縮オプション
@@ -83,8 +84,8 @@ export function needsCompression(file: File, maxSizeMB: number = 0.8): boolean {
 }
 
 /**
- * Canvas APIを使ったシンプルな画像圧縮（フォールバック用）
- * browser-image-compressionがハングした場合の代替手段
+ * Canvas APIを使った安定した画像圧縮
+ * browser-image-compressionは不安定なため、Canvas APIのみ使用
  */
 async function compressWithCanvas(
     file: File,
@@ -94,13 +95,29 @@ async function compressWithCanvas(
     return new Promise((resolve, reject) => {
         const img = new Image();
         const url = URL.createObjectURL(file);
+        let resolved = false;
+        
+        // タイムアウト設定（ハング防止）
+        const timeout = setTimeout(() => {
+            if (!resolved) {
+                resolved = true;
+                URL.revokeObjectURL(url);
+                console.warn(`[Canvas] Timeout for ${file.name}, using original`);
+                resolve(file);
+            }
+        }, PER_FILE_TIMEOUT_MS);
         
         img.onload = () => {
+            if (resolved) return;
+            
             try {
                 URL.revokeObjectURL(url);
                 
                 // リサイズ計算
                 let { width, height } = img;
+                const originalWidth = width;
+                const originalHeight = height;
+                
                 if (width > maxWidthOrHeight || height > maxWidthOrHeight) {
                     if (width > height) {
                         height = Math.round((height * maxWidthOrHeight) / width);
@@ -117,7 +134,10 @@ async function compressWithCanvas(
                 canvas.height = height;
                 const ctx = canvas.getContext('2d');
                 if (!ctx) {
-                    reject(new Error('Canvas context not available'));
+                    clearTimeout(timeout);
+                    resolved = true;
+                    console.warn(`[Canvas] No context for ${file.name}, using original`);
+                    resolve(file);
                     return;
                 }
                 ctx.drawImage(img, 0, 0, width, height);
@@ -125,25 +145,45 @@ async function compressWithCanvas(
                 // JPEG出力
                 canvas.toBlob(
                     (blob) => {
+                        clearTimeout(timeout);
+                        if (resolved) return;
+                        resolved = true;
+                        
                         if (blob) {
                             const compressedFile = new File([blob], file.name, { type: 'image/jpeg' });
-                            console.log(`[Canvas Fallback] ${file.name}: ${(file.size/1024/1024).toFixed(2)}MB → ${(compressedFile.size/1024/1024).toFixed(2)}MB`);
+                            console.log(`[Canvas] ${file.name}: ${originalWidth}x${originalHeight} → ${width}x${height}, ${(file.size/1024/1024).toFixed(2)}MB → ${(compressedFile.size/1024/1024).toFixed(2)}MB`);
+                            
+                            // Canvasをクリア（メモリ解放）
+                            canvas.width = 0;
+                            canvas.height = 0;
+                            
                             resolve(compressedFile);
                         } else {
-                            reject(new Error('Canvas toBlob failed'));
+                            console.warn(`[Canvas] toBlob failed for ${file.name}, using original`);
+                            resolve(file);
                         }
                     },
                     'image/jpeg',
                     quality
                 );
             } catch (err) {
-                reject(err);
+                clearTimeout(timeout);
+                if (!resolved) {
+                    resolved = true;
+                    console.error(`[Canvas] Error for ${file.name}:`, err);
+                    resolve(file); // エラー時も元ファイルで続行
+                }
             }
         };
         
         img.onerror = () => {
-            URL.revokeObjectURL(url);
-            reject(new Error('Image load failed'));
+            clearTimeout(timeout);
+            if (!resolved) {
+                resolved = true;
+                URL.revokeObjectURL(url);
+                console.warn(`[Canvas] Image load failed for ${file.name}, using original`);
+                resolve(file);
+            }
         };
         
         img.src = url;
@@ -151,8 +191,7 @@ async function compressWithCanvas(
 }
 
 /**
- * 単一画像を圧縮
- * ライブラリ失敗時はCanvas APIフォールバックを使用
+ * 単一画像を圧縮（Canvas APIのみ使用 - 安定性重視）
  */
 export async function compressImage(
     file: File,
@@ -164,103 +203,31 @@ export async function compressImage(
         return file;
     }
 
-    // 圧縮不要の場合はそのまま返す
-    if (!needsCompression(file, options.maxSizeMB)) {
-        // #region agent log
-        fetch('http://127.0.0.1:7242/ingest/e78e9fd7-3fa2-45c5-b036-a4f10b20798a',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'imageCompressor.ts:compressImage:skip',message:'Compression skipped - file already small',data:{fileName:file.name,sizeMB:(file.size/1024/1024).toFixed(2),maxSizeMB:options.maxSizeMB},timestamp:Date.now(),sessionId:'debug-session',hypothesisId:'B'})}).catch(()=>{});
-        // #endregion
+    // 圧縮不要の場合はそのまま返す（ただし大きい画像はリサイズ）
+    const fileSizeMB = file.size / 1024 / 1024;
+    if (fileSizeMB <= options.maxSizeMB && fileSizeMB < 1.0) {
+        console.log(`[Compressor] Skip: ${file.name} (${fileSizeMB.toFixed(2)}MB) - already small`);
+        if (onProgress) onProgress(100);
         return file;
     }
 
-    // #region agent log
-    const startTime = Date.now();
-    fetch('http://127.0.0.1:7242/ingest/e78e9fd7-3fa2-45c5-b036-a4f10b20798a',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'imageCompressor.ts:compressImage:start',message:'Starting single image compression',data:{fileName:file.name,sizeMB:(file.size/1024/1024).toFixed(2),options:{maxSizeMB:options.maxSizeMB,maxWidthOrHeight:options.maxWidthOrHeight,useWebWorker:options.useWebWorker}},timestamp:Date.now(),sessionId:'debug-session',hypothesisId:'C'})}).catch(()=>{});
-    // #endregion
+    console.log(`[Compressor] Start: ${file.name} (${fileSizeMB.toFixed(2)}MB)`);
+    if (onProgress) onProgress(10);
 
-    // まずライブラリで圧縮を試行
     try {
-        console.log(`[ImageCompressor] Starting compression: ${file.name} (${(file.size / 1024 / 1024).toFixed(2)}MB)`);
+        // Canvas APIで圧縮（タイムアウト内蔵）
+        const result = await compressWithCanvas(
+            file,
+            options.maxWidthOrHeight,
+            options.initialQuality || 0.7
+        );
         
-        // 圧縮を実行（タイムアウト付き）
-        const compressionPromise = imageCompression(file, {
-            maxSizeMB: options.maxSizeMB,
-            maxWidthOrHeight: options.maxWidthOrHeight,
-            useWebWorker: options.useWebWorker,
-            initialQuality: options.initialQuality,
-            onProgress: (p) => {
-                // #region agent log
-                if (p % 25 === 0 || p >= 99) {
-                    fetch('http://127.0.0.1:7242/ingest/e78e9fd7-3fa2-45c5-b036-a4f10b20798a',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'imageCompressor.ts:compressImage:progress',message:'imageCompression onProgress',data:{fileName:file.name,progress:p,elapsedMs:Date.now()-startTime},timestamp:Date.now(),sessionId:'debug-session',hypothesisId:'B,C'})}).catch(()=>{});
-                }
-                // #endregion
-                if (onProgress) onProgress(p);
-            },
-        });
-
-        // タイムアウト（固まるケースの防止）- タイムアウト時はCanvasフォールバックへ
-        const timeoutPromise = new Promise<never>((_, reject) => {
-            setTimeout(() => {
-                // #region agent log
-                fetch('http://127.0.0.1:7242/ingest/e78e9fd7-3fa2-45c5-b036-a4f10b20798a',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'imageCompressor.ts:compressImage:timeout',message:'Per-file timeout - trying Canvas fallback',data:{fileName:file.name,elapsedMs:Date.now()-startTime,timeoutMs:PER_FILE_TIMEOUT_MS},timestamp:Date.now(),sessionId:'debug-session',hypothesisId:'C'})}).catch(()=>{});
-                // #endregion
-                reject(new Error('Compression timeout'));
-            }, PER_FILE_TIMEOUT_MS);
-        });
-
-        const compressedBlob = await Promise.race([compressionPromise, timeoutPromise]);
-
-        // Blobを元のファイル名でFileに変換
-        const compressedFile = new File(
-            [compressedBlob],
-            file.name,
-            { type: compressedBlob.type || file.type }
-        );
-
-        // #region agent log
-        fetch('http://127.0.0.1:7242/ingest/e78e9fd7-3fa2-45c5-b036-a4f10b20798a',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'imageCompressor.ts:compressImage:success',message:'Image compression succeeded (library)',data:{fileName:file.name,originalMB:(file.size/1024/1024).toFixed(2),compressedMB:(compressedFile.size/1024/1024).toFixed(2),elapsedMs:Date.now()-startTime},timestamp:Date.now(),sessionId:'debug-session',hypothesisId:'C'})}).catch(()=>{});
-        // #endregion
-
-        console.log(
-            `[ImageCompressor] ${file.name}: ${(file.size / 1024 / 1024).toFixed(2)}MB → ${(compressedFile.size / 1024 / 1024).toFixed(2)}MB`
-        );
-
-        return compressedFile;
+        if (onProgress) onProgress(100);
+        return result;
     } catch (error) {
-        // #region agent log
-        fetch('http://127.0.0.1:7242/ingest/e78e9fd7-3fa2-45c5-b036-a4f10b20798a',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'imageCompressor.ts:compressImage:libraryFailed',message:'Library compression failed - trying Canvas fallback',data:{fileName:file.name,error:String(error),elapsedMs:Date.now()-startTime},timestamp:Date.now(),sessionId:'debug-session',hypothesisId:'C,F'})}).catch(()=>{});
-        // #endregion
-        console.warn(`[ImageCompressor] Library failed for ${file.name}, trying Canvas fallback...`);
-        
-        // Canvas APIフォールバックを試行
-        try {
-            const canvasPromise = compressWithCanvas(
-                file,
-                options.maxWidthOrHeight,
-                options.initialQuality || 0.7
-            );
-            
-            const canvasTimeoutPromise = new Promise<File>((resolve) => {
-                setTimeout(() => {
-                    console.warn(`[ImageCompressor] Canvas fallback timeout for ${file.name}, using original`);
-                    resolve(file);
-                }, CANVAS_FALLBACK_TIMEOUT_MS);
-            });
-            
-            const canvasResult = await Promise.race([canvasPromise, canvasTimeoutPromise]);
-            
-            // #region agent log
-            fetch('http://127.0.0.1:7242/ingest/e78e9fd7-3fa2-45c5-b036-a4f10b20798a',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'imageCompressor.ts:compressImage:canvasSuccess',message:'Canvas fallback succeeded',data:{fileName:file.name,originalMB:(file.size/1024/1024).toFixed(2),compressedMB:(canvasResult.size/1024/1024).toFixed(2),elapsedMs:Date.now()-startTime},timestamp:Date.now(),sessionId:'debug-session',hypothesisId:'F'})}).catch(()=>{});
-            // #endregion
-            
-            return canvasResult;
-        } catch (canvasError) {
-            // #region agent log
-            fetch('http://127.0.0.1:7242/ingest/e78e9fd7-3fa2-45c5-b036-a4f10b20798a',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'imageCompressor.ts:compressImage:allFailed',message:'All compression methods failed - using original',data:{fileName:file.name,canvasError:String(canvasError),elapsedMs:Date.now()-startTime},timestamp:Date.now(),sessionId:'debug-session',hypothesisId:'F'})}).catch(()=>{});
-            // #endregion
-            console.error('[ImageCompressor] All compression methods failed:', canvasError);
-            console.warn(`[ImageCompressor] Using original file: ${file.name} (${(file.size / 1024 / 1024).toFixed(2)}MB)`);
-            return file;
-        }
+        console.error(`[Compressor] Error for ${file.name}:`, error);
+        if (onProgress) onProgress(100);
+        return file; // エラー時は元ファイルで続行
     }
 }
 
@@ -285,47 +252,39 @@ export async function compressMultipleImages(
     onProgress?: (progress: number, currentFile: string) => void
 ): Promise<File[]> {
     const totalFiles = files.length;
-    const MAX_TOTAL_SIZE = 4.2 * 1024 * 1024; // 4.2MB制限（Vercel 4.5MB上限に対してFormDataオーバーヘッドを考慮）
+    const MAX_TOTAL_SIZE = 4.2 * 1024 * 1024; // 4.2MB制限
+    const originalSize = files.reduce((sum, f) => sum + f.size, 0);
     let baseOptions = getOptimalCompressionOptions(totalFiles);
     
-    // #region agent log
-    const loopStartTime = Date.now();
-    const originalSize = files.reduce((sum, f) => sum + f.size, 0);
-    fetch('http://127.0.0.1:7242/ingest/e78e9fd7-3fa2-45c5-b036-a4f10b20798a',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'imageCompressor.ts:compressMultipleImages:start',message:'Starting multiple image compression',data:{totalFiles,originalSizeMB:(originalSize/1024/1024).toFixed(2),baseOptions},timestamp:Date.now(),sessionId:'debug-session',hypothesisId:'A,E'})}).catch(()=>{});
-    // #endregion
+    console.log(`[Compressor] Starting batch: ${totalFiles} files, ${(originalSize/1024/1024).toFixed(2)}MB total`);
     
-    // 10枚以上の場合、合計サイズを考慮して目標サイズを動的に調整
+    // 10枚以上の場合、より厳しい圧縮
     if (totalFiles >= 10) {
-        const targetSizePerFile = (MAX_TOTAL_SIZE * 0.8) / totalFiles; // 80%の安全マージン（より厳しく）
+        const targetSizePerFile = (MAX_TOTAL_SIZE * 0.8) / totalFiles;
         baseOptions = {
             ...baseOptions,
-            maxSizeMB: Math.max(0.12, targetSizePerFile / (1024 * 1024)), // 最小0.12MBを保証
+            maxSizeMB: Math.max(0.12, targetSizePerFile / (1024 * 1024)),
         };
     }
     
     const compressedFiles: File[] = [];
     let currentTotalSize = 0;
     const startTime = Date.now();
-    const MAX_COMPRESSION_TIME = MAX_TOTAL_COMPRESSION_MS; // 全体タイムアウト（45秒）
 
     for (let i = 0; i < files.length; i++) {
-        // UIを固めないように1フレーム待機
+        // ★重要: ファイル間に遅延を入れてリソース解放を促す
+        if (i > 0) {
+            await new Promise((resolve) => setTimeout(resolve, INTER_FILE_DELAY_MS));
+        }
+        
+        // UIを更新するためのフレーム待機
         await new Promise((resolve) => setTimeout(resolve, 0));
 
-        // #region agent log
-        fetch('http://127.0.0.1:7242/ingest/e78e9fd7-3fa2-45c5-b036-a4f10b20798a',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'imageCompressor.ts:compressMultipleImages:loopIteration',message:`Processing file ${i+1}/${files.length}`,data:{index:i,fileName:files[i].name,sizeMB:(files[i].size/1024/1024).toFixed(2),elapsedMs:Date.now()-loopStartTime},timestamp:Date.now(),sessionId:'debug-session',hypothesisId:'E'})}).catch(()=>{});
-        // #endregion
-
-        // タイムアウトチェック
+        // 全体タイムアウトチェック
         const elapsedTime = Date.now() - startTime;
-        if (elapsedTime > MAX_COMPRESSION_TIME) {
-            // #region agent log
-            fetch('http://127.0.0.1:7242/ingest/e78e9fd7-3fa2-45c5-b036-a4f10b20798a',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'imageCompressor.ts:compressMultipleImages:totalTimeout',message:'Total compression timeout triggered',data:{elapsedMs:elapsedTime,timeoutMs:MAX_COMPRESSION_TIME,processedCount:i},timestamp:Date.now(),sessionId:'debug-session',hypothesisId:'A'})}).catch(()=>{});
-            // #endregion
-            console.warn(`[ImageCompressor] Compression timeout after ${(elapsedTime / 1000).toFixed(1)}s, using compressed files so far`);
-            // 圧縮済みのファイルと残りの元のファイルを結合
-            const remainingFiles = files.slice(i);
-            return [...compressedFiles, ...remainingFiles];
+        if (elapsedTime > MAX_TOTAL_COMPRESSION_MS) {
+            console.warn(`[Compressor] Total timeout after ${(elapsedTime / 1000).toFixed(1)}s, returning ${i} processed + ${files.length - i} original`);
+            return [...compressedFiles, ...files.slice(i)];
         }
 
         const file = files[i];
@@ -335,74 +294,55 @@ export async function compressMultipleImages(
             onProgress(progress, file.name);
         }
 
-        // 残りのファイル数を考慮して、目標サイズを動的に調整
-        const remainingFiles = totalFiles - i;
+        // 動的にオプションを調整
+        const remainingCount = totalFiles - i;
         const remainingSizeBudget = MAX_TOTAL_SIZE - currentTotalSize;
-        // より厳しい制限: 残り予算の80%を残りファイル数で割る（安全マージン）
-        const dynamicMaxSizeMB = remainingFiles > 0 
-            ? Math.min(baseOptions.maxSizeMB, (remainingSizeBudget * 0.8) / (remainingFiles * 1024 * 1024))
+        const dynamicMaxSizeMB = remainingCount > 0 
+            ? Math.min(baseOptions.maxSizeMB, (remainingSizeBudget * 0.8) / (remainingCount * 1024 * 1024))
             : baseOptions.maxSizeMB;
         
         const dynamicOptions = {
             ...baseOptions,
-            maxSizeMB: Math.max(0.08, dynamicMaxSizeMB), // 最小0.08MBを保証（より厳しく）
+            maxSizeMB: Math.max(0.08, dynamicMaxSizeMB),
         };
 
         let compressedFile: File;
         try {
-            const perFileTimeout = Math.max(5000, Math.min(PER_FILE_TIMEOUT_MS, MAX_COMPRESSION_TIME - elapsedTime));
-
-            // 圧縮を実行（時間がかかる場合は元ファイルにフォールバック）
-            compressedFile = await Promise.race([
-                compressImage(
-                    file,
-                    dynamicOptions,
-                    // 個別ファイルの進捗（全体進捗に加算）
-                    (fileProgress) => {
-                        if (onProgress) {
-                            const overallProgress = Math.round(
-                                ((i + fileProgress / 100) / totalFiles) * 100
-                            );
-                            onProgress(overallProgress, file.name);
-                        }
+            // Canvas APIで圧縮（タイムアウト内蔵）
+            compressedFile = await compressImage(
+                file,
+                dynamicOptions,
+                (fileProgress) => {
+                    if (onProgress) {
+                        const overallProgress = Math.round(((i + fileProgress / 100) / totalFiles) * 100);
+                        onProgress(overallProgress, file.name);
                     }
-                ),
-                new Promise<File>((resolve) => {
-                    setTimeout(() => {
-                        console.warn(`[ImageCompressor] Per-file timeout (${(perFileTimeout / 1000).toFixed(1)}s) for ${file.name}, using original`);
-                        resolve(file);
-                    }, perFileTimeout);
-                }),
-            ]);
+                }
+            );
         } catch (err) {
-            console.error(`[ImageCompressor] Error compressing ${file.name}:`, err);
-            // エラー時は元のファイルを使用
+            console.error(`[Compressor] Error for ${file.name}:`, err);
             compressedFile = file;
         }
 
         currentTotalSize += compressedFile.size;
         
-        // サイズ制限を超えた場合の警告と処理
+        // サイズ制限チェック
         if (currentTotalSize > MAX_TOTAL_SIZE) {
-            console.warn(`[ImageCompressor] Warning: Total size exceeded after ${i + 1} files: ${(currentTotalSize / 1024 / 1024).toFixed(2)}MB`);
-            // 残りのファイルは元のまま返す（欠落させない）
+            console.warn(`[Compressor] Size limit exceeded at file ${i + 1}: ${(currentTotalSize / 1024 / 1024).toFixed(2)}MB`);
             compressedFiles.push(compressedFile);
-            const remainingFiles = files.slice(i + 1);
-            return [...compressedFiles, ...remainingFiles];
+            return [...compressedFiles, ...files.slice(i + 1)];
         }
 
         compressedFiles.push(compressedFile);
+        console.log(`[Compressor] Progress: ${i + 1}/${totalFiles} done`);
     }
 
     if (onProgress) {
         onProgress(100, '完了');
     }
 
-    // 圧縮結果のサマリーをログ出力
     const compressedSize = compressedFiles.reduce((sum, f) => sum + f.size, 0);
-    console.log(
-        `[ImageCompressor] Total: ${(originalSize / 1024 / 1024).toFixed(2)}MB → ${(compressedSize / 1024 / 1024).toFixed(2)}MB (${Math.round((1 - compressedSize / originalSize) * 100)}% reduced)`
-    );
+    console.log(`[Compressor] Complete: ${(originalSize / 1024 / 1024).toFixed(2)}MB → ${(compressedSize / 1024 / 1024).toFixed(2)}MB (${Math.round((1 - compressedSize / originalSize) * 100)}% reduced)`);
 
     return compressedFiles;
 }

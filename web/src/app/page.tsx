@@ -652,40 +652,33 @@ export default function Home() {
     return foundIndex >= 0 ? foundIndex : 0;
   };
 
-  const COMPRESSION_TIMEOUT_MS = 12000; // 12秒でフォールバック（短縮: Canvas APIフォールバック追加により早めに切り替え）
+  const COMPRESSION_TIMEOUT_MS = 8000; // 8秒でフォールバック（さらに短縮）
   const compressWithTimeout = async (
     files: File[],
     onProgress?: (progress: number, currentFile: string) => void
   ): Promise<File[]> => {
-    // #region agent log
     const startTime = Date.now();
-    fetch('http://127.0.0.1:7242/ingest/e78e9fd7-3fa2-45c5-b036-a4f10b20798a',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'page.tsx:compressWithTimeout:start',message:'Compression started',data:{fileCount:files.length,fileNames:files.map(f=>f.name),fileSizes:files.map(f=>(f.size/1024/1024).toFixed(2)+'MB'),totalSizeMB:(files.reduce((s,f)=>s+f.size,0)/1024/1024).toFixed(2)},timestamp:Date.now(),sessionId:'debug-session',hypothesisId:'A,D'})}).catch(()=>{});
-    // #endregion
+    console.log(`[Page] Compression start: ${files.length} files`);
+    
     try {
-      let timeoutFired = false;
+      // 外側タイムアウト（最終防衛線）
       const timeoutPromise = new Promise<File[]>((resolve) =>
         setTimeout(() => {
-          // #region agent log
-          timeoutFired = true;
-          fetch('http://127.0.0.1:7242/ingest/e78e9fd7-3fa2-45c5-b036-a4f10b20798a',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'page.tsx:compressWithTimeout:timeout',message:'Timeout fired - returning original files',data:{elapsedMs:Date.now()-startTime,timeoutMs:COMPRESSION_TIMEOUT_MS},timestamp:Date.now(),sessionId:'debug-session',hypothesisId:'A'})}).catch(()=>{});
-          // #endregion
+          console.warn(`[Page] Compression timeout after ${COMPRESSION_TIMEOUT_MS}ms, using original files`);
           resolve(files);
         }, COMPRESSION_TIMEOUT_MS)
       );
+      
       const result = await Promise.race([
         compressMultipleImages(files, onProgress),
         timeoutPromise,
       ]);
-      // #region agent log
-      fetch('http://127.0.0.1:7242/ingest/e78e9fd7-3fa2-45c5-b036-a4f10b20798a',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'page.tsx:compressWithTimeout:complete',message:'Compression complete',data:{elapsedMs:Date.now()-startTime,timeoutFired,resultCount:result.length,resultSizes:result.map(f=>(f.size/1024/1024).toFixed(2)+'MB')},timestamp:Date.now(),sessionId:'debug-session',hypothesisId:'A'})}).catch(()=>{});
-      // #endregion
+      
+      console.log(`[Page] Compression done in ${Date.now() - startTime}ms`);
       return result;
     } catch (err) {
-      // #region agent log
-      fetch('http://127.0.0.1:7242/ingest/e78e9fd7-3fa2-45c5-b036-a4f10b20798a',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'page.tsx:compressWithTimeout:error',message:'Compression error',data:{error:String(err),elapsedMs:Date.now()-startTime},timestamp:Date.now(),sessionId:'debug-session',hypothesisId:'A'})}).catch(()=>{});
-      // #endregion
-      console.error('[Page] compressWithTimeout error:', err);
-      return files;
+      console.error('[Page] Compression error:', err);
+      return files; // エラー時は元ファイル
     }
   };
 
@@ -817,10 +810,7 @@ export default function Home() {
   const handleFileChange = useCallback(async (e: React.ChangeEvent<HTMLInputElement>) => {
     if (e.target.files && e.target.files.length > 0) {
       const files = Array.from(e.target.files);
-      // #region agent log
-      const handleStartTime = Date.now();
-      fetch('http://127.0.0.1:7242/ingest/e78e9fd7-3fa2-45c5-b036-a4f10b20798a',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'page.tsx:handleFileChange:start',message:'handleFileChange started',data:{fileCount:files.length,fileNames:files.map(f=>f.name),hasImages:files.some(f=>isImageFile(f))},timestamp:Date.now(),sessionId:'debug-session',hypothesisId:'E'})}).catch(()=>{});
-      // #endregion
+      console.log(`[Page] File selected: ${files.length} files`);
       
       // 画像ファイルがある場合は圧縮処理
       const hasImages = files.some(f => isImageFile(f));
@@ -830,38 +820,22 @@ export default function Home() {
         setIsCompressing(true);
         setCompressionProgress(0);
         setCompressionFileName('');
-        // #region agent log
-        fetch('http://127.0.0.1:7242/ingest/e78e9fd7-3fa2-45c5-b036-a4f10b20798a',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'page.tsx:handleFileChange:compressionStart',message:'isCompressing set to true',data:{},timestamp:Date.now(),sessionId:'debug-session',hypothesisId:'E'})}).catch(()=>{});
-        // #endregion
         
         try {
           processedFiles = await compressWithTimeout(
             files,
             (progress, fileName) => {
-              // #region agent log
-              if (progress % 25 === 0 || progress === 100) {
-                fetch('http://127.0.0.1:7242/ingest/e78e9fd7-3fa2-45c5-b036-a4f10b20798a',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'page.tsx:handleFileChange:progress',message:'Compression progress',data:{progress,fileName},timestamp:Date.now(),sessionId:'debug-session',hypothesisId:'B'})}).catch(()=>{});
-              }
-              // #endregion
               setCompressionProgress(progress);
               setCompressionFileName(fileName);
             }
           );
           
-          // 圧縮結果をログ出力
           const totalSize = processedFiles.reduce((sum, f) => sum + f.size, 0);
-          console.log(`[Page] Compression complete: ${(totalSize / 1024 / 1024).toFixed(2)}MB (${processedFiles.length} files)`);
+          console.log(`[Page] Compression complete: ${(totalSize / 1024 / 1024).toFixed(2)}MB`);
         } catch (err) {
-          // #region agent log
-          fetch('http://127.0.0.1:7242/ingest/e78e9fd7-3fa2-45c5-b036-a4f10b20798a',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'page.tsx:handleFileChange:catchError',message:'Compression catch block',data:{error:String(err)},timestamp:Date.now(),sessionId:'debug-session',hypothesisId:'E'})}).catch(()=>{});
-          // #endregion
           console.error('[Page] Compression error:', err);
-          // 圧縮に失敗しても元のファイルで続行
           processedFiles = files;
         } finally {
-          // #region agent log
-          fetch('http://127.0.0.1:7242/ingest/e78e9fd7-3fa2-45c5-b036-a4f10b20798a',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'page.tsx:handleFileChange:finally',message:'Finally block - setting isCompressing to false',data:{elapsedMs:Date.now()-handleStartTime,processedFileCount:processedFiles.length},timestamp:Date.now(),sessionId:'debug-session',hypothesisId:'E'})}).catch(()=>{});
-          // #endregion
           setIsCompressing(false);
           setCompressionProgress(0);
           setCompressionFileName('');

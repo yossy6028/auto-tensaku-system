@@ -241,7 +241,11 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
   // アクティブなサブスクリプションを取得
   const fetchSubscription = useCallback(async (userId: string) => {
-    if (!supabaseClient) return;
+    console.log('[AuthProvider] fetchSubscription called for userId:', userId);
+    if (!supabaseClient) {
+      console.log('[AuthProvider] supabaseClient is null');
+      return;
+    }
 
     try {
       const { data, error } = await supabaseClient
@@ -253,6 +257,8 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         .limit(1)
         .maybeSingle();
 
+      console.log('[AuthProvider] fetchSubscription result:', { data, error });
+
       if (error) {
         // テーブルが存在しない、またはRLSポリシーでアクセスできない場合
         console.warn('[AuthProvider] Failed to fetch subscription:', error.message);
@@ -261,8 +267,10 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       }
 
       if (data) {
+        console.log('[AuthProvider] Setting subscription:', data);
         setSubscription(data as Subscription);
       } else {
+        console.log('[AuthProvider] No active subscription found');
         setSubscription(null);
       }
     } catch (error) {

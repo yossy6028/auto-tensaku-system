@@ -36,6 +36,45 @@ const mapStripeStatus = (stripeStatus?: string | null): SubscriptionStatus => {
   return 'active';
 };
 
+// Supabaseユーザーを特定する
+async function resolveUserIdFromStripe(params: {
+  explicitUserId?: string | null;
+  customerId?: string | null;
+  customerEmail?: string | null;
+}): Promise<string | null> {
+  const { explicitUserId, customerId, customerEmail } = params;
+
+  if (explicitUserId) {
+    return explicitUserId;
+  }
+
+  // 1) stripe_customer_id で user_profiles を検索
+  if (customerId) {
+    const { data: profileByCustomer } = await supabaseAdmin
+      .from('user_profiles')
+      .select('id')
+      .eq('stripe_customer_id', customerId)
+      .maybeSingle();
+    if (profileByCustomer?.id) {
+      return profileByCustomer.id;
+    }
+  }
+
+  // 2) email で検索
+  if (customerEmail) {
+    const { data: profileByEmail } = await supabaseAdmin
+      .from('user_profiles')
+      .select('id')
+      .ilike('email', customerEmail)
+      .maybeSingle();
+    if (profileByEmail?.id) {
+      return profileByEmail.id;
+    }
+  }
+
+  return null;
+}
+
 // pricing_plansテーブルに紐づくプラン情報を解決し、存在しなければ作成する
 async function resolvePlan(stripePriceId?: string | null): Promise<PlanResolution> {
   // 1) price_id で紐づくプランを探す
@@ -245,7 +284,11 @@ export async function POST(request: NextRequest) {
           
           // eslint-disable-next-line @typescript-eslint/no-explicit-any
           const subscription = await stripe.subscriptions.retrieve(subscriptionId) as any;
-          const userId = subscription.metadata?.supabase_user_id || session.metadata?.supabase_user_id;
+          const userId = await resolveUserIdFromStripe({
+            explicitUserId: subscription.metadata?.supabase_user_id || session.metadata?.supabase_user_id,
+            customerId: subscription.customer as string | undefined,
+            customerEmail: (subscription.customer as Stripe.Customer)?.email || (session.customer_details?.email ?? undefined),
+          });
           
           if (!userId) {
             console.error('No user ID in subscription metadata');
@@ -271,7 +314,14 @@ export async function POST(request: NextRequest) {
       case 'customer.subscription.updated': {
         // eslint-disable-next-line @typescript-eslint/no-explicit-any
         const subscription = event.data.object as any;
-        const userId = subscription.metadata?.supabase_user_id;
+        const customerObj = subscription.customer as Stripe.Customer | string | undefined;
+        const customerId = typeof customerObj === 'string' ? customerObj : customerObj?.id;
+        const customerEmail = typeof customerObj === 'object' ? customerObj?.email : undefined;
+        const userId = await resolveUserIdFromStripe({
+          explicitUserId: subscription.metadata?.supabase_user_id,
+          customerId,
+          customerEmail,
+        });
         
         if (!userId) {
           console.error('No user ID in subscription metadata');
@@ -294,7 +344,14 @@ export async function POST(request: NextRequest) {
       case 'customer.subscription.deleted': {
         // eslint-disable-next-line @typescript-eslint/no-explicit-any
         const subscription = event.data.object as any;
-        const userId = subscription.metadata?.supabase_user_id;
+        const customerObj = subscription.customer as Stripe.Customer | string | undefined;
+        const customerId = typeof customerObj === 'string' ? customerObj : customerObj?.id;
+        const customerEmail = typeof customerObj === 'object' ? customerObj?.email : undefined;
+        const userId = await resolveUserIdFromStripe({
+          explicitUserId: subscription.metadata?.supabase_user_id,
+          customerId,
+          customerEmail,
+        });
         
         if (!userId) break;
 
@@ -325,7 +382,14 @@ export async function POST(request: NextRequest) {
           
           // eslint-disable-next-line @typescript-eslint/no-explicit-any
           const subscription = await stripe.subscriptions.retrieve(subscriptionId) as any;
-          const userId = subscription.metadata?.supabase_user_id;
+          const customerObj = subscription.customer as Stripe.Customer | string | undefined;
+          const customerId = typeof customerObj === 'string' ? customerObj : customerObj?.id;
+          const customerEmail = typeof customerObj === 'object' ? customerObj?.email : undefined;
+          const userId = await resolveUserIdFromStripe({
+            explicitUserId: subscription.metadata?.supabase_user_id,
+            customerId,
+            customerEmail,
+          });
           
           if (!userId) break;
 
@@ -354,7 +418,14 @@ export async function POST(request: NextRequest) {
           
           // eslint-disable-next-line @typescript-eslint/no-explicit-any
           const subscription = await stripe.subscriptions.retrieve(subscriptionId) as any;
-          const userId = subscription.metadata?.supabase_user_id;
+          const customerObj = subscription.customer as Stripe.Customer | string | undefined;
+          const customerId = typeof customerObj === 'string' ? customerObj : customerObj?.id;
+          const customerEmail = typeof customerObj === 'object' ? customerObj?.email : undefined;
+          const userId = await resolveUserIdFromStripe({
+            explicitUserId: subscription.metadata?.supabase_user_id,
+            customerId,
+            customerEmail,
+          });
           
           if (!userId) break;
 

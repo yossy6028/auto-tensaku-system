@@ -14,6 +14,8 @@
 const PER_FILE_TIMEOUT_MS = 5000;         // 1ファイルあたり最大5秒
 const MAX_TOTAL_COMPRESSION_MS = 30000;   // 全体で30秒
 const INTER_FILE_DELAY_MS = 500;          // ファイル間の遅延（メモリ解放用）★500msに増加
+const CAN_USE_IMAGE_BITMAP = typeof createImageBitmap === 'function';
+const TOBLOB_TIMEOUT_MS = 1500;
 
 /**
  * 圧縮オプション
@@ -98,6 +100,36 @@ function delay(ms: number): Promise<void> {
 }
 
 /**
+ * Promiseにタイムアウトを設定
+ */
+async function withTimeout<T>(
+    promise: Promise<T>,
+    timeoutMs: number,
+    onTimeout: () => T | Promise<T>
+): Promise<T> {
+    let timeoutId: ReturnType<typeof setTimeout>;
+    return new Promise<T>((resolve, reject) => {
+        timeoutId = setTimeout(async () => {
+            try {
+                resolve(await onTimeout());
+            } catch (err) {
+                reject(err);
+            }
+        }, timeoutMs);
+
+        promise
+            .then((result) => {
+                clearTimeout(timeoutId);
+                resolve(result);
+            })
+            .catch((err) => {
+                clearTimeout(timeoutId);
+                reject(err);
+            });
+    });
+}
+
+/**
  * DataURLをBlobに変換
  */
 function dataURLtoBlob(dataURL: string): Blob {
@@ -152,6 +184,105 @@ function loadImage(file: File, timeoutMs: number = 3000): Promise<HTMLImageEleme
 }
 
 /**
+ * canvas.toBlobを優先し、失敗・タイムアウト時はtoDataURLへフォールバック
+ * toDataURLは同期で重いため、なるべく避ける
+ */
+async function canvasToJpegBlob(
+    canvas: HTMLCanvasElement,
+    quality: number
+): Promise<Blob> {
+    const toBlobPromise = new Promise<Blob | null>((resolve, reject) => {
+        if (!canvas.toBlob) {
+            resolve(null);
+            return;
+        }
+        canvas.toBlob(
+            (blob) => {
+                if (!blob) {
+                    reject(new Error('canvas.toBlob returned null'));
+                    return;
+                }
+                resolve(blob);
+            },
+            'image/jpeg',
+            quality
+        );
+    });
+
+    try {
+        const blob = await withTimeout(
+            toBlobPromise,
+            TOBLOB_TIMEOUT_MS,
+            () => Promise.resolve<Blob | null>(null)
+        );
+        if (blob) return blob;
+        console.warn('[Compress] canvas.toBlob unavailable or returned null, falling back to toDataURL');
+    } catch (err) {
+        console.warn('[Compress] canvas.toBlob failed, falling back to toDataURL', err);
+    }
+
+    const dataURL = canvas.toDataURL('image/jpeg', quality);
+    return dataURLtoBlob(dataURL);
+}
+
+/**
+ * createImageBitmapが使える場合はリサイズしながらデコード（メモリ削減）
+ * 失敗時は従来のImage + drawImageにフォールバック
+ */
+async function drawToCanvas(
+    file: File,
+    width: number,
+    height: number,
+    timeoutMs: number,
+    decodedImage?: HTMLImageElement,
+    preDecodedBitmap?: ImageBitmap
+): Promise<HTMLCanvasElement> {
+    const canvas = document.createElement('canvas');
+    canvas.width = width;
+    canvas.height = height;
+    const ctx = canvas.getContext('2d');
+
+    if (!ctx) {
+        throw new Error('Canvas context is not available');
+    }
+
+    if (preDecodedBitmap) {
+        ctx.drawImage(preDecodedBitmap, 0, 0, width, height);
+        if (typeof preDecodedBitmap.close === 'function') {
+            preDecodedBitmap.close();
+        }
+        return canvas;
+    }
+
+    if (CAN_USE_IMAGE_BITMAP && !decodedImage) {
+        try {
+            const bitmap = await withTimeout(
+                createImageBitmap(file, {
+                    resizeWidth: width,
+                    resizeHeight: height,
+                    resizeQuality: 'high',
+                }),
+                timeoutMs,
+                async () => {
+                    throw new Error('createImageBitmap timeout');
+                }
+            );
+            ctx.drawImage(bitmap, 0, 0, width, height);
+            if (typeof bitmap.close === 'function') {
+                bitmap.close();
+            }
+            return canvas;
+        } catch (err) {
+            console.warn(`[Compress] createImageBitmap failed for ${file.name}, fallback to Image`, err);
+        }
+    }
+
+    const img = decodedImage ?? await loadImage(file, timeoutMs);
+    ctx.drawImage(img, 0, 0, width, height);
+    return canvas;
+}
+
+/**
  * 単一画像を圧縮（スマホ対応）
  */
 export async function compressImage(
@@ -180,18 +311,44 @@ export async function compressImage(
     try {
         // UI更新を待つ
         await waitForNextFrame();
-        
-        // 画像読み込み
-        const img = await loadImage(file, PER_FILE_TIMEOUT_MS);
+
+        // 画像読み込み（解像度取得用）
+        let bitmap: ImageBitmap | null = null;
+        let img: HTMLImageElement | null = null;
+        let width = 0;
+        let height = 0;
+
+        if (CAN_USE_IMAGE_BITMAP) {
+            try {
+                bitmap = await withTimeout(
+                    createImageBitmap(file),
+                    PER_FILE_TIMEOUT_MS,
+                    async () => {
+                        throw new Error('createImageBitmap timeout');
+                    }
+                );
+                width = bitmap.width;
+                height = bitmap.height;
+            } catch (err) {
+                console.warn(`[Compress] createImageBitmap(size) failed for ${file.name}, fallback to Image`, err);
+                bitmap = null;
+            }
+        }
+
+        if (!bitmap) {
+            img = await loadImage(file, PER_FILE_TIMEOUT_MS);
+            width = img.width;
+            height = img.height;
+        }
+
         if (onProgress) onProgress(30);
-        
+
         // UI更新を待つ
         await waitForNextFrame();
-        
+
         // リサイズ計算
-        let { width, height } = img;
         const maxDim = options.maxWidthOrHeight;
-        
+
         if (width > maxDim || height > maxDim) {
             if (width > height) {
                 height = Math.round((height * maxDim) / width);
@@ -201,42 +358,30 @@ export async function compressImage(
                 height = maxDim;
             }
         }
-        
+
         if (onProgress) onProgress(50);
-        
-        // Canvas描画
-        const canvas = document.createElement('canvas');
-        canvas.width = width;
-        canvas.height = height;
-        const ctx = canvas.getContext('2d');
-        
-        if (!ctx) {
-            console.warn(`[Compress] No canvas context for ${file.name}`);
-            if (onProgress) onProgress(100);
-            return file;
-        }
-        
-        ctx.drawImage(img, 0, 0, width, height);
+
+        // Canvas描画（createImageBitmapを優先してデコード&リサイズ）
+        const canvas = await drawToCanvas(file, width, height, PER_FILE_TIMEOUT_MS, img ?? undefined, bitmap ?? undefined);
         if (onProgress) onProgress(70);
-        
+
         // UI更新を待つ
         await waitForNextFrame();
-        
-        // toDataURL（同期）
-        const dataURL = canvas.toDataURL('image/jpeg', options.initialQuality || 0.7);
+
+        // toBlobを優先（非同期・省メモリ）、失敗時はtoDataURLでフォールバック
+        const jpegBlob = await canvasToJpegBlob(canvas, options.initialQuality || 0.7);
         if (onProgress) onProgress(90);
-        
+
         // メモリ解放
         canvas.width = 0;
         canvas.height = 0;
-        
+
         // Blob変換
-        const blob = dataURLtoBlob(dataURL);
-        const compressedFile = new File([blob], file.name, { type: 'image/jpeg' });
-        
+        const compressedFile = new File([jpegBlob], file.name, { type: 'image/jpeg' });
+
         console.log(`[Compress] Done: ${file.name} ${fileSizeMB.toFixed(2)}MB → ${(compressedFile.size/1024/1024).toFixed(2)}MB`);
         if (onProgress) onProgress(100);
-        
+
         return compressedFile;
     } catch (error) {
         console.warn(`[Compress] Failed: ${file.name}`, error);

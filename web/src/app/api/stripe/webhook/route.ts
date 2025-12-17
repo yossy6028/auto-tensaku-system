@@ -3,6 +3,8 @@ import { stripe, STRIPE_WEBHOOK_SECRET, getPlanIdFromStripePriceId } from '@/lib
 import { createClient } from '@supabase/supabase-js';
 import Stripe from 'stripe';
 
+type SubscriptionStatus = 'active' | 'cancelled' | 'past_due';
+
 // Supabase Admin Client (サービスロールキー使用)
 const supabaseAdmin = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_URL!,
@@ -21,6 +23,192 @@ const PLAN_PRICES: Record<string, number> = {
   standard: 2980,
   unlimited: 5980,
 };
+
+interface PlanResolution {
+  planId: string;
+  usageLimit: number | null;
+  pricePaid: number;
+}
+
+const mapStripeStatus = (stripeStatus?: string | null): SubscriptionStatus => {
+  if (stripeStatus === 'past_due' || stripeStatus === 'unpaid') return 'past_due';
+  if (stripeStatus === 'canceled' || stripeStatus === 'cancelled') return 'cancelled';
+  return 'active';
+};
+
+// pricing_plansテーブルに紐づくプラン情報を解決し、存在しなければ作成する
+async function resolvePlan(stripePriceId?: string | null): Promise<PlanResolution> {
+  // 1) price_id で紐づくプランを探す
+  const { data: planByPrice, error: planByPriceError } = await supabaseAdmin
+    .from('pricing_plans')
+    .select('id, usage_limit, price_yen')
+    .eq('stripe_price_id', stripePriceId || '')
+    .maybeSingle();
+
+  if (planByPriceError) {
+    console.warn('Failed to lookup pricing plan by stripe_price_id:', planByPriceError);
+  }
+
+  if (planByPrice) {
+    return {
+      planId: planByPrice.id,
+      usageLimit: planByPrice.usage_limit,
+      pricePaid: planByPrice.price_yen,
+    };
+  }
+
+  // 2) price_id からプランIDを解決し、既存IDで探す
+  const fallbackPlanId = getPlanIdFromStripePriceId(stripePriceId || '') || 'light';
+  const { data: planById, error: planByIdError } = await supabaseAdmin
+    .from('pricing_plans')
+    .select('id, usage_limit, price_yen')
+    .eq('id', fallbackPlanId)
+    .maybeSingle();
+
+  if (planByIdError) {
+    console.warn('Failed to lookup pricing plan by id:', planByIdError);
+  }
+
+  if (planById) {
+    return {
+      planId: planById.id,
+      usageLimit: planById.usage_limit,
+      pricePaid: planById.price_yen,
+    };
+  }
+
+  // 3) なければ最低限の情報でプランを作成（外部キー制約エラー防止）
+  const usageLimit = PLAN_LIMITS[fallbackPlanId] ?? null;
+  const pricePaid = PLAN_PRICES[fallbackPlanId] ?? PLAN_PRICES.light;
+  const { data: insertedPlan, error: insertPlanError } = await supabaseAdmin
+    .from('pricing_plans')
+    .insert({
+      id: fallbackPlanId,
+      name: `自動登録プラン (${fallbackPlanId})`,
+      description: null,
+      usage_limit: usageLimit,
+      price_yen: pricePaid,
+      is_active: true,
+      sort_order: 0,
+    })
+    .select('id, usage_limit, price_yen')
+    .maybeSingle();
+
+  if (insertPlanError) {
+    console.error('Failed to auto-create pricing plan:', insertPlanError);
+  }
+
+  return {
+    planId: insertedPlan?.id || fallbackPlanId,
+    usageLimit: insertedPlan?.usage_limit ?? usageLimit,
+    pricePaid: insertedPlan?.price_yen ?? pricePaid,
+  };
+}
+
+// サブスクリプションレコードの保存（既存があれば更新）
+async function upsertSubscriptionRecord(params: {
+  userId: string;
+  subscriptionId: string;
+  priceId: string | null;
+  status: SubscriptionStatus;
+  currentPeriodStart?: Date;
+  currentPeriodEnd?: Date;
+  cancelAtPeriodEnd?: boolean;
+  resetUsageCount?: boolean;
+  purchasedAt?: Date;
+}) {
+  const {
+    userId,
+    subscriptionId,
+    priceId,
+    status,
+    currentPeriodStart,
+    currentPeriodEnd,
+    cancelAtPeriodEnd,
+    resetUsageCount = false,
+    purchasedAt,
+  } = params;
+
+  const { planId, usageLimit, pricePaid } = await resolvePlan(priceId);
+  const nowIso = new Date().toISOString();
+  const periodStartIso = currentPeriodStart ? currentPeriodStart.toISOString() : null;
+  const periodEndIso = currentPeriodEnd ? currentPeriodEnd.toISOString() : null;
+
+  const basePayload = {
+    user_id: userId,
+    plan_id: planId,
+    status,
+    usage_limit: usageLimit,
+    price_paid: pricePaid,
+    stripe_subscription_id: subscriptionId,
+    stripe_price_id: priceId,
+    current_period_start: periodStartIso,
+    current_period_end: periodEndIso,
+    cancel_at_period_end: !!cancelAtPeriodEnd,
+    expires_at: periodEndIso,
+    updated_at: nowIso,
+  };
+
+  // 既存レコードをstripe_subscription_id優先で取得、なければuser_idで取得
+  const { data: existingByStripe, error: existingByStripeError } = await supabaseAdmin
+    .from('subscriptions')
+    .select('id')
+    .eq('stripe_subscription_id', subscriptionId)
+    .maybeSingle();
+
+  if (existingByStripeError) {
+    console.warn('Failed to lookup subscription by stripe_subscription_id:', existingByStripeError);
+  }
+
+  let targetId = existingByStripe?.id;
+
+  if (!targetId) {
+    const { data: existingByUser, error: existingByUserError } = await supabaseAdmin
+      .from('subscriptions')
+      .select('id')
+      .eq('user_id', userId)
+      .order('created_at', { ascending: false })
+      .limit(1)
+      .maybeSingle();
+
+    if (existingByUserError) {
+      console.warn('Failed to lookup subscription by user_id:', existingByUserError);
+    }
+
+    targetId = existingByUser?.id;
+  }
+
+  if (targetId) {
+    const { error: updateError } = await supabaseAdmin
+      .from('subscriptions')
+      .update({
+        ...basePayload,
+        ...(resetUsageCount ? { usage_count: 0 } : {}),
+      })
+      .eq('id', targetId);
+
+    if (updateError) {
+      console.error('Failed to update subscription:', updateError);
+    } else {
+      console.log('Subscription updated for user:', userId);
+    }
+    return;
+  }
+
+  const { error: insertError } = await supabaseAdmin
+    .from('subscriptions')
+    .insert({
+      ...basePayload,
+      usage_count: 0,
+      purchased_at: purchasedAt ? purchasedAt.toISOString() : nowIso,
+    });
+
+  if (insertError) {
+    console.error('Failed to insert subscription:', insertError);
+  } else {
+    console.log('Subscription inserted for user:', userId);
+  }
+}
 
 export async function POST(request: NextRequest) {
   const body = await request.text();
@@ -65,34 +253,17 @@ export async function POST(request: NextRequest) {
           }
 
           const priceId = subscription.items.data[0]?.price?.id;
-          const planId = getPlanIdFromStripePriceId(priceId || '') || 'light';
-          
-          // サブスクリプションをデータベースに保存
-          const { error } = await supabaseAdmin
-            .from('subscriptions')
-            .upsert({
-              user_id: userId,
-              plan_id: planId,
-              status: 'active',
-              usage_count: 0,
-              usage_limit: PLAN_LIMITS[planId] || 10,
-              price_paid: PLAN_PRICES[planId] || 980,
-              stripe_subscription_id: subscriptionId,
-              stripe_price_id: priceId,
-              current_period_start: new Date(subscription.current_period_start * 1000).toISOString(),
-              current_period_end: new Date(subscription.current_period_end * 1000).toISOString(),
-              cancel_at_period_end: subscription.cancel_at_period_end || false,
-              purchased_at: new Date().toISOString(),
-              expires_at: new Date(subscription.current_period_end * 1000).toISOString(),
-            }, {
-              onConflict: 'user_id',
-            });
-
-          if (error) {
-            console.error('Failed to save subscription:', error);
-          } else {
-            console.log('Subscription saved successfully for user:', userId);
-          }
+          await upsertSubscriptionRecord({
+            userId,
+            subscriptionId,
+            priceId: priceId || null,
+            status: 'active',
+            currentPeriodStart: new Date(subscription.current_period_start * 1000),
+            currentPeriodEnd: new Date(subscription.current_period_end * 1000),
+            cancelAtPeriodEnd: subscription.cancel_at_period_end || false,
+            resetUsageCount: true,
+            purchasedAt: new Date(),
+          });
         }
         break;
       }
@@ -108,29 +279,15 @@ export async function POST(request: NextRequest) {
         }
 
         const priceId = subscription.items.data[0]?.price?.id;
-        const planId = getPlanIdFromStripePriceId(priceId || '') || 'light';
-        const status = subscription.status === 'active' ? 'active' : 
-                       subscription.status === 'canceled' ? 'cancelled' : subscription.status;
-
-        const { error } = await supabaseAdmin
-          .from('subscriptions')
-          .update({
-            plan_id: planId,
-            status: status,
-            usage_limit: PLAN_LIMITS[planId] || 10,
-            price_paid: PLAN_PRICES[planId] || 980,
-            stripe_price_id: priceId,
-            current_period_start: new Date(subscription.current_period_start * 1000).toISOString(),
-            current_period_end: new Date(subscription.current_period_end * 1000).toISOString(),
-            cancel_at_period_end: subscription.cancel_at_period_end || false,
-            expires_at: new Date(subscription.current_period_end * 1000).toISOString(),
-            updated_at: new Date().toISOString(),
-          })
-          .eq('user_id', userId);
-
-        if (error) {
-          console.error('Failed to update subscription:', error);
-        }
+        await upsertSubscriptionRecord({
+          userId,
+          subscriptionId: subscription.id,
+          priceId: priceId || null,
+          status: mapStripeStatus(subscription.status),
+          currentPeriodStart: new Date(subscription.current_period_start * 1000),
+          currentPeriodEnd: new Date(subscription.current_period_end * 1000),
+          cancelAtPeriodEnd: subscription.cancel_at_period_end || false,
+        });
         break;
       }
 
@@ -141,18 +298,19 @@ export async function POST(request: NextRequest) {
         
         if (!userId) break;
 
-        const { error } = await supabaseAdmin
-          .from('subscriptions')
-          .update({
-            status: 'cancelled',
-            cancel_at_period_end: true,
-            updated_at: new Date().toISOString(),
-          })
-          .eq('user_id', userId);
-
-        if (error) {
-          console.error('Failed to cancel subscription:', error);
-        }
+        await upsertSubscriptionRecord({
+          userId,
+          subscriptionId: subscription.id,
+          priceId: subscription.items?.data?.[0]?.price?.id || null,
+          status: 'cancelled',
+          currentPeriodStart: subscription.current_period_start
+            ? new Date(subscription.current_period_start * 1000)
+            : undefined,
+          currentPeriodEnd: subscription.current_period_end
+            ? new Date(subscription.current_period_end * 1000)
+            : undefined,
+          cancelAtPeriodEnd: true,
+        });
         break;
       }
 
@@ -171,21 +329,16 @@ export async function POST(request: NextRequest) {
           
           if (!userId) break;
 
-          // 利用回数をリセット
-          const { error } = await supabaseAdmin
-            .from('subscriptions')
-            .update({
-              usage_count: 0,
-              current_period_start: new Date(subscription.current_period_start * 1000).toISOString(),
-              current_period_end: new Date(subscription.current_period_end * 1000).toISOString(),
-              expires_at: new Date(subscription.current_period_end * 1000).toISOString(),
-              updated_at: new Date().toISOString(),
-            })
-            .eq('user_id', userId);
-
-          if (error) {
-            console.error('Failed to reset usage:', error);
-          }
+          await upsertSubscriptionRecord({
+            userId,
+            subscriptionId,
+            priceId: subscription.items?.data?.[0]?.price?.id || null,
+            status: mapStripeStatus(subscription.status),
+            currentPeriodStart: new Date(subscription.current_period_start * 1000),
+            currentPeriodEnd: new Date(subscription.current_period_end * 1000),
+            cancelAtPeriodEnd: subscription.cancel_at_period_end || false,
+            resetUsageCount: true,
+          });
         }
         break;
       }
@@ -205,17 +358,19 @@ export async function POST(request: NextRequest) {
           
           if (!userId) break;
 
-          const { error } = await supabaseAdmin
-            .from('subscriptions')
-            .update({
-              status: 'past_due',
-              updated_at: new Date().toISOString(),
-            })
-            .eq('user_id', userId);
-
-          if (error) {
-            console.error('Failed to update subscription status:', error);
-          }
+          await upsertSubscriptionRecord({
+            userId,
+            subscriptionId,
+            priceId: subscription.items?.data?.[0]?.price?.id || null,
+            status: 'past_due',
+            currentPeriodStart: subscription.current_period_start
+              ? new Date(subscription.current_period_start * 1000)
+              : undefined,
+            currentPeriodEnd: subscription.current_period_end
+              ? new Date(subscription.current_period_end * 1000)
+              : undefined,
+            cancelAtPeriodEnd: subscription.cancel_at_period_end || false,
+          });
         }
         break;
       }

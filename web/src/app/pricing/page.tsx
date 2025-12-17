@@ -1,8 +1,10 @@
 'use client';
 
-import React from 'react';
+import React, { useState, useEffect } from 'react';
 import Link from 'next/link';
-import { ArrowLeft, Check, Sparkles, Zap, Crown, RefreshCw, HelpCircle } from 'lucide-react';
+import { useRouter, useSearchParams } from 'next/navigation';
+import { ArrowLeft, Check, Sparkles, Zap, Crown, RefreshCw, HelpCircle, Loader2, CheckCircle, XCircle } from 'lucide-react';
+import { useAuth } from '@/components/AuthProvider';
 
 const plans = [
   {
@@ -26,6 +28,7 @@ const plans = [
     border: 'border-emerald-200',
     text: 'text-emerald-600',
     badge: 'bg-emerald-100 text-emerald-700',
+    planKey: 'light',
   },
   {
     name: 'スタンダード',
@@ -48,6 +51,7 @@ const plans = [
     border: 'border-indigo-300',
     text: 'text-indigo-600',
     badge: 'bg-indigo-100 text-indigo-700',
+    planKey: 'standard',
   },
   {
     name: '無制限',
@@ -71,10 +75,92 @@ const plans = [
     border: 'border-amber-200',
     text: 'text-amber-600',
     badge: 'bg-amber-100 text-amber-700',
+    planKey: 'unlimited',
   },
 ];
 
 export default function PricingPage() {
+  const router = useRouter();
+  const searchParams = useSearchParams();
+  const [loadingPlan, setLoadingPlan] = useState<string | null>(null);
+  const [checkoutStatus, setCheckoutStatus] = useState<'success' | 'cancelled' | null>(null);
+
+  // AuthProviderから認証状態を取得
+  const { user, isLoading: authLoading } = useAuth();
+
+  // Checkoutの結果をチェック
+  useEffect(() => {
+    const checkout = searchParams.get('checkout');
+    if (checkout === 'success') {
+      setCheckoutStatus('success');
+      // 3秒後に利用状況ページにリダイレクト
+      setTimeout(() => {
+        router.push('/usage');
+      }, 3000);
+    } else if (checkout === 'cancelled') {
+      setCheckoutStatus('cancelled');
+      // 5秒後にステータスをクリア
+      setTimeout(() => {
+        setCheckoutStatus(null);
+        // URLパラメータをクリア
+        router.replace('/pricing');
+      }, 5000);
+    }
+  }, [searchParams, router]);
+
+  // プラン選択ハンドラー
+  const handleSelectPlan = async (planKey: string, planName: string) => {
+    console.log('[Pricing] handleSelectPlan called:', { planKey, planName, user, authLoading });
+    
+    // 認証ローディング中は待機
+    if (authLoading) {
+      console.log('[Pricing] Auth still loading, waiting...');
+      return;
+    }
+    
+    // 未ログインの場合はログインモーダルを表示
+    if (!user) {
+      console.log('[Pricing] User is null, redirecting to login');
+      // ログインページにリダイレクト（料金ページに戻ってくる）
+      router.push(`/?showAuth=true&redirect=/pricing&plan=${planKey}`);
+      return;
+    }
+
+    console.log('[Pricing] User is logged in, proceeding to checkout');
+    setLoadingPlan(planKey);
+
+    try {
+      console.log('[Pricing] Calling /api/stripe/checkout with planName:', planName);
+      const response = await fetch('/api/stripe/checkout', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          planName: planName,
+        }),
+      });
+
+      const data = await response.json();
+      console.log('[Pricing] API response:', { status: response.status, data });
+
+      if (!response.ok) {
+        throw new Error(data.error || '決済セッションの作成に失敗しました');
+      }
+
+      // Stripeの決済ページ/ポータルにリダイレクト
+      if (data.redirectUrl) {
+        console.log('[Pricing] Redirecting to:', data.redirectUrl);
+        window.location.href = data.redirectUrl;
+      }
+    } catch (error) {
+      console.error('[Pricing] Checkout error:', error);
+      alert(error instanceof Error ? error.message : '決済処理中にエラーが発生しました');
+    } finally {
+      setLoadingPlan(null);
+    }
+  };
+
   return (
     <main className="min-h-screen bg-slate-50 relative overflow-hidden selection:bg-indigo-100 selection:text-indigo-900 font-sans text-slate-900">
       {/* Background Decoration (Same as Top Page) */}
@@ -84,6 +170,20 @@ export default function PricingPage() {
         <div className="absolute top-[20%] right-[-5%] w-[30%] h-[30%] rounded-full bg-violet-400/20 blur-[100px] animate-pulse-slow delay-1000"></div>
         <div className="absolute bottom-[-10%] left-[20%] w-[35%] h-[35%] rounded-full bg-blue-400/20 blur-[100px] animate-pulse-slow delay-2000"></div>
       </div>
+
+      {/* Checkout Status Banner */}
+      {checkoutStatus === 'success' && (
+        <div className="fixed top-0 left-0 right-0 z-50 bg-green-500 text-white py-4 px-6 flex items-center justify-center shadow-lg animate-slide-down">
+          <CheckCircle className="w-6 h-6 mr-3" />
+          <span className="font-bold">お申し込みが完了しました！利用状況ページに移動します...</span>
+        </div>
+      )}
+      {checkoutStatus === 'cancelled' && (
+        <div className="fixed top-0 left-0 right-0 z-50 bg-amber-500 text-white py-4 px-6 flex items-center justify-center shadow-lg animate-slide-down">
+          <XCircle className="w-6 h-6 mr-3" />
+          <span className="font-bold">決済がキャンセルされました。いつでも再度お申し込みいただけます。</span>
+        </div>
+      )}
 
       <div className="max-w-7xl mx-auto py-12 px-4 sm:px-6 lg:px-8 relative z-10">
         {/* Back Link */}
@@ -165,6 +265,7 @@ export default function PricingPage() {
         <div className="grid grid-cols-1 md:grid-cols-3 gap-8 lg:gap-10 mb-24 max-w-7xl mx-auto">
           {plans.map((plan) => {
             const Icon = plan.icon;
+            const isLoading = loadingPlan === plan.planKey;
 
             return (
               <div
@@ -260,9 +361,18 @@ export default function PricingPage() {
                 {/* CTA Button */}
                 <div className="p-8 pt-0">
                   <button
-                    className={`w-full py-4 px-6 rounded-xl font-bold text-white transition-all duration-300 shadow-lg hover:shadow-xl hover:-translate-y-1 bg-gradient-to-r ${plan.gradient} ${plan.shadow}`}
+                    onClick={() => handleSelectPlan(plan.planKey, plan.name)}
+                    disabled={isLoading || loadingPlan !== null || authLoading}
+                    className={`w-full py-4 px-6 rounded-xl font-bold text-white transition-all duration-300 shadow-lg hover:shadow-xl hover:-translate-y-1 bg-gradient-to-r ${plan.gradient} ${plan.shadow} disabled:opacity-50 disabled:cursor-not-allowed disabled:hover:translate-y-0 flex items-center justify-center`}
                   >
-                    このプランを選択
+                    {isLoading || authLoading ? (
+                      <>
+                        <Loader2 className="w-5 h-5 mr-2 animate-spin" />
+                        処理中...
+                      </>
+                    ) : (
+                      'このプランを選択'
+                    )}
                   </button>
                 </div>
               </div>
@@ -294,6 +404,10 @@ export default function PricingPage() {
               {
                 q: "無料トライアルはありますか？",
                 a: "初回ご登録の方には、3回分の無料採点をプレゼントしております。まずはお試しいただき、サービスの品質をご確認ください。"
+              },
+              {
+                q: "支払い方法は何がありますか？",
+                a: "クレジットカード（Visa、Mastercard、American Express、JCB）でのお支払いに対応しております。決済は安全なStripeシステムを使用しています。"
               }
             ].map((item, i) => (
               <div key={i} className="bg-white/60 backdrop-blur-sm rounded-2xl p-8 border border-slate-200 hover:bg-white hover:shadow-md transition-all">

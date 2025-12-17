@@ -89,10 +89,10 @@ const ALLOWED_MIME_TYPES = [
 /**
  * ファイルサイズ制限
  * Vercel Serverless Functions: 4.5MBペイロード上限（プランに関係なく）
- * 安全マージンを考慮して4MBに設定
+ * FormDataオーバーヘッドを考慮して4.3MBに設定
  */
-const MAX_SINGLE_FILE_SIZE = 4 * 1024 * 1024; // 4MB
-const MAX_TOTAL_SIZE = 4 * 1024 * 1024; // 4MB（Vercelペイロード上限対応）
+const MAX_SINGLE_FILE_SIZE = 4.3 * 1024 * 1024; // 4.3MB（単一ファイル）
+const MAX_TOTAL_SIZE = 4.3 * 1024 * 1024; // 4.3MB（Vercelペイロード上限対応）
 const MAX_FILES_COUNT = 10; // 最大ファイル数
 
 // 無料再採点（もっと厳しく/甘く）用の設定
@@ -141,7 +141,11 @@ function validateFile(file: File): void {
     
     // ファイルサイズ検証
     if (file.size > MAX_SINGLE_FILE_SIZE) {
-        throw new Error(`ファイル「${file.name}」が大きすぎます（${(file.size / 1024 / 1024).toFixed(1)}MB）。スマホで撮影した画像は自動圧縮されますが、圧縮に失敗した可能性があります。画像を小さくするか、別のファイル形式でお試しください。`);
+        const isPdf = file.type === 'application/pdf';
+        const advice = isPdf 
+            ? 'PDFはオンライン圧縮ツール（iLovePDF等）で圧縮するか、画像として撮影し直してください。'
+            : 'スマホで撮影した画像は自動圧縮されますが、圧縮に失敗した可能性があります。画像を小さくするか、別のファイル形式でお試しください。';
+        throw new Error(`ファイル「${file.name}」が大きすぎます（${(file.size / 1024 / 1024).toFixed(1)}MB）。${advice}`);
     }
     
     // ファイル名検証（パストラバーサル防止）
@@ -176,7 +180,7 @@ function validateFiles(files: File[]): void {
     // 合計サイズの検証
     const totalSize = files.reduce((sum, file) => sum + file.size, 0);
     if (totalSize > MAX_TOTAL_SIZE) {
-        throw new Error(`ファイルの合計サイズが大きすぎます（${(totalSize / 1024 / 1024).toFixed(1)}MB）。合計4MB以下になるようにしてください。`);
+        throw new Error(`ファイルの合計サイズが大きすぎます（${(totalSize / 1024 / 1024).toFixed(1)}MB）。合計4.3MB以下になるようにしてください。PDFの場合はオンライン圧縮ツール（iLovePDF等）で圧縮してから再度お試しください。`);
     }
     
     // 各ファイルの検証

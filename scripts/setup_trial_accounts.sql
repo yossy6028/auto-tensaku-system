@@ -106,3 +106,6 @@ LEFT JOIN user_profiles up ON u.id = up.id
 WHERE u.email IN ('trial1@example.com', 'trial2@example.com', 'trial3@example.com')
 ORDER BY u.email;
 
+
+
+

@@ -27,3 +27,6 @@ export async function createServerSupabaseClient() {
   });
 }
 
+// エイリアス（Stripe APIルート等との互換性のため）
+export const createClient = createServerSupabaseClient;
+

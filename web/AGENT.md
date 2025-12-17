@@ -298,7 +298,7 @@ export const dynamic = 'force-dynamic';
 | Pro + Fluid Compute | 900秒 | maxDuration = 300 |
 
 #### 2. Fluid Computeの有効化（Proプランの場合）
-1. Vercelダッシュボード → Settings → Functions
+1. Vercelダッシュボいんード → Settings → Functions
 2. "Enable Fluid Compute" をONに
 3. 再デプロイ
 
@@ -310,3 +310,71 @@ export const dynamic = 'force-dynamic';
 **リージョンコード:**
 - `hnd1`: 東京（推奨）
 - `iad1`: ワシントンDC（デフォルト）
+
+## Stripe課金システム
+
+### 概要
+
+月額サブスクリプション型の課金システムをStripeで実装。3つのプランを提供:
+
+| プラン | 価格 | 採点回数 |
+|--------|------|---------|
+| ライト | ¥980/月 | 10回/月 |
+| スタンダード | ¥2,980/月 | 30回/月 |
+| 無制限 | ¥5,980/月 | 無制限 |
+
+### 関連ファイル
+
+- `web/src/lib/stripe/config.ts` - Stripe設定（Price IDマッピング）
+- `web/src/lib/stripe/client.ts` - クライアントサイドStripe
+- `web/src/app/api/stripe/checkout/route.ts` - Checkout Session作成
+- `web/src/app/api/stripe/webhook/route.ts` - Webhook処理
+- `web/src/app/api/stripe/portal/route.ts` - カスタマーポータル
+- `web/src/app/pricing/page.tsx` - 料金プランページ
+- `web/src/app/subscription/page.tsx` - サブスクリプション管理ページ
+
+### 環境変数
+
+```bash
+# Stripe API Keys
+NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY=pk_xxx
+STRIPE_SECRET_KEY=sk_xxx
+STRIPE_WEBHOOK_SECRET=whsec_xxx
+
+# Stripe Price IDs
+STRIPE_PRICE_LIGHT_ID=price_xxx
+STRIPE_PRICE_STANDARD_ID=price_xxx
+STRIPE_PRICE_UNLIMITED_ID=price_xxx
+```
+
+### Webhook設定
+
+#### ローカル開発
+
+```bash
+# Stripe CLIでWebhookをローカルに転送
+stripe login
+stripe listen --forward-to localhost:3000/api/stripe/webhook
+```
+
+#### 本番環境
+
+Stripeダッシュボード →「Webhooks」でエンドポイント追加:
+- URL: `https://your-domain.vercel.app/api/stripe/webhook`
+- イベント: `checkout.session.completed`, `invoice.paid`, `invoice.payment_failed`, `customer.subscription.updated`, `customer.subscription.deleted`
+
+### DBスキーマ（Stripe関連）
+
+**user_profiles:**
+- `stripe_customer_id` - Stripe顧客ID (cus_xxx)
+
+**subscriptions:**
+- `stripe_subscription_id` - StripeサブスクリプションID (sub_xxx)
+- `stripe_price_id` - Stripe価格ID (price_xxx)
+- `current_period_start` - 請求期間開始日
+- `current_period_end` - 請求期間終了日
+- `cancel_at_period_end` - 期間終了時にキャンセル予定
+
+### 詳細なセットアップ手順
+
+`web/STRIPE_SETUP.md` を参照してください。

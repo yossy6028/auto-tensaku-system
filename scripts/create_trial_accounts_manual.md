@@ -118,3 +118,6 @@ WHERE u.email IN ('trial1@example.com', 'trial2@example.com', 'trial3@example.co
 ORDER BY u.email;
 ```
 
+
+
+

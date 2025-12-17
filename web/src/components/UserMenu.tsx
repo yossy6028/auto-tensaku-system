@@ -1,7 +1,7 @@
 'use client';
 
 import React, { useState, useRef, useEffect } from 'react';
-import { User, LogOut, Settings, CreditCard, ChevronDown, Infinity, BookOpen } from 'lucide-react';
+import { User, LogOut, Settings, CreditCard, ChevronDown, Infinity, BookOpen, Receipt } from 'lucide-react';
 import { useAuth } from './AuthProvider';
 import Link from 'next/link';
 
@@ -146,6 +146,15 @@ export function UserMenu({ onAuthClick }: UserMenuProps) {
             >
               <CreditCard className="w-4 h-4" />
               <span className="text-sm">プラン・料金</span>
+            </Link>
+            
+            <Link
+              href="/subscription"
+              onClick={() => setIsOpen(false)}
+              className="flex items-center gap-3 px-3 py-2 rounded-lg hover:bg-slate-50 transition-colors text-slate-700"
+            >
+              <Receipt className="w-4 h-4" />
+              <span className="text-sm">サブスクリプション管理</span>
             </Link>
             
             <Link

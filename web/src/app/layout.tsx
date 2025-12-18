@@ -19,6 +19,17 @@ export const metadata: Metadata = {
   description: "指導歴20年超のベテラン国語講師のノウハウとAIによる解析で、あなたの思考に寄り添うフィードバックを提供する自動添削システムです。",
   keywords: ["国語", "添削", "AI", "自動採点", "記述式", "受験", "教育"],
   authors: [{ name: "EduShift" }],
+  manifest: "/manifest.webmanifest",
+  themeColor: "#4f46e5",
+  appleWebApp: {
+    capable: true,
+    title: "EduShift",
+    statusBarStyle: "default",
+  },
+  icons: {
+    icon: [{ url: "/logo.jpg", type: "image/jpeg" }],
+    apple: [{ url: "/logo.jpg", type: "image/jpeg" }],
+  },
   openGraph: {
     title: "中学・高校受験記述問題自動添削システム",
     description: "指導歴20年超のベテラン国語講師のノウハウとAIによる解析で、あなたの思考に寄り添うフィードバックを提供します。",

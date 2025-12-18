@@ -113,6 +113,8 @@ type GradingApiResultItem = {
     regradeToken?: string | null;
     regradeRemaining?: number | null;
     regradeMode?: 'new' | 'free' | 'none';
+    incompleteGrading?: boolean;  // 不完全な採点（課金対象外）
+    missingFields?: string[];     // 不足しているフィールド
 };
 
 function parseStrictness(value: unknown): GradingStrictness {
@@ -143,7 +145,7 @@ function validateFile(file: File): void {
     if (file.size > MAX_SINGLE_FILE_SIZE) {
         const isPdf = file.type === 'application/pdf';
         const advice = isPdf 
-            ? 'PDFはオンライン圧縮ツール（iLovePDF等）で圧縮するか、画像として撮影し直してください。'
+            ? 'PDFは容量オーバーしやすいため、スマホ等で写真を撮ってアップロードすることをおすすめします。または、オンライン圧縮ツール（iLovePDF等）で圧縮してから再度お試しください。'
             : 'スマホで撮影した画像は自動圧縮されますが、圧縮に失敗した可能性があります。画像を小さくするか、別のファイル形式でお試しください。';
         throw new Error(`ファイル「${file.name}」が大きすぎます（${(file.size / 1024 / 1024).toFixed(1)}MB）。${advice}`);
     }
@@ -180,7 +182,11 @@ function validateFiles(files: File[]): void {
     // 合計サイズの検証
     const totalSize = files.reduce((sum, file) => sum + file.size, 0);
     if (totalSize > MAX_TOTAL_SIZE) {
-        throw new Error(`ファイルの合計サイズが大きすぎます（${(totalSize / 1024 / 1024).toFixed(1)}MB）。合計4.3MB以下になるようにしてください。PDFの場合はオンライン圧縮ツール（iLovePDF等）で圧縮してから再度お試しください。`);
+        const hasPdf = files.some(f => f.type === 'application/pdf');
+        const advice = hasPdf 
+            ? 'PDFは容量オーバーしやすいため、スマホ等で写真を撮ってアップロードすることをおすすめします。または、オンライン圧縮ツール（iLovePDF等）で圧縮してから再度お試しください。'
+            : '合計4.3MB以下になるように、ファイルを分割するか、写真の枚数を減らしてください。';
+        throw new Error(`ファイルの合計サイズが大きすぎます（${(totalSize / 1024 / 1024).toFixed(1)}MB）。${advice}`);
     }
     
     // 各ファイルの検証
@@ -489,6 +495,15 @@ export async function POST(req: NextRequest) {
         // ファイルをバッファに変換（役割情報を付与）
         const fileBuffers = await convertFilesToBuffers(files, pdfPageInfo, fileRoles);
 
+        // 画像数の警告（6枚以上でOCR精度が低下する傾向がある）
+        const RECOMMENDED_MAX_IMAGES = 5;
+        const imageFileCount = fileBuffers.filter(f => f.mimeType.startsWith('image/')).length;
+        let imageCountWarning: string | null = null;
+        if (imageFileCount > RECOMMENDED_MAX_IMAGES) {
+            imageCountWarning = `画像が${imageFileCount}枚あります。画像数が多い（${RECOMMENDED_MAX_IMAGES}枚以上）とOCR精度が低下する場合があります。採点結果が不完全な場合は、画像を分割して再度お試しください。`;
+            logger.warn(`[API] ⚠️ 画像数警告: ${imageFileCount}枚（推奨: ${RECOMMENDED_MAX_IMAGES}枚以下）`);
+        }
+
         // 採点実行
         const grader = new EduShiftGrader();
         const results: GradingApiResultItem[] = [];
@@ -496,7 +511,7 @@ export async function POST(req: NextRequest) {
         for (const label of sanitizedLabels) {
             try {
                 let result;
-                
+
                 // 確認済みテキストがある場合はそれを使用（OCRスキップ）
                 if (confirmedTexts[label]) {
                     logger.info(`[API] Using confirmed text for ${label}: ${confirmedTexts[label].length} chars`);
@@ -510,8 +525,22 @@ export async function POST(req: NextRequest) {
                     // 従来通りOCR + 採点
                     result = await grader.gradeAnswerFromMultipleFiles(label, fileBuffers, pdfPageInfo, fileRoles, strictness);
                 }
-                
-                results.push({ label, result, strictness });
+
+                // 不完全な採点結果のチェック（課金対象外）
+                const resultObj = result as { incomplete_grading?: boolean; missing_fields?: string[] } | undefined;
+                if (resultObj?.incomplete_grading) {
+                    logger.warn(`[API] Incomplete grading for ${label}: missing ${resultObj.missing_fields?.join(', ')}`);
+                    results.push({
+                        label,
+                        result,
+                        strictness,
+                        incompleteGrading: true,
+                        missingFields: resultObj.missing_fields,
+                        error: resultObj.missing_fields ? `採点結果が不完全: ${resultObj.missing_fields.join(', ')}` : '採点結果が不完全です'
+                    });
+                } else {
+                    results.push({ label, result, strictness });
+                }
             } catch (error: unknown) {
                 const message = error instanceof Error ? error.message : 'Unknown error';
                 logger.error(`Error grading ${label}:`, error);
@@ -519,8 +548,8 @@ export async function POST(req: NextRequest) {
             }
         }
 
-        // 採点成功時に利用回数をインクリメント
-        const successfulGradings = results.filter(r => r.result && !r.error);
+        // 採点成功時に利用回数をインクリメント（不完全な採点は除外）
+        const successfulGradings = results.filter(r => r.result && !r.error && !r.incompleteGrading);
         
         for (const grading of successfulGradings) {
             // 無料再採点の場合は消費しない
@@ -607,10 +636,11 @@ export async function POST(req: NextRequest) {
             }
         }
 
-        return NextResponse.json({ 
-            status: 'success', 
+        return NextResponse.json({
+            status: 'success',
             results,
-            usageInfo
+            usageInfo,
+            warnings: imageCountWarning ? [imageCountWarning] : undefined
         });
 
     } catch (error: unknown) {

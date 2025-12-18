@@ -734,7 +734,7 @@ export default function Home() {
     if (oversizedFile) {
       const isPdf = oversizedFile.type === 'application/pdf';
       const advice = isPdf 
-        ? 'PDFはオンライン圧縮ツール（iLovePDF等）で圧縮してください。'
+        ? 'PDFは容量オーバーしやすいため、スマホ等で写真を撮ってアップロードすることをおすすめします。または、オンライン圧縮ツール（iLovePDF等）で圧縮してから再度お試しください。'
         : '4.3MB以下のファイルをアップロードしてください。';
       setError(`ファイル「${oversizedFile.name}」が大きすぎます（${(oversizedFile.size / 1024 / 1024).toFixed(1)}MB）。${advice}`);
       return;
@@ -743,7 +743,11 @@ export default function Home() {
     if (totalSize > MAX_TOTAL_SIZE) {
       const totalMB = (totalSize / 1024 / 1024).toFixed(1);
       const maxMB = (MAX_TOTAL_SIZE / 1024 / 1024).toFixed(1);
-      setError(`ファイルの合計サイズが大きすぎます（${totalMB}MB）。合計${maxMB}MB以下になるように、ファイルを分割するか、PDFの場合はオンライン圧縮ツールで圧縮してください。`);
+      const hasPdf = filesToUse.some(f => f.type === 'application/pdf');
+      const advice = hasPdf 
+        ? 'PDFは容量オーバーしやすいため、スマホ等で写真を撮ってアップロードすることをおすすめします。または、オンライン圧縮ツール（iLovePDF等）で圧縮してから再度お試しください。'
+        : `合計${maxMB}MB以下になるように、ファイルを分割するか、写真の枚数を減らしてください。`;
+      setError(`ファイルの合計サイズが大きすぎます（${totalMB}MB）。${advice}`);
       return;
     }
 
@@ -1065,7 +1069,7 @@ export default function Home() {
       const fileCount = filesToUse.length;
       const hasPdf = filesToUse.some(f => f.type === 'application/pdf');
       const advice = hasPdf 
-        ? 'PDFの場合はオンライン圧縮ツール（iLovePDF等）で圧縮するか、'
+        ? 'PDFは容量オーバーしやすいため、スマホ等で写真を撮ってアップロードすることをおすすめします。または、オンライン圧縮ツール（iLovePDF等）で圧縮するか、'
         : '';
       setError(`ファイルの合計サイズが大きすぎます（${totalMB}MB、${fileCount}枚）。合計${maxMB}MB以下になるように、${advice}ファイルを分割するか、写真の枚数を減らしてください。`);
       return;
@@ -2411,6 +2415,10 @@ export default function Home() {
                       <li className="flex items-start mt-2 pt-2 border-t border-amber-200">
                         <span className="text-amber-500 mr-2">📷</span>
                         <span><strong>文字がはっきりと読み取れる</strong>画質であること</span>
+                      </li>
+                      <li className="flex items-start mt-2 pt-2 border-t border-amber-200">
+                        <span className="text-amber-500 mr-2">📝</span>
+                        <span><strong>問題の文章は全て含める</strong>こと。該当問題と関係ない部分はできるだけ含めないこと</span>
                       </li>
                       <li className="flex items-start mt-2 pt-2 border-t border-amber-200">
                         <span className="text-amber-500 mr-2">⏱️</span>

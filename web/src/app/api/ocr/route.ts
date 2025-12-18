@@ -89,7 +89,11 @@ function validateFile(file: File): void {
     }
     
     if (file.size > MAX_SINGLE_FILE_SIZE) {
-        throw new Error(`ファイル「${file.name}」が大きすぎます（${(file.size / 1024 / 1024).toFixed(1)}MB）。4MB以下のファイルをアップロードしてください。`);
+        const isPdf = file.type === 'application/pdf';
+        const advice = isPdf 
+            ? 'PDFは容量オーバーしやすいため、スマホ等で写真を撮ってアップロードすることをおすすめします。または、オンライン圧縮ツール（iLovePDF等）で圧縮してから再度お試しください。'
+            : '4MB以下のファイルをアップロードしてください。';
+        throw new Error(`ファイル「${file.name}」が大きすぎます（${(file.size / 1024 / 1024).toFixed(1)}MB）。${advice}`);
     }
     
     const dangerousNamePatterns = [/\.\./, /[\/\\]/, /[\x00-\x1f]/, /^\.+$/];
@@ -111,7 +115,11 @@ function validateFiles(files: File[]): void {
     
     const totalSize = files.reduce((sum, file) => sum + file.size, 0);
     if (totalSize > MAX_TOTAL_SIZE) {
-        throw new Error(`ファイルの合計サイズが大きすぎます。`);
+        const hasPdf = files.some(f => f.type === 'application/pdf');
+        const advice = hasPdf 
+            ? 'PDFは容量オーバーしやすいため、スマホ等で写真を撮ってアップロードすることをおすすめします。または、オンライン圧縮ツール（iLovePDF等）で圧縮してから再度お試しください。'
+            : '合計4MB以下になるように、ファイルを分割するか、写真の枚数を減らしてください。';
+        throw new Error(`ファイルの合計サイズが大きすぎます（${(totalSize / 1024 / 1024).toFixed(1)}MB）。${advice}`);
     }
     
     for (const file of files) {
@@ -232,8 +240,12 @@ export async function POST(req: NextRequest) {
         if (totalFileSize > MAX_REQUEST_SIZE) {
             const totalMB = (totalFileSize / 1024 / 1024).toFixed(1);
             const maxMB = (MAX_REQUEST_SIZE / 1024 / 1024).toFixed(1);
+            const hasPdf = files.some(f => f.type === 'application/pdf');
+            const advice = hasPdf 
+                ? 'PDFは容量オーバーしやすいため、スマホ等で写真を撮ってアップロードすることをおすすめします。または、オンライン圧縮ツール（iLovePDF等）で圧縮してから再度お試しください。'
+                : `合計${maxMB}MB以下になるように、ファイルを圧縮するか分割してください。`;
             return NextResponse.json(
-                { status: 'error', message: `ファイルの合計サイズが大きすぎます（${totalMB}MB）。合計${maxMB}MB以下になるように、ファイルを圧縮するか分割してください。` },
+                { status: 'error', message: `ファイルの合計サイズが大きすぎます（${totalMB}MB）。${advice}` },
                 { status: 413 }
             );
         }

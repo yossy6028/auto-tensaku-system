@@ -209,28 +209,14 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         .single();
 
       if (error) {
-        // テーブルが存在しない、またはRLSポリシーでアクセスできない場合
         console.warn('[AuthProvider] Failed to fetch user profile:', error.message);
         setProfile(null);
         return;
       }
 
       if (data) {
-        const userProfile = data as UserProfile;
-        console.log('[AuthProvider] Profile fetched:', {
-          userId: userProfile.id,
-          role: userProfile.role,
-          email: userProfile.email || 'no email'
-        });
-        setProfile(userProfile);
-        // プロファイルが取得されたら、利用可否情報を更新（管理者チェックのため）
-        if (userProfile.role === 'admin') {
-          console.log('[AuthProvider] ✅ Admin profile detected, will update usage info');
-        } else {
-          console.log('[AuthProvider] ❌ Profile role is not admin:', userProfile.role);
-        }
+        setProfile(data as UserProfile);
       } else {
-        console.log('[AuthProvider] ❌ No profile data found');
         setProfile(null);
       }
     } catch (error) {
@@ -241,11 +227,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
   // アクティブなサブスクリプションを取得
   const fetchSubscription = useCallback(async (userId: string) => {
-    console.log('[AuthProvider] fetchSubscription called for userId:', userId);
-    if (!supabaseClient) {
-      console.log('[AuthProvider] supabaseClient is null');
-      return;
-    }
+    if (!supabaseClient) return;
 
     try {
       const { data, error } = await supabaseClient
@@ -257,26 +239,18 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         .limit(1)
         .maybeSingle();
 
-      console.log('[AuthProvider] fetchSubscription result:', { data, error });
-
       if (error) {
-        // テーブルが存在しない、またはRLSポリシーでアクセスできない場合
         console.warn('[AuthProvider] Failed to fetch subscription:', error.message);
         setSubscription(null);
         return;
       }
 
       if (data) {
-        console.log('[AuthProvider] Setting subscription:', data);
         setSubscription(data as Subscription);
       } else {
-        console.log('[AuthProvider] No active subscription found');
         // フォールバック: Stripeから同期を試みる
         try {
-          console.log('[AuthProvider] Trying Stripe sync fallback...');
           const res = await fetch('/api/stripe/sync', { method: 'POST' });
-          const json = await res.json();
-          console.log('[AuthProvider] Stripe sync response:', res.status, json);
           if (res.ok) {
             const { data: synced } = await supabaseClient
               .from('subscriptions')
@@ -287,8 +261,8 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
               .limit(1)
               .maybeSingle();
             if (synced) {
-              console.log('[AuthProvider] Setting subscription after sync:', synced);
               setSubscription(synced as Subscription);
+              return;
             }
           }
         } catch (syncError) {
@@ -373,7 +347,6 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     if (!supabaseClient) return null;
 
     try {
-      console.log('[AuthProvider] Registering device for user:', userId);
       const rpcClient = supabaseClient as unknown as {
         rpc: (fn: string, args: Record<string, unknown>) => Promise<{ data: unknown; error: unknown }>;
       };
@@ -408,7 +381,6 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
           maxDevices: result.max_devices,
         };
         
-        console.log('[AuthProvider] Device registration result:', registrationResult);
         return registrationResult;
       }
       return null;
@@ -433,10 +405,8 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         markDeviceAsRegistered();
         setDeviceLimitInfo(null);
         setShowDeviceLimitModal(false);
-        console.log('[AuthProvider] ✅ Device registered successfully:', result.message);
       } else {
         // デバイス上限に達している
-        console.log('[AuthProvider] ⚠️ Device limit reached:', result.message);
         
         // デバイス一覧を取得
         const devices = await fetchUserDevices(userId);
@@ -458,7 +428,6 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     if (!supabaseClient || !user) return false;
 
     try {
-      console.log('[AuthProvider] Removing device:', deviceId);
       const rpcClient = supabaseClient as unknown as {
         rpc: (fn: string, args: Record<string, unknown>) => Promise<{ data: unknown; error: unknown }>;
       };
@@ -474,7 +443,6 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
       if (data && Array.isArray(data) && data.length > 0) {
         const result = data[0] as { success: boolean; message: string };
-        console.log('[AuthProvider] Device removal result:', result);
         return result.success;
       }
       return false;
@@ -491,45 +459,30 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   }, [user, deviceInfo, handleDeviceRegistration]);
 
   // 利用可否情報を取得
-  const refreshUsageInfo = useCallback(async () => {
+  // overrideUser: onAuthStateChange等から直接渡す場合に使用（stale closure対策）
+  const refreshUsageInfo = useCallback(async (overrideUser?: User | null) => {
     if (!supabaseClient) {
-      console.log('[AuthProvider] refreshUsageInfo: supabaseClient is null');
-      setUsageInfo(null);
-      return;
-    }
-    
-    if (!user) {
-      console.log('[AuthProvider] refreshUsageInfo: user is null');
       setUsageInfo(null);
       return;
     }
 
-    // セッションが存在することを確認
-    if (!session) {
-      console.log('[AuthProvider] refreshUsageInfo: session is null, skipping');
+    // 渡されたユーザーを優先、なければstateのユーザーを使用
+    const targetUser = overrideUser !== undefined ? overrideUser : user;
+
+    if (!targetUser) {
       setUsageInfo(null);
       return;
     }
-
-    console.log('[AuthProvider] refreshUsageInfo called for user:', user.id);
 
     // プロファイルを直接取得して管理者チェック（profileがまだ取得されていない場合に備える）
     try {
-      console.log('[AuthProvider] Checking admin status for user:', user.id);
       const { data: profileData, error: profileError } = await supabaseClient
         .from('user_profiles')
         .select('role')
-        .eq('id', user.id)
+        .eq('id', targetUser.id)
         .maybeSingle();
 
-      console.log('[AuthProvider] Profile fetch result:', { 
-        hasData: !!profileData, 
-        role: profileData ? (profileData as { role?: string }).role : null,
-        error: profileError?.message || null
-      });
-
       if (!profileError && profileData && (profileData as { role?: string }).role === 'admin') {
-        console.log('[AuthProvider] ✅ Admin user detected, setting unlimited access');
         setUsageInfo({
           canUse: true,
           message: '管理者アカウント: 無制限で利用可能です',
@@ -540,11 +493,6 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
           accessType: 'admin',
         });
         return;
-      } else {
-        console.log('[AuthProvider] ❌ Not an admin user or profile fetch failed:', {
-          profileError: profileError?.message,
-          role: profileData ? (profileData as { role?: string }).role : 'no data'
-        });
       }
     } catch (error) {
       console.warn('[AuthProvider] Failed to check admin status:', error);
@@ -558,7 +506,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         rpc: (fn: string, args: Record<string, unknown>) => Promise<{ data: unknown; error: unknown }>;
       };
 
-      const { data, error } = await rpcClient.rpc('can_use_service', { p_user_id: user.id });
+      const { data, error } = await rpcClient.rpc('can_use_service', { p_user_id: targetUser.id });
 
       if (error) {
         console.warn('[AuthProvider] Failed to fetch usage info:', error);
@@ -588,7 +536,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
         // 無料体験終了チェック
         if (!info.can_use && info.access_type === 'none') {
-          await fetchFreeAccessInfo(user.id).catch(() => {});
+          await fetchFreeAccessInfo(targetUser.id).catch(() => {});
         }
       } else {
         setUsageInfo({
@@ -613,7 +561,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         accessType: 'none',
       });
     }
-  }, [supabaseClient, user, session, fetchFreeAccessInfo]);
+  }, [supabaseClient, user, fetchFreeAccessInfo]);
 
   // 初期化
   useEffect(() => {
@@ -629,55 +577,41 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       // 全体のタイムアウトを設定（5秒後には必ずローディングを解除）
       const globalTimeout = setTimeout(() => {
         if (isMounted) {
-          console.warn('[AuthProvider] Initialization timeout (5s), forcing loading to false');
+          console.warn('[AuthProvider] Initialization timeout (5s)');
           setIsLoading(false);
         }
       }, 5000);
 
       try {
         // セッション取得を最優先（これが完了すればローディングを解除）
-        console.log('[AuthProvider] Getting session...');
         if (!supabase) {
           clearTimeout(globalTimeout);
           if (isMounted) setIsLoading(false);
           return;
         }
-        
+
         const sessionPromise = supabase.auth.getSession();
-        const sessionTimeout = new Promise((resolve) => 
+        const sessionTimeout = new Promise((resolve) =>
           setTimeout(() => resolve({ data: { session: null } }), 2000)
         );
-        
+
         const { data: { session } } = await Promise.race([sessionPromise, sessionTimeout]) as { data: { session: Session | null } };
-        console.log('[AuthProvider] Session retrieved:', session ? 'Found' : 'Null');
-        if (session?.user) {
-          console.log('[AuthProvider] User ID:', session.user.id);
-          console.log('[AuthProvider] User email:', session.user.email);
-        }
 
         if (isMounted) {
-          setSession(session);
-          // セッションがない場合は、userも確実にnullに設定
-          const user = session?.user ?? null;
-          setUser(user);
-          
-          if (!session) {
-            console.log('[AuthProvider] Session is null, clearing all user data');
-            setProfile(null);
-            setSubscription(null);
-            setUsageInfo(null);
-            setFreeAccessInfo(null);
+          // セッションがある場合のみ状態を更新
+          // タイムアウトでnullが返された場合は、onAuthStateChangeに任せる
+          if (session) {
+            setSession(session);
+            setUser(session.user ?? null);
           }
-          
-          // セッション取得が完了したら、すぐにローディングを解除
-          console.log('[AuthProvider] Session set, clearing loading state');
+          // getSession()がnullを返した場合（タイムアウト含む）は、onAuthStateChangeに任せる
+
           clearTimeout(globalTimeout);
           setIsLoading(false);
         }
 
         // 以下の処理はバックグラウンドで実行（ローディング解除をブロックしない）
-        console.log('[AuthProvider] Starting background data fetch...');
-        
+
         // システム設定とプランを並列で取得（タイムアウト付き）
         Promise.all([
           Promise.race([
@@ -692,9 +626,6 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
         // ユーザー固有のデータ取得（セッションがある場合のみ）
         if (session?.user && isMounted) {
-          console.log('[AuthProvider] Fetching user specific data in background...');
-          // 注意: fetchFreeAccessInfo は refreshUsageInfo 内でのみ呼ぶ（サブスクリプション確認後）
-          // 無条件で呼ぶと、有料プランユーザーにも「無料期間終了」モーダルが表示されてしまう
           Promise.all([
             fetchProfile(session.user.id).catch(() => {}),
             fetchSubscription(session.user.id).catch(() => {}),
@@ -705,7 +636,6 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         console.error('[AuthProvider] Auth initialization error:', error);
         clearTimeout(globalTimeout);
         if (isMounted) {
-          console.log('[AuthProvider] Error occurred, setting isLoading to false');
           setIsLoading(false);
         }
       }
@@ -716,7 +646,8 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     return () => {
       isMounted = false;
     };
-  }, [supabase, fetchSystemSettings, fetchPlans, fetchProfile, fetchSubscription, handleDeviceRegistration]);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [supabase]);
 
   // 認証状態の変更を監視
   useEffect(() => {
@@ -724,24 +655,61 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
     const { data: { subscription: authSubscription } } = supabase.auth.onAuthStateChange(
       async (event, session) => {
-        console.log('[AuthProvider] onAuthStateChange:', event, session ? 'session exists' : 'session null');
         setSession(session);
         const user = session?.user ?? null;
         setUser(user);
 
         if (session?.user) {
-          // エラーは各関数内で処理されるため、ここでは静かに失敗させる
-          await fetchProfile(session.user.id).catch(() => {});
-          await fetchSubscription(session.user.id).catch(() => {});
-          // 注意: fetchFreeAccessInfo は refreshUsageInfo 内でのみ呼ぶ（サブスクリプション確認後）
-          // 無条件で呼ぶと、有料プランユーザーにも「無料期間終了」モーダルが表示されてしまう
-          // 利用可否情報を更新（認証イベント由来で更新することで、useEffect内の同期setState連鎖を避ける）
-          await refreshUsageInfo().catch(() => {});
-          // デバイス登録処理
-          handleDeviceRegistration(session.user.id).catch(() => {});
+          // onAuthStateChangeコールバックを素早く完了させるため、データ取得は遅延実行
+          const userId = session.user.id;
+          const sessionUser = session.user;
+
+          setTimeout(async () => {
+            // プロファイル取得（直接クエリ）
+            try {
+              const { data: profileData, error: profileError } = await supabase
+                .from('user_profiles')
+                .select('*')
+                .eq('id', userId)
+                .single();
+              if (!profileError && profileData) {
+                setProfile(profileData as UserProfile);
+              }
+            } catch (e) {
+              console.error('[AuthProvider] Profile fetch error:', e);
+            }
+
+            // サブスクリプション取得（直接クエリ）
+            try {
+              const { data: subData, error: subError } = await supabase
+                .from('subscriptions')
+                .select('*')
+                .eq('user_id', userId)
+                .eq('status', 'active')
+                .order('created_at', { ascending: false })
+                .limit(1)
+                .maybeSingle();
+              if (!subError && subData) {
+                setSubscription(subData as Subscription);
+              }
+            } catch (e) {
+              console.error('[AuthProvider] Subscription fetch error:', e);
+            }
+
+            // 利用可否情報を更新
+            try {
+              await refreshUsageInfo(sessionUser);
+            } catch (e) {
+              console.error('[AuthProvider] refreshUsageInfo error:', e);
+            }
+
+            // デバイス登録処理
+            handleDeviceRegistration(userId).catch((e) => {
+              console.error('[AuthProvider] handleDeviceRegistration error:', e);
+            });
+          }, 100); // 100ms遅延
         } else {
           // セッションがない場合は、すべてのユーザー関連データをクリア
-          console.log('[AuthProvider] Session is null, clearing all user data');
           setProfile(null);
           setSubscription(null);
           setUsageInfo(null);
@@ -757,7 +725,8 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     return () => {
       authSubscription.unsubscribe();
     };
-  }, [supabase, fetchProfile, fetchSubscription, handleDeviceRegistration, refreshUsageInfo]);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [supabase]);
 
   // 利用可否情報（usageInfo）の更新は、認証イベント（onAuthStateChange）と明示操作（refreshUsageInfo）で行う。
   // ※ useEffect内でrefreshUsageInfo/setStateを同期呼び出しすると、eslintのreact-hooks/set-state-in-effectに抵触するため。
@@ -777,7 +746,6 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     
     if (!error && data?.session) {
       // ログイン成功後、即座にセッションとユーザー情報を設定
-      console.log('[AuthProvider] Login successful, setting session immediately');
       setSession(data.session);
       setUser(data.session.user);
       
@@ -791,7 +759,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         Promise.all([
           fetchProfile(data.session.user.id).catch(() => {}),
           fetchSubscription(data.session.user.id).catch(() => {}),
-          refreshUsageInfo().catch(() => {})
+          refreshUsageInfo(data.session.user).catch(() => {})
         ]).catch(() => {});
       }
     }
@@ -812,7 +780,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const resetPassword = async (email: string) => {
     if (!supabase) return { error: new Error('Supabase is not configured') };
     const { error } = await supabase.auth.resetPasswordForEmail(email, {
-      redirectTo: `${window.location.origin}/auth/callback?next=/auth/reset-password`,
+      redirectTo: `${window.location.origin}/auth/reset-password`,
     });
     return { error };
   };

@@ -1,8 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { stripe, getPlanIdFromStripePriceId } from '@/lib/stripe/config';
 import { createClient } from '@/lib/supabase/server';
-import type { Database } from '@/lib/supabase/types';
-import Stripe from 'stripe';
 
 const PLAN_LIMITS: Record<string, number> = {
   light: 10,
@@ -68,7 +66,6 @@ export async function POST(request: NextRequest) {
 
     // createdの新しい順にソートして最新を取得
     const sorted = [...subscriptions.data].sort((a, b) => b.created - a.created);
-    // Stripe型が環境依存で解決しない場合に備えてゆるくキャスト
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const subscription = sorted[0] as any;
 
@@ -87,7 +84,19 @@ export async function POST(request: NextRequest) {
     const status: SubscriptionStatus = mapStripeStatus(subscription.status);
     const cancelAtPeriodEnd = subscription.cancel_at_period_end || false;
 
-    // Supabaseに反映（既存があれば更新）
+    // 古いactiveサブスクリプションをcancelledに更新（同じユーザーの他のサブスクリプション）
+    const { error: updateOldError } = await supabase
+      .from('subscriptions')
+      .update({ status: 'cancelled', updated_at: new Date().toISOString() })
+      .eq('user_id', user.id)
+      .eq('status', 'active')
+      .neq('stripe_subscription_id', subscription.id);
+
+    if (updateOldError) {
+      console.warn('[Stripe Sync] Failed to cancel old subscriptions:', updateOldError.message);
+    }
+
+    // Supabaseに反映（stripe_subscription_idでupsert）
     const { error: upsertError } = await supabase
       .from('subscriptions')
       .upsert(
@@ -106,7 +115,7 @@ export async function POST(request: NextRequest) {
           purchased_at: currentPeriodStart || new Date().toISOString(),
           expires_at: currentPeriodEnd,
         },
-        { onConflict: 'user_id' }
+        { onConflict: 'stripe_subscription_id' }
       );
 
     if (upsertError) {

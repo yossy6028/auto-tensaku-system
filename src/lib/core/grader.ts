@@ -3,12 +3,14 @@ import { CONFIG } from "../config";
 import { SYSTEM_INSTRUCTION } from "../prompts/eduShift";
 import { fileToGenerativePart, getMimeType } from "../utils/image";
 
-const OCR_CONFIG = {
+const OCR_CONFIG: Record<string, unknown> = {
     temperature: 0,
     topP: 0.4,
     topK: 32,
-    maxOutputTokens: 2048,
-    responseMimeType: "application/json" as const
+    maxOutputTokens: 4096,
+    responseMimeType: "application/json",
+    thinkingConfig: { thinkingLevel: "low" },
+    mediaResolution: "high"
 };
 
 const GRADING_CONFIG = {

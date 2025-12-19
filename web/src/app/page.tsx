@@ -110,6 +110,13 @@ export default function Home() {
   const [results, setResults] = useState<GradingResponseItem[] | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [requirePlan, setRequirePlan] = useState(false);
+
+  // 回数消費確認用の状態
+  const [usageConsumed, setUsageConsumed] = useState<{
+    consumed: boolean;
+    previousCount: number | null;
+    currentCount: number | null;
+  } | null>(null);
   
   // 画像圧縮中の状態
   const [isCompressing, setIsCompressing] = useState(false);
@@ -1671,6 +1678,20 @@ export default function Home() {
         });
         setResults(data.results);
         if (Array.isArray(data.results)) ingestRegradeInfo(data.results);
+
+        // 回数消費情報をログ出力・保存
+        if (data.usageInfo) {
+          console.log('[Page] Usage info from API:', data.usageInfo);
+          // 現在の使用回数を保存（APIから返された最新情報）
+          setUsageConsumed({
+            consumed: true,
+            previousCount: usageInfo?.usageCount ?? null,
+            currentCount: data.usageInfo.usageCount ?? null,
+          });
+        } else {
+          console.warn('[Page] No usageInfo returned from API');
+        }
+
         // 利用情報を更新（エラーが発生しても続行、非同期で実行）
         refreshUsageInfo().catch((err) => {
           console.warn('[Page] Failed to refresh usage info:', err);
@@ -1818,6 +1839,35 @@ export default function Home() {
     return Math.min(100, Math.round(score));
   };
 
+  // 次の問題へ進むためのリセット関数
+  const handleNextProblem = () => {
+    // フォーム状態をリセット
+    setUploadedFiles([]);
+    setAnswerFileIndex(null);
+    setFileRoles({});
+    setResults(null);
+    setError(null);
+    setRequirePlan(false);
+    setOcrFlowStep('idle');
+    setOcrResults({});
+    setConfirmedTexts({});
+    setCurrentOcrLabel('');
+    setOcrEditModal(null);
+    setRegradeByLabel({});
+    setEditedFeedbacks([]);
+    setEditingFields([]);
+    setPdfPageInfo({ answerPage: '', problemPage: '', modelAnswerPage: '' });
+    setUsageConsumed(null);
+
+    // 使用情報を再取得（回数消費が確定したことを表示に反映）
+    refreshUsageInfo().catch((err) => {
+      console.warn('[Page] Failed to refresh usage info:', err);
+    });
+
+    // ページ上部にスクロール
+    window.scrollTo({ top: 0, behavior: 'smooth' });
+  };
+
   // ローディング中
   if (authLoading) {
     return (
@@ -1865,7 +1915,7 @@ export default function Home() {
                 />
               </div>
             </div>
-            <h1 className="text-2xl sm:text-3xl md:text-5xl lg:text-6xl font-black text-slate-800 tracking-tight mb-6 leading-tight">
+            <h1 className="text-3xl sm:text-4xl md:text-5xl lg:text-6xl font-black text-slate-800 tracking-tight mb-6 leading-tight">
               <span className="block sm:inline">中学・高校</span>
               <span className="block sm:inline">受験記述問題</span>
               <br className="hidden sm:block" />
@@ -2071,7 +2121,7 @@ export default function Home() {
               />
             </div>
           </div>
-          <h1 className="text-2xl sm:text-3xl md:text-5xl lg:text-7xl font-black text-slate-800 tracking-tight mb-8 leading-tight">
+          <h1 className="text-3xl sm:text-4xl md:text-5xl lg:text-7xl font-black text-slate-800 tracking-tight mb-8 leading-tight">
             <span className="block sm:inline">中学・高校</span>
             <span className="block sm:inline">受験記述問題</span>
             <br className="hidden sm:block" />
@@ -3528,6 +3578,51 @@ export default function Home() {
             </div>
           );
         })}
+
+        {/* 次の問題へボタン */}
+        {results && results.length > 0 && (
+          <div className="mt-16 mb-8 text-center">
+            <div className="bg-gradient-to-r from-indigo-50 via-violet-50 to-purple-50 rounded-3xl p-8 border border-indigo-100 shadow-lg">
+              <p className="text-slate-600 mb-4 text-lg">
+                採点が完了しました。別の問題を採点しますか？
+              </p>
+
+              {/* 回数消費確認表示 */}
+              {usageConsumed && usageConsumed.consumed && (
+                <div className="mb-6 inline-flex items-center gap-2 px-4 py-2 bg-green-100 text-green-800 rounded-full text-sm font-medium border border-green-200">
+                  <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
+                  </svg>
+                  採点回数を1回消費しました
+                  {usageInfo && usageInfo.usageLimit !== null && usageInfo.usageLimit !== -1 && (
+                    <span className="ml-1">
+                      （残り <span className="font-bold">{usageInfo.remainingCount ?? 0}</span>回 / {usageInfo.usageLimit}回）
+                    </span>
+                  )}
+                  {usageInfo && usageInfo.usageLimit === -1 && (
+                    <span className="ml-1">（無制限プラン）</span>
+                  )}
+                </div>
+              )}
+
+              <div className="block">
+                <button
+                  onClick={handleNextProblem}
+                  className="inline-flex items-center px-8 py-4 bg-gradient-to-r from-indigo-600 to-violet-600 text-white rounded-2xl font-bold text-lg hover:from-indigo-700 hover:to-violet-700 transition-all shadow-xl hover:shadow-2xl hover:scale-105 transform"
+                >
+                  <svg xmlns="http://www.w3.org/2000/svg" className="h-6 w-6 mr-3" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
+                  </svg>
+                  次の問題を採点する
+                </button>
+              </div>
+
+              <p className="text-sm text-slate-500 mt-4">
+                ※ 無料再採点を使わずに「次の問題へ」を押しても追加消費はありません
+              </p>
+            </div>
+          </div>
+        )}
 
       </div>
 

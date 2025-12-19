@@ -636,10 +636,21 @@ export default function Home() {
     currentAnswerIndex: number | null
   ): number | null => {
     if (files.length === 0) return null;
-    if (currentAnswerIndex !== null && currentAnswerIndex < files.length) return currentAnswerIndex;
 
-    // 役割優先: answer > answer_problem > all > problem_model
-    const priority: FileRole[] = ['answer', 'answer_problem', 'all', 'problem_model'];
+    // 答案として扱える役割
+    const answerRoles: FileRole[] = ['answer', 'answer_problem', 'all'];
+
+    // 現在のインデックスが有効かつ答案役割の場合のみ維持
+    if (
+      currentAnswerIndex !== null &&
+      currentAnswerIndex < files.length &&
+      answerRoles.includes(roles[currentAnswerIndex])
+    ) {
+      return currentAnswerIndex;
+    }
+
+    // 役割優先で探索: answer > answer_problem > all > (problem_modelは答案ではない)
+    const priority: FileRole[] = ['answer', 'answer_problem', 'all'];
     for (const role of priority) {
       const idx = files.findIndex((_, i) => roles[i] === role);
       if (idx >= 0) {
@@ -723,9 +734,11 @@ export default function Home() {
     const totalSize = files.reduce((sum, file) => sum + file.size, 0);
     const imageSize = imageFiles.reduce((sum, file) => sum + file.size, 0);
     const nonImageSize = totalSize - imageSize;
-    const imageBudget = MAX_TOTAL_SIZE_BYTES - nonImageSize;
+    if (nonImageSize >= MAX_TOTAL_SIZE_BYTES) {
+      return false;
+    }
 
-    if (imageBudget <= 0) return true;
+    const imageBudget = MAX_TOTAL_SIZE_BYTES - nonImageSize;
     return imageSize > imageBudget;
   };
 
@@ -1168,10 +1181,10 @@ export default function Home() {
     // 画像ファイルを圧縮（10枚対応）
     const hasImages = uploadedFiles.some(f => isImageFile(f));
     const hasPdf = uploadedFiles.some(f => f.type === 'application/pdf');
-    const hasPdfPageInfo = !!(pdfPageInfo.answerPage || pdfPageInfo.problemPage || pdfPageInfo.modelAnswerPage);
+    const hasPdfPageInfoForProcessing = !!(pdfPageInfo.answerPage || pdfPageInfo.problemPage || pdfPageInfo.modelAnswerPage);
     let filesToUse = uploadedFiles;
     
-    if (hasImages || (hasPdf && hasPdfPageInfo)) {
+    if (hasImages || (hasPdf && hasPdfPageInfoForProcessing)) {
       setIsCompressing(true);
       setCompressionProgress(0);
       setCompressionFileName('');
@@ -1357,10 +1370,10 @@ export default function Home() {
     // 画像ファイルを圧縮（OCR時と同様）
     const hasImages = uploadedFiles.some(f => isImageFile(f));
     const hasPdf = uploadedFiles.some(f => f.type === 'application/pdf');
-    const hasPdfPageInfo = !!(pdfPageInfo.answerPage || pdfPageInfo.problemPage || pdfPageInfo.modelAnswerPage);
+    const hasPdfPageInfoForProcessing = !!(pdfPageInfo.answerPage || pdfPageInfo.problemPage || pdfPageInfo.modelAnswerPage);
     let filesToUse = uploadedFiles;
     
-    if (hasImages || (hasPdf && hasPdfPageInfo)) {
+    if (hasImages || (hasPdf && hasPdfPageInfoForProcessing)) {
       setIsCompressing(true);
       setCompressionProgress(0);
       setCompressionFileName('');
@@ -1393,10 +1406,8 @@ export default function Home() {
       const totalMB = (totalSize / 1024 / 1024).toFixed(1);
       const maxMB = (MAX_TOTAL_SIZE / 1024 / 1024).toFixed(1);
       const hasPdf = filesToUse.some(f => f.type === 'application/pdf');
-      const advice = hasPdf 
-        ? 'PDFの場合はオンライン圧縮ツール（iLovePDF等）で圧縮してください。'
-        : 'ファイルを圧縮するか分割してください。';
-      setError(`ファイルの合計サイズが大きすぎます（${totalMB}MB）。合計${maxMB}MB以下になるように、${advice}`);
+      const baseMessage = `ファイルの合計サイズが大きすぎます（${totalMB}MB）。合計${maxMB}MB以下になるように、ファイルを圧縮するか分割してください。`;
+      setError(hasPdf ? `${baseMessage} ${PDF_SIZE_ADVICE}` : baseMessage);
       setIsLoading(false);
       setOcrFlowStep('idle');
       return;
@@ -1523,10 +1534,10 @@ export default function Home() {
     // 画像ファイルを圧縮（10枚対応）
     const hasImages = uploadedFiles.some(f => isImageFile(f));
     const hasPdf = uploadedFiles.some(f => f.type === 'application/pdf');
-    const hasPdfPageInfo = !!(pdfPageInfo.answerPage || pdfPageInfo.problemPage || pdfPageInfo.modelAnswerPage);
+    const hasPdfPageInfoForProcessing = !!(pdfPageInfo.answerPage || pdfPageInfo.problemPage || pdfPageInfo.modelAnswerPage);
     let filesToUse = uploadedFiles;
     
-    if (hasImages || (hasPdf && hasPdfPageInfo)) {
+    if (hasImages || (hasPdf && hasPdfPageInfoForProcessing)) {
       setIsCompressing(true);
       setCompressionProgress(0);
       setCompressionFileName('');
@@ -1560,7 +1571,7 @@ export default function Home() {
     if (oversizedFile) {
       const isPdf = oversizedFile.type === 'application/pdf';
       const advice = isPdf 
-        ? 'PDFはオンライン圧縮ツール（iLovePDF等）で圧縮するか、画像として撮影し直してください。'
+        ? PDF_SIZE_ADVICE
         : '4.3MB以下のファイルをアップロードしてください。';
       setError(`ファイル「${oversizedFile.name}」が大きすぎます（${(oversizedFile.size / 1024 / 1024).toFixed(1)}MB）。${advice}`);
       return;
@@ -1570,10 +1581,8 @@ export default function Home() {
       const totalMB = (totalSize / 1024 / 1024).toFixed(1);
       const maxMB = (MAX_TOTAL_SIZE / 1024 / 1024).toFixed(1);
       const hasPdf = filesToUse.some(f => f.type === 'application/pdf');
-      const advice = hasPdf 
-        ? 'PDFの場合はオンライン圧縮ツール（iLovePDF等）で圧縮するか、'
-        : '';
-      setError(`ファイルの合計サイズが大きすぎます（${totalMB}MB）。合計${maxMB}MB以下になるように、${advice}ファイルを分割してください。`);
+      const baseMessage = `ファイルの合計サイズが大きすぎます（${totalMB}MB）。合計${maxMB}MB以下になるように、ファイルを分割してください。`;
+      setError(hasPdf ? `${baseMessage} ${PDF_SIZE_ADVICE}` : baseMessage);
       return;
     }
 
@@ -2781,6 +2790,8 @@ export default function Home() {
                             newRoles[i] = i === 0 ? 'answer' : 'problem_model';
                           });
                           setFileRoles(newRoles);
+                          // 答案インデックスを再計算
+                          setAnswerFileIndex(detectAnswerIndexByRole(uploadedFiles, newRoles, null));
                         }}
                         className="px-3 py-1.5 text-xs font-bold bg-indigo-100 text-indigo-700 rounded-lg border border-indigo-200 hover:bg-indigo-200 transition-colors"
                       >
@@ -2795,6 +2806,8 @@ export default function Home() {
                             newRoles[i] = 'all';
                           });
                           setFileRoles(newRoles);
+                          // 答案インデックスを再計算
+                          setAnswerFileIndex(detectAnswerIndexByRole(uploadedFiles, newRoles, null));
                         }}
                         className="px-3 py-1.5 text-xs font-bold bg-rose-100 text-rose-700 rounded-lg border border-rose-200 hover:bg-rose-200 transition-colors"
                       >
@@ -2865,7 +2878,12 @@ export default function Home() {
                               <button
                                 key={value}
                                 type="button"
-                                onClick={() => setFileRoles(prev => ({ ...prev, [index]: value as FileRole }))}
+                                onClick={() => {
+                                  const newRoles = { ...fileRoles, [index]: value as FileRole };
+                                  setFileRoles(newRoles);
+                                  // 答案インデックスを再計算
+                                  setAnswerFileIndex(detectAnswerIndexByRole(uploadedFiles, newRoles, answerFileIndex));
+                                }}
                                 className={clsx(
                                   "px-2 sm:px-3 py-1 sm:py-1.5 text-[10px] sm:text-xs font-bold rounded-lg border transition-all",
                                   fileRoles[index] === value

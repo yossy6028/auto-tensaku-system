@@ -6,6 +6,7 @@ import type { Database } from '@/lib/supabase/types';
 import { checkRateLimit, GRADING_RATE_LIMIT } from '@/lib/security/rateLimit';
 import { logger } from '@/lib/security/logger';
 import { createRegradeToken, verifyRegradeToken } from '@/lib/security/regradeToken';
+import { isHeicMimeType, hasHeicExtension, convertHeicBufferToJpeg } from '@/lib/utils/serverHeicConverter';
 
 // Force dynamic to prevent caching
 export const dynamic = 'force-dynamic';
@@ -242,25 +243,44 @@ async function convertFilesToBuffers(
 ): Promise<UploadedFilePart[]> {
     const fileBuffersNested = await Promise.all<UploadedFilePart[]>(
         files.map(async (file, index) => {
-            const buffer = Buffer.from(await file.arrayBuffer());
+            let buffer = Buffer.from(await file.arrayBuffer());
+            let mimeType = file.type;
+            let fileName = file.name;
             const role = fileRoles[index.toString()] || 'other';
-            
-            if (file.type === 'application/pdf') {
+
+            // HEIC/HEIF形式の場合はJPEGに変換（Gemini API互換性のため）
+            if (isHeicMimeType(mimeType) || hasHeicExtension(fileName)) {
+                logger.info(`[HEIC] Server-side conversion for: ${fileName}`);
+                const jpegBuffer = await convertHeicBufferToJpeg(buffer, 85);
+                if (jpegBuffer) {
+                    // Buffer.from()で再ラップして型の互換性を確保
+                    buffer = Buffer.from(jpegBuffer);
+                    mimeType = 'image/jpeg';
+                    fileName = fileName.replace(/\.(heic|heif)$/i, '.jpeg');
+                    logger.info(`[HEIC] Conversion successful: ${file.name} → ${fileName}`);
+                } else {
+                    // 変換失敗時はエラーを投げる（HEICのままではGeminiで処理できない可能性が高い）
+                    logger.error(`[HEIC] Conversion failed for: ${fileName}`);
+                    throw new Error(`HEIC画像「${file.name}」の変換に失敗しました。iPhoneのカメラ設定で「互換性優先」を選択するか、写真アプリでJPEG形式に変換してから再度アップロードしてください。`);
+                }
+            }
+
+            if (mimeType === 'application/pdf') {
                 // PDFの場合は各ページに役割を引き継ぐ
-                const pdfPages = await processPdfFile(buffer, file.name);
+                const pdfPages = await processPdfFile(buffer, fileName);
                 return pdfPages.map(page => ({ ...page, role }));
             }
-            
+
             return [{
                 buffer,
-                mimeType: file.type,
-                name: file.name,
+                mimeType,
+                name: fileName,
                 sourceFileName: file.name,
                 role  // 役割情報を追加
             }];
         })
     );
-    
+
     return fileBuffersNested.flat();
 }
 

@@ -1,14 +1,17 @@
 /**
  * 画像圧縮ユーティリティ
- * 
+ *
  * スマホで撮影した大きな画像を自動的に圧縮し、
  * Vercelのペイロード制限（4.5MB）内に収める
- * 
+ *
  * スマホ対応最優先:
  * - 画像サイズを1000pxに制限（メモリ節約）
  * - 処理間に500msの遅延（GC時間確保）
  * - requestAnimationFrameでUI更新保証
+ * - HEIC形式を自動的にJPEGに変換（Gemini API互換性のため）
  */
+
+import { isHeicFile, convertHeicToJpeg } from './heicConverter';
 
 // タイムアウト設定
 const IS_MOBILE = typeof navigator !== 'undefined' && /iPhone|iPad|Android/i.test(navigator.userAgent);
@@ -281,6 +284,7 @@ async function drawToCanvas(
 
 /**
  * 単一画像を圧縮（スマホ対応）
+ * HEIC形式は先にJPEGに変換してから圧縮
  */
 export async function compressImage(
     file: File,
@@ -293,16 +297,33 @@ export async function compressImage(
         return file;
     }
 
-    const fileSizeMB = file.size / 1024 / 1024;
-    
-    // 小さいファイルはスキップ
-    if (fileSizeMB <= options.maxSizeMB && fileSizeMB < 0.5) {
-        console.log(`[Compress] Skip: ${file.name} (${fileSizeMB.toFixed(2)}MB)`);
-        if (onProgress) onProgress(100);
-        return file;
+    let workingFile = file;
+
+    // HEIC形式の場合は先にJPEGに変換（Gemini API互換性のため必須）
+    if (isHeicFile(file)) {
+        console.log(`[Compress] HEIC detected: ${file.name}, converting to JPEG first...`);
+        if (onProgress) onProgress(5);
+
+        const converted = await convertHeicToJpeg(file, 0.9);
+        if (converted) {
+            workingFile = converted;
+            console.log(`[Compress] HEIC→JPEG conversion successful: ${file.name} → ${converted.name}`);
+        } else {
+            // 変換失敗時は警告を出すが、元のファイルで続行（サーバー側で再試行）
+            console.warn(`[Compress] HEIC conversion failed for ${file.name}, will try server-side conversion`);
+        }
     }
 
-    console.log(`[Compress] Start: ${file.name} (${fileSizeMB.toFixed(2)}MB)`);
+    const fileSizeMB = workingFile.size / 1024 / 1024;
+
+    // 小さいファイルはスキップ（ただしHEIC変換後は必ず返す）
+    if (fileSizeMB <= options.maxSizeMB && fileSizeMB < 0.5) {
+        console.log(`[Compress] Skip compression: ${workingFile.name} (${fileSizeMB.toFixed(2)}MB)`);
+        if (onProgress) onProgress(100);
+        return workingFile;
+    }
+
+    console.log(`[Compress] Start: ${workingFile.name} (${fileSizeMB.toFixed(2)}MB)`);
     if (onProgress) onProgress(10);
 
     try {
@@ -318,7 +339,7 @@ export async function compressImage(
         if (CAN_USE_IMAGE_BITMAP) {
             try {
                 bitmap = await withTimeout(
-                    createImageBitmap(file),
+                    createImageBitmap(workingFile),
                     PER_FILE_TIMEOUT_MS,
                     async () => {
                         throw new Error('createImageBitmap timeout');
@@ -327,13 +348,13 @@ export async function compressImage(
                 width = bitmap.width;
                 height = bitmap.height;
             } catch (err) {
-                console.warn(`[Compress] createImageBitmap(size) failed for ${file.name}, fallback to Image`, err);
+                console.warn(`[Compress] createImageBitmap(size) failed for ${workingFile.name}, fallback to Image`, err);
                 bitmap = null;
             }
         }
 
         if (!bitmap) {
-            img = await loadImage(file, PER_FILE_TIMEOUT_MS);
+            img = await loadImage(workingFile, PER_FILE_TIMEOUT_MS);
             width = img.width;
             height = img.height;
         }
@@ -359,7 +380,7 @@ export async function compressImage(
         if (onProgress) onProgress(50);
 
         // Canvas描画（createImageBitmapを優先してデコード&リサイズ）
-        const canvas = await drawToCanvas(file, width, height, PER_FILE_TIMEOUT_MS, img ?? undefined, bitmap ?? undefined);
+        const canvas = await drawToCanvas(workingFile, width, height, PER_FILE_TIMEOUT_MS, img ?? undefined, bitmap ?? undefined);
         if (onProgress) onProgress(70);
 
         // UI更新を待つ
@@ -374,13 +395,14 @@ export async function compressImage(
         canvas.height = 0;
 
         if (!jpegBlob) {
-            console.warn(`[Compress] Skip toDataURL fallback for ${file.name}, returning original file to avoid UI block`);
+            console.warn(`[Compress] Skip toDataURL fallback for ${workingFile.name}, returning working file to avoid UI block`);
             if (onProgress) onProgress(100);
-            return file;
+            return workingFile;
         }
 
-        // Blob変換
-        const compressedFile = new File([jpegBlob], file.name, { type: 'image/jpeg' });
+        // Blob変換（ファイル名はJPEG拡張子に統一）
+        const newName = workingFile.name.replace(/\.(heic|heif)$/i, '.jpeg');
+        const compressedFile = new File([jpegBlob], newName, { type: 'image/jpeg' });
 
         console.log(`[Compress] Done: ${file.name} ${fileSizeMB.toFixed(2)}MB → ${(compressedFile.size/1024/1024).toFixed(2)}MB`);
         if (onProgress) onProgress(100);
@@ -389,7 +411,8 @@ export async function compressImage(
     } catch (error) {
         console.warn(`[Compress] Failed: ${file.name}`, error);
         if (onProgress) onProgress(100);
-        return file;
+        // 変換失敗時もworkingFile（HEIC変換済みの可能性）を返す
+        return workingFile;
     }
 }
 

@@ -1916,8 +1916,8 @@ export default function Home() {
               </div>
             </div>
             <h1 className="text-4xl sm:text-5xl md:text-6xl lg:text-7xl font-black text-slate-800 tracking-tight mb-6 leading-tight">
-              <span className="block sm:inline">中学・高校</span>
-              <span className="block sm:inline">受験記述問題</span>
+              <span className="block sm:inline">中学・高校受験</span>
+              <span className="block sm:inline">記述問題</span>
               <br className="hidden sm:block" />
               <span className="text-transparent bg-clip-text bg-gradient-to-r from-indigo-600 via-violet-600 to-blue-600 animate-gradient-x block sm:inline-block mt-1 sm:mt-0">
                 自動添削システム
@@ -2122,8 +2122,8 @@ export default function Home() {
             </div>
           </div>
           <h1 className="text-4xl sm:text-5xl md:text-6xl lg:text-7xl font-black text-slate-800 tracking-tight mb-8 leading-tight">
-            <span className="block sm:inline">中学・高校</span>
-            <span className="block sm:inline">受験記述問題</span>
+            <span className="block sm:inline">中学・高校受験</span>
+            <span className="block sm:inline">記述問題</span>
             <br className="hidden sm:block" />
             <span className="text-transparent bg-clip-text bg-gradient-to-r from-indigo-600 via-violet-600 to-fuchsia-600 animate-gradient-x pb-2 block sm:inline-block mt-1 sm:mt-0">
               自動添削システム

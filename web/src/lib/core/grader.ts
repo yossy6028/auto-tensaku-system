@@ -7,6 +7,9 @@ import { SYSTEM_INSTRUCTION } from "../prompts/eduShift";
 // 大きなPDF（複数ページ）の場合、Geminiの応答に時間がかかるため余裕を持たせる
 const OCR_TIMEOUT_MS = 250_000;     // 250秒（maxDuration=300秒に余裕を持たせる）
 const GRADING_TIMEOUT_MS = 250_000; // 250秒
+const OCR_RETRY_ATTEMPTS = 3;
+const OCR_RETRY_BACKOFF_MS = 800;
+const OCR_RETRY_JITTER_MS = 400;
 // 注: OCRと採点は別APIなので、それぞれ独立してタイムアウトを設定
 
 // 採点の厳しさ（3段階）
@@ -62,6 +65,10 @@ async function withTimeout<T>(promise: Promise<T>, timeoutMs: number, operation:
         clearTimeout(timeoutId!);
         throw error;
     }
+}
+
+function sleep(ms: number): Promise<void> {
+    return new Promise(resolve => setTimeout(resolve, ms));
 }
 
 // 型定義
@@ -332,6 +339,8 @@ export class EduShiftGrader {
         }
 
         const sanitizedLabel = targetLabel.replace(/[<>\\"'`]/g, "").trim() || "target";
+        const ocrModelName = CONFIG.OCR_MODEL_NAME || CONFIG.MODEL_NAME;
+        const fallbackModelName = CONFIG.OCR_FALLBACK_MODEL_NAME || "";
         const ocrPrompts = [
             this.buildOcrPrompt(sanitizedLabel, "primary"),
             this.buildOcrPrompt(sanitizedLabel, "retry")
@@ -343,7 +352,7 @@ export class EduShiftGrader {
         let bestFallbackCount = -1;
 
         for (const prompt of ocrPrompts) {
-            const attempt = await this.runOcrAttempt(prompt, targetParts);
+            const attempt = await this.runOcrAttempt(prompt, targetParts, ocrModelName);
 
             if (attempt.text && !this.isOcrFailure(attempt.text)) {
                 if (attempt.charCount > bestValidCount) {
@@ -362,7 +371,7 @@ export class EduShiftGrader {
         if (!bestValid && targetParts.length > 1) {
             console.warn("[Grader] OCR失敗のため、画像ごとの再試行を実施します");
             for (const part of targetParts) {
-                const attempt = await this.runOcrAttempt(ocrPrompts[1], [part]);
+                const attempt = await this.runOcrAttempt(ocrPrompts[1], [part], ocrModelName);
                 if (attempt.text && !this.isOcrFailure(attempt.text)) {
                     if (attempt.charCount > bestValidCount) {
                         bestValid = attempt;
@@ -372,6 +381,18 @@ export class EduShiftGrader {
                     bestFallback = attempt;
                     bestFallbackCount = attempt.charCount;
                 }
+            }
+        }
+
+        if (!bestValid && fallbackModelName && fallbackModelName !== ocrModelName) {
+            console.warn("[Grader] OCRフォールバックモデルで再試行します:", fallbackModelName);
+            const fallbackAttempt = await this.runOcrAttempt(ocrPrompts[1], targetParts, fallbackModelName);
+            if (fallbackAttempt.text && !this.isOcrFailure(fallbackAttempt.text)) {
+                bestValid = fallbackAttempt;
+                bestValidCount = fallbackAttempt.charCount;
+            } else if (fallbackAttempt.text && fallbackAttempt.charCount > bestFallbackCount) {
+                bestFallback = fallbackAttempt;
+                bestFallbackCount = fallbackAttempt.charCount;
             }
         }
 
@@ -401,6 +422,7 @@ export class EduShiftGrader {
             "要約・補完・修正は禁止です。",
             "縦書きは右から左へ、上から下へ読みます。",
             "判読不能な文字は「〓」に置き換えてください。",
+            "textは空にせず、何も読めない場合は「〓」のみを出力してください。",
             "JSONのみで返してください: {\"text\":\"<verbatim>\",\"char_count\":<空白改行除外の文字数>}"
         ];
 
@@ -429,32 +451,65 @@ export class EduShiftGrader {
         return { text: normalized, charCount };
     }
 
-    private async runOcrAttempt(prompt: string, parts: ContentPart[]): Promise<{ text: string; charCount: number }> {
-        let result;
-        try {
-            result = await withTimeout(
-                this.ai.models.generateContent({
-                    model: CONFIG.MODEL_NAME,
-                    contents: [{ role: "user", parts: [{ text: prompt }, ...parts] }],
-                    config: {
-                        ...this.ocrConfig,
-                        systemInstruction: this.ocrSystemInstruction
+    private async runOcrAttempt(
+        prompt: string,
+        parts: ContentPart[],
+        modelName?: string
+    ): Promise<{ text: string; charCount: number }> {
+        const resolvedModel = modelName || CONFIG.OCR_MODEL_NAME || CONFIG.MODEL_NAME;
+        let best: { text: string; charCount: number } | null = null;
+        let bestCount = -1;
+        let lastError: unknown = null;
+
+        for (let attemptIndex = 0; attemptIndex < OCR_RETRY_ATTEMPTS; attemptIndex += 1) {
+            try {
+                const result = await withTimeout(
+                    this.ai.models.generateContent({
+                        model: resolvedModel,
+                        contents: [{ role: "user", parts: [{ text: prompt }, ...parts] }],
+                        config: {
+                            ...this.ocrConfig,
+                            systemInstruction: this.ocrSystemInstruction
+                        }
+                    }),
+                    OCR_TIMEOUT_MS,
+                    "OCR処理"
+                );
+
+                const raw = result?.text?.trim() ?? "";
+                if (!raw) {
+                    lastError = new Error("OCR応答が空でした");
+                } else {
+                    const parsed = this.parseOcrResponse(raw);
+                    if (parsed.text && !this.isOcrFailure(parsed.text)) {
+                        return parsed;
                     }
-                }),
-                OCR_TIMEOUT_MS,
-                "OCR処理"
-            );
-        } catch (error) {
-            console.error("[Grader] OCR API呼び出しエラー:", error);
-            throw new Error(`OCR処理に失敗しました: ${error instanceof Error ? error.message : String(error)}`);
+                    if (parsed.text && parsed.charCount > bestCount) {
+                        best = parsed;
+                        bestCount = parsed.charCount;
+                    }
+                }
+            } catch (error) {
+                console.error("[Grader] OCR API呼び出しエラー:", error);
+                lastError = error;
+            }
+
+            if (attemptIndex < OCR_RETRY_ATTEMPTS - 1) {
+                const jitter = Math.floor(Math.random() * OCR_RETRY_JITTER_MS);
+                const backoff = OCR_RETRY_BACKOFF_MS * (attemptIndex + 1) + jitter;
+                await sleep(backoff);
+            }
         }
 
-        const raw = result?.text?.trim() ?? "";
-        if (!raw) {
-            return { text: "", charCount: 0 };
+        if (best) {
+            return best;
         }
 
-        return this.parseOcrResponse(raw);
+        if (lastError) {
+            throw new Error(`OCR処理に失敗しました: ${lastError instanceof Error ? lastError.message : String(lastError)}`);
+        }
+
+        return { text: "", charCount: 0 };
     }
 
     /**

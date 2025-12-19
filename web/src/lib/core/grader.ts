@@ -122,12 +122,27 @@ type DeductionDetail = {
     deduction_percentage: number;
 };
 
-type GradingResult = Record<string, unknown> & { 
-    score?: number; 
+// フィードバック内容の型定義
+type FeedbackContent = {
+    good_point?: string;
+    improvement_advice?: string;
+    rewrite_example?: string;
+};
+
+type GradingResult = Record<string, unknown> & {
+    score?: number;
     recognized_text?: string;
     recognized_text_full?: string;
     deduction_details?: DeductionDetail[];
     mandatory_checks?: MandatoryChecks;
+    feedback_content?: FeedbackContent;
+};
+
+// 品質検証結果の型定義
+type QualityValidationResult = {
+    isValid: boolean;
+    missingFields: string[];
+    warnings: string[];
 };
 
 // ファイル分類用の正規表現パターン
@@ -307,6 +322,12 @@ export class EduShiftGrader {
         if (targetParts.length === 0) {
             console.error("[Grader] ❌ OCR対象の画像がありません");
             throw new Error("答案画像が見つかりません。ファイルを正しくアップロードしてください。");
+        }
+
+        // 画像数が多い場合の警告（6枚以上でOCR精度が低下する傾向がある）
+        const RECOMMENDED_MAX_IMAGES = 5;
+        if (targetParts.length > RECOMMENDED_MAX_IMAGES) {
+            console.warn(`[Grader] ⚠️ 画像数が多い（${targetParts.length}枚）: OCR精度が低下する可能性があります。推奨は${RECOMMENDED_MAX_IMAGES}枚以下です。`);
         }
 
         const sanitizedLabel = targetLabel.replace(/[<>\\\"'`]/g, "").trim() || "target";
@@ -910,6 +931,77 @@ export class EduShiftGrader {
     }
 
     /**
+     * 採点結果の品質を検証
+     * 必須フィールド（good_point, improvement_advice, rewrite_example等）が含まれているかを確認
+     * 不完全な結果は課金対象外とするため、この検証でエラーを返す
+     */
+    private validateGradingQuality(parsed: Record<string, unknown>): QualityValidationResult {
+        const missingFields: string[] = [];
+        const warnings: string[] = [];
+
+        const gradingResult = parsed.grading_result as GradingResult | undefined;
+
+        // grading_result自体の存在チェック
+        if (!gradingResult) {
+            missingFields.push("grading_result");
+            return { isValid: false, missingFields, warnings };
+        }
+
+        // 必須フィールドのチェック
+        // 1. recognized_text（OCR結果）
+        const recognizedText = String(gradingResult.recognized_text || "").trim();
+        const placeholderPattern = /読み取れませんでした|画像が不鮮明|見つかりません|〓{5,}|取得できませんでした|回答テキストを取得できませんでした/;
+
+        if (!recognizedText || placeholderPattern.test(recognizedText)) {
+            missingFields.push("recognized_text（生徒の解答）");
+        } else if (recognizedText.length < 5) {
+            warnings.push("recognized_textが極端に短い（5文字未満）");
+        }
+
+        // 2. score（スコア）
+        if (typeof gradingResult.score !== "number" || Number.isNaN(gradingResult.score)) {
+            missingFields.push("score（採点スコア）");
+        }
+
+        // 3. feedback_content（フィードバック内容）
+        const feedbackContent = gradingResult.feedback_content as FeedbackContent | undefined;
+
+        if (!feedbackContent) {
+            missingFields.push("feedback_content（フィードバック）");
+        } else {
+            // good_point（良い点）は必須
+            const goodPoint = String(feedbackContent.good_point || "").trim();
+            if (!goodPoint || goodPoint.length < 5) {
+                missingFields.push("good_point（良い点）");
+            }
+
+            // improvement_advice（改善アドバイス）は必須
+            const advice = String(feedbackContent.improvement_advice || "").trim();
+            if (!advice || advice.length < 5) {
+                missingFields.push("improvement_advice（改善アドバイス）");
+            }
+
+            // rewrite_example（書き直し例）は必須
+            const rewrite = String(feedbackContent.rewrite_example || "").trim();
+            if (!rewrite || rewrite.length < 5) {
+                missingFields.push("rewrite_example（書き直し例）");
+            }
+        }
+
+        const isValid = missingFields.length === 0;
+
+        if (!isValid) {
+            console.error("[Grader] ❌ 品質検証失敗 - 必須フィールドが不足:", missingFields);
+        } else if (warnings.length > 0) {
+            console.warn("[Grader] ⚠️ 品質検証警告:", warnings);
+        } else {
+            console.log("[Grader] ✅ 品質検証OK");
+        }
+
+        return { isValid, missingFields, warnings };
+    }
+
+    /**
      * OCRの列ごと読み取り結果を検証
      * AIがocr_debugを正しく出力しているか、列ごとの文字数が一致しているかを確認
      */
@@ -1322,7 +1414,20 @@ System Instructionに定義された以下のルールを厳密に適用して�
             
             // プログラムによる検証・補完を実行
             const validated = this.validateAndEnhanceGrading(parsed);
-            
+
+            // 品質検証: 必須フィールドが揃っているかチェック
+            const qualityResult = this.validateGradingQuality(validated);
+            if (!qualityResult.isValid) {
+                console.error("[Grader] ❌ 採点結果の品質検証失敗（課金対象外）");
+                return {
+                    status: "error",
+                    message: `採点結果が不完全です。以下の項目が正しく読み取れませんでした: ${qualityResult.missingFields.join(", ")}。画像の品質を確認し、再度お試しください。`,
+                    incomplete_grading: true,  // 不完全な採点フラグ（課金対象外の判定に使用）
+                    grading_result: validated.grading_result,
+                    missing_fields: qualityResult.missingFields
+                };
+            }
+
             console.log("[Grader] 採点完了（確認済みテキスト使用）");
             return validated;
         }
@@ -1331,6 +1436,7 @@ System Instructionに定義された以下のルールを厳密に適用して�
         return {
             status: "error",
             message: "System Error: Failed to parse AI response.",
+            incomplete_grading: true,  // 不完全な採点フラグ
             grading_result: {
                 recognized_text: confirmedText,
                 user_confirmed: true
@@ -1540,7 +1646,20 @@ System Instructionに定義された以下のルールを厳密に適用して�
             
             // プログラムによる検証・補完を実行
             const validated = this.validateAndEnhanceGrading(parsed);
-            
+
+            // 品質検証: 必須フィールドが揃っているかチェック
+            const qualityResult = this.validateGradingQuality(validated);
+            if (!qualityResult.isValid) {
+                console.error("[Grader] ❌ 採点結果の品質検証失敗（課金対象外）");
+                return {
+                    status: "error",
+                    message: `採点結果が不完全です。以下の項目が正しく読み取れませんでした: ${qualityResult.missingFields.join(", ")}。画像の品質を確認し、再度お試しください。`,
+                    incomplete_grading: true,  // 不完全な採点フラグ（課金対象外の判定に使用）
+                    grading_result: validated.grading_result,
+                    missing_fields: qualityResult.missingFields
+                };
+            }
+
             console.log("[Grader] Stage 2 完了: プログラム検証完了", {
                 ocrLength: ocrText.length,
                 hasGradingResult: !!validated.grading_result,
@@ -1550,13 +1669,13 @@ System Instructionに定義された以下のルールを厳密に適用して�
                 vocabCheck: (validated.grading_result as GradingResult | undefined)?.mandatory_checks?.vocabulary_check,
                 finalScore: (validated.grading_result as GradingResult | undefined)?.score
             });
-            
+
             // 検証結果の構造をログ出力
             console.log("[Grader] validated keys:", Object.keys(validated));
             if (validated.grading_result) {
                 console.log("[Grader] grading_result keys:", Object.keys(validated.grading_result as object));
             }
-            
+
             return validated;
         }
 
@@ -1564,6 +1683,7 @@ System Instructionに定義された以下のルールを厳密に適用して�
         return {
             status: "error",
             message: "System Error: Failed to parse AI response.",
+            incomplete_grading: true,  // 不完全な採点フラグ
             grading_result: {
                 recognized_text: ocrText,
                 recognized_text_full: ocrResult.fullText || ocrText,

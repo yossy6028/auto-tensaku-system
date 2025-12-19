@@ -9,7 +9,9 @@
  */
 
 // HEIC変換のタイムアウト（ミリ秒）
-const HEIC_CONVERSION_TIMEOUT_MS = 10000; // 10秒
+// モバイルでは処理が遅いため長めに設定
+const IS_MOBILE = typeof navigator !== 'undefined' && /iPhone|iPad|Android/i.test(navigator.userAgent);
+const HEIC_CONVERSION_TIMEOUT_MS = IS_MOBILE ? 20000 : 15000; // モバイル20秒、PC15秒
 
 /**
  * ファイルがHEIC形式かどうかを判定
@@ -35,11 +37,18 @@ async function loadHeic2Any(): Promise<typeof import('heic2any').default | null>
         return null;
     }
 
+    // モバイル判定
+    const isMobile = /iPhone|iPad|Android/i.test(navigator.userAgent);
+    console.log(`[HEIC] Loading heic2any... (mobile: ${isMobile}, userAgent: ${navigator.userAgent.slice(0, 50)}...)`);
+
     try {
+        const startTime = Date.now();
         const heic2any = (await import('heic2any')).default;
+        console.log(`[HEIC] heic2any loaded successfully in ${Date.now() - startTime}ms`);
         return heic2any;
     } catch (error) {
         console.error('[HEIC] Failed to load heic2any:', error);
+        console.error('[HEIC] This may cause HEIC images to fail on Gemini API - will fall back to server-side conversion');
         return null;
     }
 }
@@ -84,15 +93,19 @@ export async function convertHeicToJpeg(
         return file;
     }
 
-    console.log(`[HEIC] Converting: ${file.name} (${(file.size / 1024 / 1024).toFixed(2)}MB)`);
+    const fileSizeMB = file.size / 1024 / 1024;
+    console.log(`[HEIC] Converting: ${file.name} (${fileSizeMB.toFixed(2)}MB, type: ${file.type}, timeout: ${HEIC_CONVERSION_TIMEOUT_MS}ms)`);
 
+    const loadStartTime = Date.now();
     const heic2any = await loadHeic2Any();
     if (!heic2any) {
-        console.warn('[HEIC] heic2any not available, returning original file');
+        console.warn('[HEIC] heic2any not available - will rely on server-side conversion');
         return null;
     }
+    console.log(`[HEIC] heic2any ready in ${Date.now() - loadStartTime}ms, starting conversion...`);
 
     try {
+        const conversionStartTime = Date.now();
         const result = await withTimeout(
             heic2any({
                 blob: file,
@@ -102,6 +115,7 @@ export async function convertHeicToJpeg(
             HEIC_CONVERSION_TIMEOUT_MS,
             `HEIC変換がタイムアウトしました（${HEIC_CONVERSION_TIMEOUT_MS / 1000}秒）`
         );
+        const conversionTime = Date.now() - conversionStartTime;
 
         // heic2anyはBlobまたはBlob[]を返す
         const jpegBlob = Array.isArray(result) ? result[0] : result;
@@ -115,14 +129,16 @@ export async function convertHeicToJpeg(
         const newName = file.name.replace(/\.(heic|heif)$/i, '.jpeg');
         const convertedFile = new File([jpegBlob], newName, { type: 'image/jpeg' });
 
-        const originalSizeMB = file.size / 1024 / 1024;
         const convertedSizeMB = convertedFile.size / 1024 / 1024;
 
-        console.log(`[HEIC] Converted: ${file.name} → ${newName} (${originalSizeMB.toFixed(2)}MB → ${convertedSizeMB.toFixed(2)}MB)`);
+        console.log(`[HEIC] ✓ Converted successfully: ${file.name} → ${newName} (${fileSizeMB.toFixed(2)}MB → ${convertedSizeMB.toFixed(2)}MB) in ${conversionTime}ms`);
 
         return convertedFile;
     } catch (error) {
-        console.error(`[HEIC] Conversion failed for ${file.name}:`, error);
+        const errorMessage = error instanceof Error ? error.message : String(error);
+        console.error(`[HEIC] ✗ Conversion failed for ${file.name}: ${errorMessage}`);
+        console.error('[HEIC] Full error:', error);
+        console.warn('[HEIC] Will fall back to server-side conversion');
         return null;
     }
 }

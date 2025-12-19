@@ -33,33 +33,35 @@ export type CompressionOptions = {
 };
 
 /**
- * デフォルトの圧縮設定（スマホ対応）
+ * デフォルトの圧縮設定
+ * PC/スマホで異なる解像度を使用（OCR精度とメモリのバランス）
+ * ★重要: 解像度を下げすぎると手書き文字のOCRが失敗する
  */
 export const DEFAULT_COMPRESSION_OPTIONS: CompressionOptions = {
-    maxSizeMB: 0.5,
-    maxWidthOrHeight: 1000,      // ★1000pxに縮小（メモリ節約）
+    maxSizeMB: 0.6,
+    maxWidthOrHeight: IS_MOBILE ? 1600 : 2048,  // スマホ1600px、PC2048px（OCR精度確保）
     useWebWorker: false,
-    initialQuality: 0.7,
+    initialQuality: 0.8,
 };
 
 /**
- * 高品質圧縮設定
+ * 高品質圧縮設定（文字の多い答案向け）
  */
 export const HIGH_QUALITY_OPTIONS: CompressionOptions = {
-    maxSizeMB: 0.7,
-    maxWidthOrHeight: 1200,      // ★1200pxに縮小
+    maxSizeMB: 0.85,
+    maxWidthOrHeight: IS_MOBILE ? 1800 : 2560,  // スマホ1800px、PC2560px
     useWebWorker: false,
-    initialQuality: 0.75,
+    initialQuality: 0.85,
 };
 
 /**
  * 低品質圧縮設定（ファイル数が多い場合）
  */
 export const LOW_QUALITY_OPTIONS: CompressionOptions = {
-    maxSizeMB: 0.2,
-    maxWidthOrHeight: 800,       // ★800pxに縮小
+    maxSizeMB: 0.25,
+    maxWidthOrHeight: IS_MOBILE ? 1200 : 1400,  // スマホ1200px、PC1400px（最低限OCR可能）
     useWebWorker: false,
-    initialQuality: 0.5,
+    initialQuality: 0.6,
 };
 
 /**

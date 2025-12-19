@@ -250,17 +250,18 @@ async function convertFilesToBuffers(
 
             // HEIC/HEIF形式の場合はJPEGに変換（Gemini API互換性のため）
             if (isHeicMimeType(mimeType) || hasHeicExtension(fileName)) {
-                logger.info(`[HEIC] Server-side conversion for: ${fileName}`);
-                const jpegBuffer = await convertHeicBufferToJpeg(buffer, 85);
+                logger.info(`[Grade API] HEIC detected: ${fileName} (${(buffer.length / 1024 / 1024).toFixed(2)}MB), starting server-side conversion`);
+                const jpegBuffer = await convertHeicBufferToJpeg(buffer, 85, fileName);
                 if (jpegBuffer) {
                     // Buffer.from()で再ラップして型の互換性を確保
                     buffer = Buffer.from(jpegBuffer);
                     mimeType = 'image/jpeg';
-                    fileName = fileName.replace(/\.(heic|heif)$/i, '.jpeg');
-                    logger.info(`[HEIC] Conversion successful: ${file.name} → ${fileName}`);
+                    const newFileName = fileName.replace(/\.(heic|heif)$/i, '.jpeg');
+                    logger.info(`[Grade API] HEIC conversion successful: ${fileName} → ${newFileName} (${(buffer.length / 1024 / 1024).toFixed(2)}MB)`);
+                    fileName = newFileName;
                 } else {
                     // 変換失敗時はエラーを投げる（HEICのままではGeminiで処理できない可能性が高い）
-                    logger.error(`[HEIC] Conversion failed for: ${fileName}`);
+                    logger.error(`[Grade API] HEIC conversion failed for: ${fileName}`);
                     throw new Error(`HEIC画像「${file.name}」の変換に失敗しました。iPhoneのカメラ設定で「互換性優先」を選択するか、写真アプリでJPEG形式に変換してから再度アップロードしてください。`);
                 }
             }

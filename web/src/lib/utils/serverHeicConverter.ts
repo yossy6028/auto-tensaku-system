@@ -30,25 +30,36 @@ export function hasHeicExtension(fileName: string): boolean {
  *
  * @param buffer HEIC画像のBufferデータ
  * @param quality JPEG品質（1-100）
+ * @param fileName オプションのファイル名（ログ用）
  * @returns 変換後のJPEG Buffer、または変換失敗時はnull
  */
 export async function convertHeicBufferToJpeg(
     buffer: Buffer,
-    quality: number = 85
+    quality: number = 85,
+    fileName?: string
 ): Promise<Buffer | null> {
+    const startTime = Date.now();
+    const sizeMB = buffer.length / 1024 / 1024;
+    const fileLabel = fileName ? ` (${fileName})` : '';
+
     try {
-        console.log(`[ServerHEIC] Converting HEIC buffer (${(buffer.length / 1024 / 1024).toFixed(2)}MB)...`);
+        console.log(`[ServerHEIC] Starting conversion${fileLabel}: ${sizeMB.toFixed(2)}MB, quality: ${quality}`);
 
         const jpegBuffer = await sharp(buffer)
             .jpeg({ quality })
             .toBuffer();
 
-        console.log(`[ServerHEIC] Conversion successful: ${(buffer.length / 1024 / 1024).toFixed(2)}MB → ${(jpegBuffer.length / 1024 / 1024).toFixed(2)}MB`);
+        const resultSizeMB = jpegBuffer.length / 1024 / 1024;
+        const elapsed = Date.now() - startTime;
+        console.log(`[ServerHEIC] ✓ Conversion successful${fileLabel}: ${sizeMB.toFixed(2)}MB → ${resultSizeMB.toFixed(2)}MB in ${elapsed}ms`);
 
         // Buffer型の互換性を確保するためにBuffer.fromで再ラップ
         return Buffer.from(jpegBuffer);
     } catch (error) {
-        console.error('[ServerHEIC] Conversion failed:', error);
+        const elapsed = Date.now() - startTime;
+        const errorMessage = error instanceof Error ? error.message : String(error);
+        console.error(`[ServerHEIC] ✗ Conversion failed${fileLabel} after ${elapsed}ms: ${errorMessage}`);
+        console.error('[ServerHEIC] Full error:', error);
         return null;
     }
 }

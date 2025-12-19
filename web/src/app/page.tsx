@@ -652,29 +652,39 @@ export default function Home() {
     return foundIndex >= 0 ? foundIndex : 0;
   };
 
-  const COMPRESSION_TIMEOUT_MS = 8000; // 8秒でフォールバック（さらに短縮）
+  // 圧縮タイムアウト: ファイル数に応じて動的に設定（PC版で高解像度画像が多い場合に対応）
+  const getCompressionTimeout = (fileCount: number) => {
+    // 基本: 1ファイルあたり6秒 + バッファ10秒（最低15秒、最大60秒）
+    const baseTimeout = Math.min(60000, Math.max(15000, fileCount * 6000 + 10000));
+    return baseTimeout;
+  };
+
   const compressWithTimeout = async (
     files: File[],
     onProgress?: (progress: number, currentFile: string) => void
   ): Promise<File[]> => {
     const startTime = Date.now();
-    console.log(`[Page] Compression start: ${files.length} files`);
-    
+    const totalSize = files.reduce((sum, f) => sum + f.size, 0);
+    const timeoutMs = getCompressionTimeout(files.length);
+    console.log(`[Page] Compression start: ${files.length} files, ${(totalSize / 1024 / 1024).toFixed(2)}MB, timeout: ${timeoutMs}ms`);
+
     try {
       // 外側タイムアウト（最終防衛線）
       const timeoutPromise = new Promise<File[]>((resolve) =>
         setTimeout(() => {
-          console.warn(`[Page] Compression timeout after ${COMPRESSION_TIMEOUT_MS}ms, using original files`);
+          console.warn(`[Page] Compression timeout after ${timeoutMs}ms, using original files`);
           resolve(files);
-        }, COMPRESSION_TIMEOUT_MS)
+        }, timeoutMs)
       );
-      
+
       const result = await Promise.race([
         compressMultipleImages(files, onProgress),
         timeoutPromise,
       ]);
-      
-      console.log(`[Page] Compression done in ${Date.now() - startTime}ms`);
+
+      const compressedSize = result.reduce((sum, f) => sum + f.size, 0);
+      const elapsed = Date.now() - startTime;
+      console.log(`[Page] Compression done in ${elapsed}ms: ${(totalSize / 1024 / 1024).toFixed(2)}MB → ${(compressedSize / 1024 / 1024).toFixed(2)}MB`);
       return result;
     } catch (err) {
       console.error('[Page] Compression error:', err);

@@ -56,6 +56,14 @@ function maskSensitiveData(obj: unknown, depth = 0): unknown {
 /**
  * ログを出力
  */
+function toSafeErrorPayload(error: Error): Record<string, string | undefined> {
+    return {
+        name: error.name,
+        message: error.message,
+        stack: error.stack
+    };
+}
+
 function log(level: LogLevel, message: string, ...args: unknown[]): void {
     const timestamp = new Date().toISOString();
     const prefix = `[${timestamp}] [${level.toUpperCase()}]`;
@@ -66,7 +74,13 @@ function log(level: LogLevel, message: string, ...args: unknown[]): void {
     }
     
     // 本番環境では機密情報をマスク
-    const safeArgs = isDevelopment ? args : args.map(arg => maskSensitiveData(arg));
+    const normalizedArgs = args.map((arg) => {
+        if (arg instanceof Error) {
+            return toSafeErrorPayload(arg);
+        }
+        return arg;
+    });
+    const safeArgs = isDevelopment ? normalizedArgs : normalizedArgs.map(arg => maskSensitiveData(arg));
     
     switch (level) {
         case 'debug':
@@ -118,7 +132,6 @@ export const logger = {
 };
 
 export default logger;
-
 
 
 

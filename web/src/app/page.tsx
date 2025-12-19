@@ -1915,7 +1915,7 @@ export default function Home() {
                 />
               </div>
             </div>
-            <h1 className="text-3xl sm:text-4xl md:text-5xl lg:text-6xl font-black text-slate-800 tracking-tight mb-6 leading-tight">
+            <h1 className="text-4xl sm:text-5xl md:text-6xl lg:text-7xl font-black text-slate-800 tracking-tight mb-6 leading-tight">
               <span className="block sm:inline">中学・高校</span>
               <span className="block sm:inline">受験記述問題</span>
               <br className="hidden sm:block" />
@@ -2121,7 +2121,7 @@ export default function Home() {
               />
             </div>
           </div>
-          <h1 className="text-3xl sm:text-4xl md:text-5xl lg:text-7xl font-black text-slate-800 tracking-tight mb-8 leading-tight">
+          <h1 className="text-4xl sm:text-5xl md:text-6xl lg:text-7xl font-black text-slate-800 tracking-tight mb-8 leading-tight">
             <span className="block sm:inline">中学・高校</span>
             <span className="block sm:inline">受験記述問題</span>
             <br className="hidden sm:block" />
@@ -3587,23 +3587,21 @@ export default function Home() {
                 採点が完了しました。別の問題を採点しますか？
               </p>
 
-              {/* 回数消費確認表示 */}
-              {usageConsumed && usageConsumed.consumed && (
-                <div className="mb-6 inline-flex items-center gap-2 px-4 py-2 bg-green-100 text-green-800 rounded-full text-sm font-medium border border-green-200">
-                  <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
-                  </svg>
-                  採点回数を1回消費しました
-                  {usageInfo && usageInfo.usageLimit !== null && usageInfo.usageLimit !== -1 && (
-                    <span className="ml-1">
-                      （残り <span className="font-bold">{usageInfo.remainingCount ?? 0}</span>回 / {usageInfo.usageLimit}回）
-                    </span>
-                  )}
-                  {usageInfo && usageInfo.usageLimit === -1 && (
-                    <span className="ml-1">（無制限プラン）</span>
-                  )}
-                </div>
-              )}
+              {/* 回数消費確認表示 - 常に表示 */}
+              <div className="mb-6 inline-flex items-center gap-2 px-4 py-2 bg-green-100 text-green-800 rounded-full text-sm font-medium border border-green-200">
+                <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
+                </svg>
+                採点回数を1回消費しました
+                {usageInfo && usageInfo.usageLimit !== null && usageInfo.usageLimit > 0 && (
+                  <span className="ml-1">
+                    （残り <span className="font-bold">{usageInfo.remainingCount ?? 0}</span>回 / {usageInfo.usageLimit}回）
+                  </span>
+                )}
+                {usageInfo && (usageInfo.usageLimit === -1 || usageInfo.usageLimit === null) && (
+                  <span className="ml-1">（無制限プラン）</span>
+                )}
+              </div>
 
               <div className="block">
                 <button
@@ -3616,10 +3614,6 @@ export default function Home() {
                   次の問題を採点する
                 </button>
               </div>
-
-              <p className="text-sm text-slate-500 mt-4">
-                ※ 無料再採点を使わずに「次の問題へ」を押しても追加消費はありません
-              </p>
             </div>
           </div>
         )}

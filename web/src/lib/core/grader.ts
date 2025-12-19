@@ -518,6 +518,16 @@ export class EduShiftGrader {
 
                 const raw = result?.text?.trim() ?? "";
                 if (!raw) {
+                    const candidate = result?.candidates?.[0];
+                    const promptFeedback = result?.promptFeedback;
+                    console.warn("[Grader] OCR応答が空でした", {
+                        responseId: result?.responseId,
+                        candidateCount: result?.candidates?.length ?? 0,
+                        finishReason: candidate?.finishReason,
+                        finishMessage: candidate?.finishMessage,
+                        promptBlockReason: promptFeedback?.blockReason,
+                        promptBlockMessage: promptFeedback?.blockReasonMessage
+                    });
                     lastError = new Error("OCR応答が空でした");
                 } else {
                     const parsed = this.parseOcrResponse(raw);
@@ -546,7 +556,7 @@ export class EduShiftGrader {
         }
 
         if (lastError) {
-            throw new Error(`OCR処理に失敗しました: ${lastError instanceof Error ? lastError.message : String(lastError)}`);
+            console.error("[Grader] OCR処理に失敗しました:", lastError);
         }
 
         return { text: "", charCount: 0 };

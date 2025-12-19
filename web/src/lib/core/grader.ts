@@ -10,6 +10,7 @@ const GRADING_TIMEOUT_MS = 250_000; // 250秒
 const OCR_RETRY_ATTEMPTS = 3;
 const OCR_RETRY_BACKOFF_MS = 800;
 const OCR_RETRY_JITTER_MS = 400;
+const OCR_THINKING_BUDGET = 128;
 // 注: OCRと採点は別APIなので、それぞれ独立してタイムアウトを設定
 
 // 採点の厳しさ（3段階）
@@ -161,7 +162,7 @@ const FILE_PATTERNS = {
 
 export class EduShiftGrader {
     private ai: GoogleGenAI;
-    private ocrThinkingUnsupported = false;
+    private ocrThinkingMode: "disabled" | "enabled" | "unsupported" = "disabled";
     
     // OCR用の設定（安定性優先）
     private readonly ocrConfig = {
@@ -508,14 +509,18 @@ export class EduShiftGrader {
                     ...this.ocrConfig,
                     systemInstruction: this.ocrSystemInstruction
                 };
-                const configWithThinking = this.ocrThinkingUnsupported
-                    ? baseConfig
-                    : {
+                const buildConfig = (mode: "disabled" | "enabled" | "unsupported") => {
+                    if (mode === "unsupported") {
+                        return baseConfig;
+                    }
+                    return {
                         ...baseConfig,
                         thinkingConfig: {
-                            thinkingBudget: 0
+                            thinkingBudget: mode === "enabled" ? OCR_THINKING_BUDGET : 0
                         }
                     };
+                };
+                const configWithThinking = buildConfig(this.ocrThinkingMode);
                 let result;
                 try {
                     result = await withTimeout(
@@ -529,15 +534,28 @@ export class EduShiftGrader {
                     );
                 } catch (error) {
                     const message = error instanceof Error ? error.message : String(error);
-                    const thinkingUnsupported = /thinking/i.test(message) && /unsupported|not supported|support/i.test(message);
-                    if (!this.ocrThinkingUnsupported && thinkingUnsupported) {
-                        console.warn("[Grader] thinkingConfigが未対応のため無効化します:", message);
-                        this.ocrThinkingUnsupported = true;
+                    const thinkingUnsupported = /thinking/i.test(message) && /unsupported|not supported|does not support|not available/i.test(message);
+                    const thinkingRequired = /thinking/i.test(message) && /only works in thinking mode|budget 0 is invalid|requires thinking/i.test(message);
+                    if (this.ocrThinkingMode !== "enabled" && thinkingRequired) {
+                        console.warn("[Grader] thinkingモード必須のため有効化します:", message);
+                        this.ocrThinkingMode = "enabled";
                         result = await withTimeout(
                             this.ai.models.generateContent({
                                 model: resolvedModel,
                                 contents: [{ role: "user", parts: [{ text: prompt }, ...parts] }],
-                                config: baseConfig
+                                config: buildConfig("enabled")
+                            }),
+                            OCR_TIMEOUT_MS,
+                            "OCR処理"
+                        );
+                    } else if (this.ocrThinkingMode !== "unsupported" && thinkingUnsupported) {
+                        console.warn("[Grader] thinkingConfigが未対応のため無効化します:", message);
+                        this.ocrThinkingMode = "unsupported";
+                        result = await withTimeout(
+                            this.ai.models.generateContent({
+                                model: resolvedModel,
+                                contents: [{ role: "user", parts: [{ text: prompt }, ...parts] }],
+                                config: buildConfig("unsupported")
                             }),
                             OCR_TIMEOUT_MS,
                             "OCR処理"

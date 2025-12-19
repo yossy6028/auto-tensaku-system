@@ -161,6 +161,7 @@ const FILE_PATTERNS = {
 
 export class EduShiftGrader {
     private ai: GoogleGenAI;
+    private ocrThinkingUnsupported = false;
     
     // OCR用の設定（安定性優先）
     private readonly ocrConfig = {
@@ -503,18 +504,48 @@ export class EduShiftGrader {
 
         for (let attemptIndex = 0; attemptIndex < OCR_RETRY_ATTEMPTS; attemptIndex += 1) {
             try {
-                const result = await withTimeout(
-                    this.ai.models.generateContent({
-                        model: resolvedModel,
-                        contents: [{ role: "user", parts: [{ text: prompt }, ...parts] }],
-                        config: {
-                            ...this.ocrConfig,
-                            systemInstruction: this.ocrSystemInstruction
+                const baseConfig = {
+                    ...this.ocrConfig,
+                    systemInstruction: this.ocrSystemInstruction
+                };
+                const configWithThinking = this.ocrThinkingUnsupported
+                    ? baseConfig
+                    : {
+                        ...baseConfig,
+                        thinkingConfig: {
+                            thinkingBudget: 0
                         }
-                    }),
-                    OCR_TIMEOUT_MS,
-                    "OCR処理"
-                );
+                    };
+                let result;
+                try {
+                    result = await withTimeout(
+                        this.ai.models.generateContent({
+                            model: resolvedModel,
+                            contents: [{ role: "user", parts: [{ text: prompt }, ...parts] }],
+                            config: configWithThinking
+                        }),
+                        OCR_TIMEOUT_MS,
+                        "OCR処理"
+                    );
+                } catch (error) {
+                    const message = error instanceof Error ? error.message : String(error);
+                    const thinkingUnsupported = /thinking/i.test(message) && /unsupported|not supported|support/i.test(message);
+                    if (!this.ocrThinkingUnsupported && thinkingUnsupported) {
+                        console.warn("[Grader] thinkingConfigが未対応のため無効化します:", message);
+                        this.ocrThinkingUnsupported = true;
+                        result = await withTimeout(
+                            this.ai.models.generateContent({
+                                model: resolvedModel,
+                                contents: [{ role: "user", parts: [{ text: prompt }, ...parts] }],
+                                config: baseConfig
+                            }),
+                            OCR_TIMEOUT_MS,
+                            "OCR処理"
+                        );
+                    } else {
+                        throw error;
+                    }
+                }
 
                 const raw = result?.text?.trim() ?? "";
                 if (!raw) {
@@ -526,7 +557,10 @@ export class EduShiftGrader {
                         finishReason: candidate?.finishReason,
                         finishMessage: candidate?.finishMessage,
                         promptBlockReason: promptFeedback?.blockReason,
-                        promptBlockMessage: promptFeedback?.blockReasonMessage
+                        promptBlockMessage: promptFeedback?.blockReasonMessage,
+                        thoughtsTokenCount: result?.usageMetadata?.thoughtsTokenCount,
+                        candidatesTokenCount: result?.usageMetadata?.candidatesTokenCount,
+                        totalTokenCount: result?.usageMetadata?.totalTokenCount
                     });
                     lastError = new Error("OCR応答が空でした");
                 } else {

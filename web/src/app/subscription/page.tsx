@@ -17,12 +17,14 @@ import {
   Infinity,
   ExternalLink,
   Loader2,
-  Settings
+  Settings,
+  Gift,
+  Clock
 } from 'lucide-react';
 
 export default function SubscriptionPage() {
   const router = useRouter();
-  const { user, subscription, usageInfo, isLoading, refreshUsageInfo } = useAuth();
+  const { user, subscription, usageInfo, freeAccessInfo, systemSettings, isLoading, refreshUsageInfo } = useAuth();
   const [isLoadingPortal, setIsLoadingPortal] = useState(false);
 
   useEffect(() => {
@@ -309,26 +311,132 @@ export default function SubscriptionPage() {
             </div>
           </div>
 
-          {/* Trial Info Card (if applicable) */}
-          {usageInfo?.accessType === 'trial' && (
-            <div className="bg-indigo-50/80 backdrop-blur-md border border-indigo-200 rounded-2xl p-6">
-              <div className="flex items-start">
-                <div className="bg-indigo-100 rounded-full p-3 mr-5 flex-shrink-0">
-                  <Sparkles className="w-6 h-6 text-indigo-600" />
+          {/* Free Trial Section - Enhanced */}
+          {(usageInfo?.accessType === 'trial' || freeAccessInfo?.freeAccessType === 'expired') && (
+            <div className={`backdrop-blur-2xl shadow-[0_8px_30px_rgb(0,0,0,0.04)] rounded-[2rem] overflow-hidden border ring-1 ring-white/50 ${
+              freeAccessInfo?.freeAccessType === 'expired'
+                ? 'bg-amber-50/80 border-amber-200'
+                : usageInfo?.remainingCount === 0
+                  ? 'bg-orange-50/80 border-orange-200'
+                  : 'bg-indigo-50/80 border-indigo-200'
+            }`}>
+              {/* Header */}
+              <div className={`p-6 ${
+                freeAccessInfo?.freeAccessType === 'expired'
+                  ? 'bg-gradient-to-r from-amber-500 to-orange-500'
+                  : usageInfo?.remainingCount === 0
+                    ? 'bg-gradient-to-r from-orange-500 to-red-500'
+                    : 'bg-gradient-to-r from-indigo-500 to-violet-500'
+              } text-white`}>
+                <div className="flex items-center">
+                  <div className="w-12 h-12 bg-white/20 rounded-xl flex items-center justify-center mr-4">
+                    {freeAccessInfo?.freeAccessType === 'expired' || usageInfo?.remainingCount === 0 ? (
+                      <Clock className="w-6 h-6" />
+                    ) : (
+                      <Gift className="w-6 h-6" />
+                    )}
+                  </div>
+                  <div>
+                    <h2 className="text-xl font-bold">
+                      {freeAccessInfo?.freeAccessType === 'expired'
+                        ? '無料体験が終了しました'
+                        : usageInfo?.remainingCount === 0
+                          ? '無料体験の回数を使い切りました'
+                          : '無料体験中'}
+                    </h2>
+                    <p className="text-white/80 text-sm mt-1">
+                      {freeAccessInfo?.freeAccessType === 'expired'
+                        ? 'プランを購入して引き続きご利用ください'
+                        : usageInfo?.remainingCount === 0
+                          ? 'プランを購入すると引き続き採点できます'
+                          : `最大${systemSettings?.freeTrialUsageLimit || 3}回まで無料でお試しいただけます`}
+                    </p>
+                  </div>
                 </div>
-                <div>
-                  <h3 className="font-bold text-indigo-800 mb-2 text-lg">無料トライアル中</h3>
-                  <p className="text-indigo-700 leading-relaxed">
-                    現在、無料トライアル期間中です。残り <strong>{usageInfo.remainingCount}回</strong> ご利用いただけます。
-                    トライアル期間終了後も引き続きご利用いただくには、プランをご購入ください。
-                  </p>
+              </div>
+
+              {/* Content */}
+              <div className="p-6 md:p-8">
+                {/* Usage Stats */}
+                <div className="bg-white/60 rounded-2xl p-6 mb-6">
+                  <div className="flex items-center justify-between mb-4">
+                    <span className="text-sm font-medium text-slate-600">使用状況</span>
+                    <span className={`px-3 py-1 rounded-full text-xs font-bold ${
+                      freeAccessInfo?.freeAccessType === 'expired' || usageInfo?.remainingCount === 0
+                        ? 'bg-red-100 text-red-700'
+                        : 'bg-green-100 text-green-700'
+                    }`}>
+                      {freeAccessInfo?.freeAccessType === 'expired' || usageInfo?.remainingCount === 0
+                        ? '使用終了'
+                        : '利用可能'}
+                    </span>
+                  </div>
+
+                  {/* Progress Bar */}
+                  <div className="mb-4">
+                    <div className="flex items-baseline justify-between mb-2">
+                      <div className="flex items-baseline">
+                        <span className="text-3xl font-black text-slate-800">
+                          {usageInfo?.usageCount ?? ((systemSettings?.freeTrialUsageLimit || 3) - (freeAccessInfo?.trialUsageRemaining ?? 0))}
+                        </span>
+                        <span className="text-slate-500 ml-2">/ {systemSettings?.freeTrialUsageLimit || 3}回使用</span>
+                      </div>
+                      <span className={`font-bold ${
+                        usageInfo?.remainingCount === 0 || freeAccessInfo?.freeAccessType === 'expired'
+                          ? 'text-red-600'
+                          : 'text-indigo-600'
+                      }`}>
+                        残り {usageInfo?.remainingCount ?? freeAccessInfo?.trialUsageRemaining ?? 0}回
+                      </span>
+                    </div>
+                    <div className="w-full bg-slate-200 rounded-full h-3 overflow-hidden">
+                      <div
+                        className={`h-full rounded-full transition-all ${
+                          usageInfo?.remainingCount === 0 || freeAccessInfo?.freeAccessType === 'expired'
+                            ? 'bg-gradient-to-r from-red-400 to-orange-500'
+                            : 'bg-gradient-to-r from-indigo-500 to-violet-500'
+                        }`}
+                        style={{
+                          width: `${Math.min(
+                            ((usageInfo?.usageCount ?? ((systemSettings?.freeTrialUsageLimit || 3) - (freeAccessInfo?.trialUsageRemaining ?? 0)))
+                            / (systemSettings?.freeTrialUsageLimit || 3)) * 100,
+                            100
+                          )}%`
+                        }}
+                      />
+                    </div>
+                  </div>
+
+                  {/* Trial Period Info */}
+                  {freeAccessInfo?.trialDaysRemaining !== null && freeAccessInfo?.trialDaysRemaining !== undefined && (
+                    <p className="text-sm text-slate-500 flex items-center">
+                      <Clock className="w-4 h-4 mr-2" />
+                      体験期間の残り日数: <span className="font-bold text-slate-700 ml-1">{freeAccessInfo.trialDaysRemaining}日</span>
+                    </p>
+                  )}
+                </div>
+
+                {/* CTA */}
+                <div className="space-y-4">
                   <Link
                     href="/pricing"
-                    className="inline-flex items-center mt-4 text-indigo-600 hover:text-indigo-800 font-medium"
+                    className={`flex items-center justify-center w-full py-4 px-6 font-bold rounded-xl shadow-lg hover:shadow-xl hover:-translate-y-0.5 transition-all ${
+                      freeAccessInfo?.freeAccessType === 'expired' || usageInfo?.remainingCount === 0
+                        ? 'bg-gradient-to-r from-amber-500 to-orange-500 text-white'
+                        : 'bg-gradient-to-r from-indigo-500 to-violet-500 text-white'
+                    }`}
                   >
-                    プランを見る
-                    <ArrowLeft className="w-4 h-4 ml-2 rotate-180" />
+                    <CreditCard className="w-5 h-5 mr-2" />
+                    {freeAccessInfo?.freeAccessType === 'expired' || usageInfo?.remainingCount === 0
+                      ? 'プランを購入する'
+                      : 'プラン一覧を見る'}
                   </Link>
+
+                  {usageInfo?.remainingCount !== 0 && freeAccessInfo?.freeAccessType !== 'expired' && (
+                    <p className="text-sm text-center text-slate-500">
+                      残り回数を使い切るまで無料でお試しいただけます
+                    </p>
+                  )}
                 </div>
               </div>
             </div>

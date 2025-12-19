@@ -334,8 +334,9 @@ export class EduShiftGrader {
 
         // 画像数が多い場合の警告（6枚以上でOCR精度が低下する傾向がある）
         const RECOMMENDED_MAX_IMAGES = 5;
-        if (targetParts.length > RECOMMENDED_MAX_IMAGES) {
-            console.warn(`[Grader] ⚠️ 画像数が多い（${targetParts.length}枚）: OCR精度が低下する可能性があります。推奨は${RECOMMENDED_MAX_IMAGES}枚以下です。`);
+        const usePerImageOnly = targetParts.length > RECOMMENDED_MAX_IMAGES;
+        if (usePerImageOnly) {
+            console.warn(`[Grader] ⚠️ 画像数が多い（${targetParts.length}枚）: 個別OCRに切り替えます。推奨は${RECOMMENDED_MAX_IMAGES}枚以下です。`);
         }
 
         const sanitizedLabel = targetLabel.replace(/[<>\\"'`]/g, "").trim() || "target";
@@ -343,61 +344,94 @@ export class EduShiftGrader {
         const fallbackModelName = CONFIG.OCR_FALLBACK_MODEL_NAME || "";
         const ocrPrompts = [
             this.buildOcrPrompt(sanitizedLabel, "primary"),
-            this.buildOcrPrompt(sanitizedLabel, "retry")
+            this.buildOcrPrompt(sanitizedLabel, "retry"),
+            this.buildOcrPrompt(sanitizedLabel, "detail")
         ];
+        const fallbackPrompt = ocrPrompts[ocrPrompts.length - 1];
+        const shouldUseFallbackModel = Boolean(fallbackModelName && fallbackModelName !== ocrModelName);
+        let fallbackLogged = false;
+        let finalText = "";
+        let charCount = 0;
 
-        let bestValid: { text: string; charCount: number } | null = null;
-        let bestFallback: { text: string; charCount: number } | null = null;
-        let bestValidCount = -1;
-        let bestFallbackCount = -1;
-
-        for (const prompt of ocrPrompts) {
-            const attempt = await this.runOcrAttempt(prompt, targetParts, ocrModelName);
-
-            if (attempt.text && !this.isOcrFailure(attempt.text)) {
-                if (attempt.charCount > bestValidCount) {
-                    bestValid = attempt;
-                    bestValidCount = attempt.charCount;
-                }
-                break;
-            }
-
-            if (attempt.text && attempt.charCount > bestFallbackCount) {
-                bestFallback = attempt;
-                bestFallbackCount = attempt.charCount;
-            }
-        }
-
-        if (!bestValid && targetParts.length > 1) {
-            console.warn("[Grader] OCR失敗のため、画像ごとの再試行を実施します");
+        if (usePerImageOnly) {
+            const perImageTexts: string[] = [];
             for (const part of targetParts) {
-                const attempt = await this.runOcrAttempt(ocrPrompts[1], [part], ocrModelName);
+                let bestValid: { text: string; charCount: number } | null = null;
+                let bestFallback: { text: string; charCount: number } | null = null;
+                let bestFallbackCount = -1;
+
+                for (const prompt of ocrPrompts) {
+                    const attempt = await this.runOcrAttempt(prompt, [part], ocrModelName);
+
+                    if (attempt.text && !this.isOcrFailure(attempt.text)) {
+                        bestValid = attempt;
+                        break;
+                    }
+
+                    if (attempt.text && attempt.charCount > bestFallbackCount) {
+                        bestFallback = attempt;
+                        bestFallbackCount = attempt.charCount;
+                    }
+                }
+
+                if (!bestValid && shouldUseFallbackModel) {
+                    if (!fallbackLogged) {
+                        console.warn("[Grader] OCRフォールバックモデルで再試行します:", fallbackModelName);
+                        fallbackLogged = true;
+                    }
+                    const fallbackAttempt = await this.runOcrAttempt(fallbackPrompt, [part], fallbackModelName);
+                    if (fallbackAttempt.text && !this.isOcrFailure(fallbackAttempt.text)) {
+                        bestValid = fallbackAttempt;
+                    } else if (fallbackAttempt.text && fallbackAttempt.charCount > bestFallbackCount) {
+                        bestFallback = fallbackAttempt;
+                        bestFallbackCount = fallbackAttempt.charCount;
+                    }
+                }
+
+                const selected = bestValid ?? bestFallback ?? { text: "", charCount: 0 };
+                perImageTexts.push(selected.text);
+                charCount += selected.charCount;
+            }
+
+            finalText = perImageTexts.join("\n").trim();
+        } else {
+            let bestValid: { text: string; charCount: number } | null = null;
+            let bestFallback: { text: string; charCount: number } | null = null;
+            let bestValidCount = -1;
+            let bestFallbackCount = -1;
+
+            for (const prompt of ocrPrompts) {
+                const attempt = await this.runOcrAttempt(prompt, targetParts, ocrModelName);
+
                 if (attempt.text && !this.isOcrFailure(attempt.text)) {
                     if (attempt.charCount > bestValidCount) {
                         bestValid = attempt;
                         bestValidCount = attempt.charCount;
                     }
-                } else if (attempt.text && attempt.charCount > bestFallbackCount) {
+                    break;
+                }
+
+                if (attempt.text && attempt.charCount > bestFallbackCount) {
                     bestFallback = attempt;
                     bestFallbackCount = attempt.charCount;
                 }
             }
-        }
 
-        if (!bestValid && fallbackModelName && fallbackModelName !== ocrModelName) {
-            console.warn("[Grader] OCRフォールバックモデルで再試行します:", fallbackModelName);
-            const fallbackAttempt = await this.runOcrAttempt(ocrPrompts[1], targetParts, fallbackModelName);
-            if (fallbackAttempt.text && !this.isOcrFailure(fallbackAttempt.text)) {
-                bestValid = fallbackAttempt;
-                bestValidCount = fallbackAttempt.charCount;
-            } else if (fallbackAttempt.text && fallbackAttempt.charCount > bestFallbackCount) {
-                bestFallback = fallbackAttempt;
-                bestFallbackCount = fallbackAttempt.charCount;
+            if (!bestValid && shouldUseFallbackModel) {
+                console.warn("[Grader] OCRフォールバックモデルで再試行します:", fallbackModelName);
+                const fallbackAttempt = await this.runOcrAttempt(fallbackPrompt, targetParts, fallbackModelName);
+                if (fallbackAttempt.text && !this.isOcrFailure(fallbackAttempt.text)) {
+                    bestValid = fallbackAttempt;
+                    bestValidCount = fallbackAttempt.charCount;
+                } else if (fallbackAttempt.text && fallbackAttempt.charCount > bestFallbackCount) {
+                    bestFallback = fallbackAttempt;
+                    bestFallbackCount = fallbackAttempt.charCount;
+                }
             }
-        }
 
-        const finalText = bestValid?.text ?? bestFallback?.text ?? "";
-        const charCount = bestValid?.charCount ?? bestFallback?.charCount ?? 0;
+            finalText = bestValid?.text ?? bestFallback?.text ?? "";
+            charCount = bestValid?.charCount ?? bestFallback?.charCount ?? 0;
+        }
 
         console.log("[Grader] OCR結果:", { text: finalText.substring(0, 100), charCount });
 
@@ -416,18 +450,24 @@ export class EduShiftGrader {
         return { text: finalText, fullText: finalText, matchedTarget: true };
     }
 
-    private buildOcrPrompt(label: string, mode: "primary" | "retry"): string {
+    private buildOcrPrompt(label: string, mode: "primary" | "retry" | "detail"): string {
+        const jsonInstruction = "JSONのみで返してください: {\"text\":\"<verbatim>\",\"char_count\":<空白改行除外の文字数>}";
         const baseLines = [
             `「${label}」の解答欄のみを対象に、手書き文字を一字一句そのまま書き出してください。`,
             "要約・補完・修正は禁止です。",
             "縦書きは右から左へ、上から下へ読みます。",
             "判読不能な文字は「〓」に置き換えてください。",
             "textは空にせず、何も読めない場合は「〓」のみを出力してください。",
-            "JSONのみで返してください: {\"text\":\"<verbatim>\",\"char_count\":<空白改行除外の文字数>}"
+            jsonInstruction
         ];
 
         if (mode === "retry") {
             baseLines.unshift("前回の読み取りが不十分だったため、特に慎重にOCRを実行してください。");
+        }
+
+        if (mode === "detail") {
+            baseLines.unshift("最終パスです。1文字ずつ確認し、数字・記号・単位・送り仮名まで原文通りに転写してください。");
+            baseLines.splice(baseLines.length - 1, 0, "解答欄以外の問題文・注釈・欄外メモは含めないでください。");
         }
 
         return baseLines.join("\n");

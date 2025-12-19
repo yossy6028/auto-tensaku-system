@@ -12,6 +12,7 @@ import { UsageStatus } from '@/components/UsageStatus';
 import { DeviceLimitModal } from '@/components/DeviceLimitModal';
 import Link from 'next/link';
 import { compressMultipleImages, formatFileSize, isImageFile } from '@/lib/utils/imageCompressor';
+import { extractPdfPages } from '@/lib/utils/pdfPageExtractor';
 
 type GradingStrictness = 'lenient' | 'standard' | 'strict';
 
@@ -652,6 +653,82 @@ export default function Home() {
     return foundIndex >= 0 ? foundIndex : 0;
   };
 
+  const MAX_TOTAL_SIZE_BYTES = 4.2 * 1024 * 1024;
+  const MAX_SINGLE_FILE_SIZE_BYTES = 4.3 * 1024 * 1024;
+  const PDF_SIZE_ADVICE = 'PDFはページ番号を指定すると必要ページだけ抽出して軽くできます。難しい場合はオンライン圧縮ツール（iLovePDF等）で圧縮してから再度お試しください。';
+
+  const parsePageRange = (input?: string): number[] => {
+    if (!input) return [];
+    const pages = new Set<number>();
+    input.split(',').forEach((part) => {
+      const trimmed = part.trim();
+      if (!trimmed) return;
+      const rangeParts = trimmed.split('-').map((token) => token.trim());
+      if (rangeParts.length === 2) {
+        const start = parseInt(rangeParts[0], 10);
+        const end = parseInt(rangeParts[1], 10);
+        if (Number.isFinite(start) && Number.isFinite(end)) {
+          const from = Math.min(start, end);
+          const to = Math.max(start, end);
+          for (let i = from; i <= to; i += 1) pages.add(i);
+        }
+        return;
+      }
+      const single = parseInt(trimmed, 10);
+      if (Number.isFinite(single)) pages.add(single);
+    });
+    return Array.from(pages).sort((a, b) => a - b);
+  };
+
+  const mergeUniquePages = (...lists: number[][]): number[] => {
+    const merged = new Set<number>();
+    lists.forEach((list) => list.forEach((page) => merged.add(page)));
+    return Array.from(merged).sort((a, b) => a - b);
+  };
+
+  const getPdfPagesForRole = (
+    role: FileRole | undefined,
+    info: { answerPage?: string; problemPage?: string; modelAnswerPage?: string }
+  ): number[] => {
+    const answerPages = parsePageRange(info.answerPage);
+    const problemPages = parsePageRange(info.problemPage);
+    const modelPages = parsePageRange(info.modelAnswerPage);
+
+    switch (role) {
+      case 'answer':
+        return answerPages;
+      case 'problem':
+        return problemPages;
+      case 'model':
+        return modelPages;
+      case 'answer_problem':
+        return mergeUniquePages(answerPages, problemPages);
+      case 'problem_model':
+        return mergeUniquePages(problemPages, modelPages);
+      case 'all':
+        return mergeUniquePages(answerPages, problemPages, modelPages);
+      default:
+        return [];
+    }
+  };
+
+  const shouldCompressImages = (files: File[]): boolean => {
+    const imageFiles = files.filter((file) => isImageFile(file));
+    if (imageFiles.length === 0) return false;
+
+    if (imageFiles.some((file) => file.size > MAX_SINGLE_FILE_SIZE_BYTES)) {
+      return true;
+    }
+
+    const totalSize = files.reduce((sum, file) => sum + file.size, 0);
+    const imageSize = imageFiles.reduce((sum, file) => sum + file.size, 0);
+    const nonImageSize = totalSize - imageSize;
+    const imageBudget = MAX_TOTAL_SIZE_BYTES - nonImageSize;
+
+    if (imageBudget <= 0) return true;
+    return imageSize > imageBudget;
+  };
+
   // 圧縮タイムアウト: ファイル数に応じて動的に設定（PC版で高解像度画像が多い場合に対応）
   const getCompressionTimeout = (fileCount: number) => {
     // 基本: 1ファイルあたり6秒 + バッファ10秒（最低15秒、最大60秒）
@@ -692,6 +769,49 @@ export default function Home() {
     }
   };
 
+  const prepareFilesForUpload = async (
+    files: File[],
+    options: {
+      fileRoles: Record<number, FileRole>;
+      pdfPageInfo: { answerPage?: string; problemPage?: string; modelAnswerPage?: string };
+      onCompressionProgress?: (progress: number, currentFile: string) => void;
+    }
+  ): Promise<File[]> => {
+    let processedFiles = files;
+    const hasPdf = processedFiles.some((file) => file.type === 'application/pdf');
+    const hasPdfPageInfo = !!(
+      options.pdfPageInfo.answerPage ||
+      options.pdfPageInfo.problemPage ||
+      options.pdfPageInfo.modelAnswerPage
+    );
+
+    if (hasPdf && hasPdfPageInfo) {
+      const extractedFiles: File[] = [];
+      for (let i = 0; i < processedFiles.length; i += 1) {
+        const file = processedFiles[i];
+        if (file.type !== 'application/pdf') {
+          extractedFiles.push(file);
+          continue;
+        }
+        const role = options.fileRoles[i];
+        const pages = getPdfPagesForRole(role, options.pdfPageInfo);
+        if (pages.length === 0) {
+          extractedFiles.push(file);
+          continue;
+        }
+        const { file: extracted } = await extractPdfPages(file, pages);
+        extractedFiles.push(extracted);
+      }
+      processedFiles = extractedFiles;
+    }
+
+    if (!shouldCompressImages(processedFiles)) {
+      return processedFiles;
+    }
+
+    return compressWithTimeout(processedFiles, options.onCompressionProgress);
+  };
+
   const openOcrEditModal = (label: string, initialText: string, strictness: GradingStrictness, problemCondition = '') => {
     setOcrEditModal({ label, text: initialText, strictness, problemCondition });
   };
@@ -711,21 +831,24 @@ export default function Home() {
     }
 
     const hasImages = uploadedFiles.some(f => isImageFile(f));
+    const hasPdf = uploadedFiles.some(f => f.type === 'application/pdf');
+    const hasPdfPageInfo = !!(pdfPageInfo.answerPage || pdfPageInfo.problemPage || pdfPageInfo.modelAnswerPage);
     let filesToUse = uploadedFiles;
 
-    if (hasImages) {
+    if (hasImages || (hasPdf && hasPdfPageInfo)) {
       setIsCompressing(true);
       setCompressionProgress(0);
       setCompressionFileName('');
 
       try {
-        filesToUse = await compressWithTimeout(
-          uploadedFiles,
-          (progress, fileName) => {
+        filesToUse = await prepareFilesForUpload(uploadedFiles, {
+          fileRoles,
+          pdfPageInfo,
+          onCompressionProgress: (progress, fileName) => {
             setCompressionProgress(progress);
             setCompressionFileName(fileName);
-          }
-        );
+          },
+        });
       } catch (err) {
         console.error('[Page] Manual regrade compression error:', err);
         filesToUse = uploadedFiles;
@@ -736,15 +859,15 @@ export default function Home() {
       }
     }
 
-    const MAX_TOTAL_SIZE = 4.2 * 1024 * 1024; // 4.2MB（Vercel 4.5MB上限に対してFormDataオーバーヘッドを考慮）
-    const MAX_SINGLE_FILE_SIZE = 4.3 * 1024 * 1024; // 4.3MB
+    const MAX_TOTAL_SIZE = MAX_TOTAL_SIZE_BYTES;
+    const MAX_SINGLE_FILE_SIZE = MAX_SINGLE_FILE_SIZE_BYTES;
     const totalSize = filesToUse.reduce((sum, file) => sum + file.size, 0);
 
     const oversizedFile = filesToUse.find(file => file.size > MAX_SINGLE_FILE_SIZE);
     if (oversizedFile) {
       const isPdf = oversizedFile.type === 'application/pdf';
       const advice = isPdf 
-        ? 'PDFは容量オーバーしやすいため、スマホ等で写真を撮ってアップロードすることをおすすめします。または、オンライン圧縮ツール（iLovePDF等）で圧縮してから再度お試しください。'
+        ? PDF_SIZE_ADVICE
         : '4.3MB以下のファイルをアップロードしてください。';
       setError(`ファイル「${oversizedFile.name}」が大きすぎます（${(oversizedFile.size / 1024 / 1024).toFixed(1)}MB）。${advice}`);
       return;
@@ -755,7 +878,7 @@ export default function Home() {
       const maxMB = (MAX_TOTAL_SIZE / 1024 / 1024).toFixed(1);
       const hasPdf = filesToUse.some(f => f.type === 'application/pdf');
       const advice = hasPdf 
-        ? 'PDFは容量オーバーしやすいため、スマホ等で写真を撮ってアップロードすることをおすすめします。または、オンライン圧縮ツール（iLovePDF等）で圧縮してから再度お試しください。'
+        ? PDF_SIZE_ADVICE
         : `合計${maxMB}MB以下になるように、ファイルを分割するか、写真の枚数を減らしてください。`;
       setError(`ファイルの合計サイズが大きすぎます（${totalMB}MB）。${advice}`);
       return;
@@ -828,9 +951,10 @@ export default function Home() {
       
       // 画像ファイルがある場合は圧縮処理
       const hasImages = files.some(f => isImageFile(f));
+      const shouldCompress = hasImages && shouldCompressImages(files);
       let processedFiles = files;
       
-      if (hasImages) {
+      if (shouldCompress) {
         setIsCompressing(true);
         setCompressionProgress(0);
         setCompressionFileName('');
@@ -1043,21 +1167,24 @@ export default function Home() {
     
     // 画像ファイルを圧縮（10枚対応）
     const hasImages = uploadedFiles.some(f => isImageFile(f));
+    const hasPdf = uploadedFiles.some(f => f.type === 'application/pdf');
+    const hasPdfPageInfo = !!(pdfPageInfo.answerPage || pdfPageInfo.problemPage || pdfPageInfo.modelAnswerPage);
     let filesToUse = uploadedFiles;
     
-    if (hasImages) {
+    if (hasImages || (hasPdf && hasPdfPageInfo)) {
       setIsCompressing(true);
       setCompressionProgress(0);
       setCompressionFileName('');
       
       try {
-        filesToUse = await compressWithTimeout(
-          uploadedFiles,
-          (progress, fileName) => {
+        filesToUse = await prepareFilesForUpload(uploadedFiles, {
+          fileRoles,
+          pdfPageInfo,
+          onCompressionProgress: (progress, fileName) => {
             setCompressionProgress(progress);
             setCompressionFileName(fileName);
-          }
-        );
+          },
+        });
       } catch (err) {
         console.error('[Page] OCR compression error:', err);
         // 圧縮に失敗しても元のファイルで続行
@@ -1071,17 +1198,15 @@ export default function Home() {
 
     // 圧縮後のファイルサイズチェック（413エラー対策）
     const totalFileSize = filesToUse.reduce((sum, file) => sum + file.size, 0);
-    const MAX_REQUEST_SIZE = 4.2 * 1024 * 1024; // 4.2MB（Vercel 4.5MB上限に対してFormDataオーバーヘッドを考慮）
+    const MAX_REQUEST_SIZE = MAX_TOTAL_SIZE_BYTES;
     
     if (totalFileSize > MAX_REQUEST_SIZE) {
       const totalMB = (totalFileSize / 1024 / 1024).toFixed(1);
       const maxMB = (MAX_REQUEST_SIZE / 1024 / 1024).toFixed(1);
       const fileCount = filesToUse.length;
       const hasPdf = filesToUse.some(f => f.type === 'application/pdf');
-      const advice = hasPdf 
-        ? 'PDFは容量オーバーしやすいため、スマホ等で写真を撮ってアップロードすることをおすすめします。または、オンライン圧縮ツール（iLovePDF等）で圧縮するか、'
-        : '';
-      setError(`ファイルの合計サイズが大きすぎます（${totalMB}MB、${fileCount}枚）。合計${maxMB}MB以下になるように、${advice}ファイルを分割するか、写真の枚数を減らしてください。`);
+      const baseMessage = `ファイルの合計サイズが大きすぎます（${totalMB}MB、${fileCount}枚）。合計${maxMB}MB以下になるように、ファイルを分割するか、写真の枚数を減らしてください。`;
+      setError(hasPdf ? `${baseMessage} ${PDF_SIZE_ADVICE}` : baseMessage);
       return;
     }
 
@@ -1231,21 +1356,24 @@ export default function Home() {
 
     // 画像ファイルを圧縮（OCR時と同様）
     const hasImages = uploadedFiles.some(f => isImageFile(f));
+    const hasPdf = uploadedFiles.some(f => f.type === 'application/pdf');
+    const hasPdfPageInfo = !!(pdfPageInfo.answerPage || pdfPageInfo.problemPage || pdfPageInfo.modelAnswerPage);
     let filesToUse = uploadedFiles;
     
-    if (hasImages) {
+    if (hasImages || (hasPdf && hasPdfPageInfo)) {
       setIsCompressing(true);
       setCompressionProgress(0);
       setCompressionFileName('');
       
       try {
-        filesToUse = await compressWithTimeout(
-          uploadedFiles,
-          (progress, fileName) => {
+        filesToUse = await prepareFilesForUpload(uploadedFiles, {
+          fileRoles,
+          pdfPageInfo,
+          onCompressionProgress: (progress, fileName) => {
             setCompressionProgress(progress);
             setCompressionFileName(fileName);
-          }
-        );
+          },
+        });
       } catch (err) {
         console.error('[Page] Grading compression error:', err);
         // 圧縮に失敗しても元のファイルで続行
@@ -1258,7 +1386,7 @@ export default function Home() {
     }
 
     // 圧縮後のファイルサイズチェック
-    const MAX_TOTAL_SIZE = 4.2 * 1024 * 1024; // 4.2MB（Vercel 4.5MB上限に対してFormDataオーバーヘッドを考慮）
+    const MAX_TOTAL_SIZE = MAX_TOTAL_SIZE_BYTES;
     const totalSize = filesToUse.reduce((sum, file) => sum + file.size, 0);
     
     if (totalSize > MAX_TOTAL_SIZE) {
@@ -1394,21 +1522,24 @@ export default function Home() {
 
     // 画像ファイルを圧縮（10枚対応）
     const hasImages = uploadedFiles.some(f => isImageFile(f));
+    const hasPdf = uploadedFiles.some(f => f.type === 'application/pdf');
+    const hasPdfPageInfo = !!(pdfPageInfo.answerPage || pdfPageInfo.problemPage || pdfPageInfo.modelAnswerPage);
     let filesToUse = uploadedFiles;
     
-    if (hasImages) {
+    if (hasImages || (hasPdf && hasPdfPageInfo)) {
       setIsCompressing(true);
       setCompressionProgress(0);
       setCompressionFileName('');
       
       try {
-        filesToUse = await compressWithTimeout(
-          uploadedFiles,
-          (progress, fileName) => {
+        filesToUse = await prepareFilesForUpload(uploadedFiles, {
+          fileRoles,
+          pdfPageInfo,
+          onCompressionProgress: (progress, fileName) => {
             setCompressionProgress(progress);
             setCompressionFileName(fileName);
-          }
-        );
+          },
+        });
       } catch (err) {
         console.error('[Page] Grading compression error:', err);
         // 圧縮に失敗しても元のファイルで続行
@@ -1421,8 +1552,8 @@ export default function Home() {
     }
 
     // 圧縮後のファイルサイズチェック（Vercel Serverless Functions: 4.5MBペイロード上限）
-    const MAX_TOTAL_SIZE = 4.2 * 1024 * 1024; // 4.2MB（Vercel 4.5MB上限に対してFormDataオーバーヘッドを考慮）
-    const MAX_SINGLE_FILE_SIZE = 4.3 * 1024 * 1024; // 4.3MB
+    const MAX_TOTAL_SIZE = MAX_TOTAL_SIZE_BYTES;
+    const MAX_SINGLE_FILE_SIZE = MAX_SINGLE_FILE_SIZE_BYTES;
     const totalSize = filesToUse.reduce((sum, file) => sum + file.size, 0);
     
     const oversizedFile = filesToUse.find(file => file.size > MAX_SINGLE_FILE_SIZE);
@@ -1572,6 +1703,35 @@ export default function Home() {
     setError(null);
     setRequirePlan(false);
 
+    const hasImages = uploadedFiles.some(f => isImageFile(f));
+    const hasPdf = uploadedFiles.some(f => f.type === 'application/pdf');
+    const hasPdfPageInfo = !!(pdfPageInfo.answerPage || pdfPageInfo.problemPage || pdfPageInfo.modelAnswerPage);
+    let filesToUse = uploadedFiles;
+
+    if (hasImages || (hasPdf && hasPdfPageInfo)) {
+      setIsCompressing(true);
+      setCompressionProgress(0);
+      setCompressionFileName('');
+
+      try {
+        filesToUse = await prepareFilesForUpload(uploadedFiles, {
+          fileRoles,
+          pdfPageInfo,
+          onCompressionProgress: (progress, fileName) => {
+            setCompressionProgress(progress);
+            setCompressionFileName(fileName);
+          },
+        });
+      } catch (err) {
+        console.error('[Page] Regrade compression error:', err);
+        filesToUse = uploadedFiles;
+      } finally {
+        setIsCompressing(false);
+        setCompressionProgress(0);
+        setCompressionFileName('');
+      }
+    }
+
     // 既に結果があるなら、その recognized_text を使ってOCRをスキップ（無料再採点でも速くする）
     const current = results?.find((r) => r.label === label);
     const raw = (current?.result as unknown as { grading_result?: unknown })?.grading_result ?? (current?.result as unknown);
@@ -1592,12 +1752,12 @@ export default function Home() {
       formData.append('confirmedTexts', JSON.stringify({ [label]: confirmedTextForRegrade }));
     }
 
-    const hasPdfPageInfo = pdfPageInfo.answerPage || pdfPageInfo.problemPage || pdfPageInfo.modelAnswerPage;
-    if (hasPdfPageInfo) {
+    const hasPdfPageInfoForRequest = pdfPageInfo.answerPage || pdfPageInfo.problemPage || pdfPageInfo.modelAnswerPage;
+    if (hasPdfPageInfoForRequest) {
       formData.append('pdfPageInfo', JSON.stringify(pdfPageInfo));
     }
     formData.append('fileRoles', JSON.stringify(fileRoles));
-    uploadedFiles.forEach((file) => {
+    filesToUse.forEach((file) => {
       formData.append('files', file);
     });
 
@@ -2439,6 +2599,82 @@ export default function Home() {
 
                   <p className="text-xs text-blue-600 font-medium bg-blue-50 px-3 py-2 rounded-lg inline-block border border-blue-200">
                     🔒 アップロードされた画像は採点完了後に自動削除され、AIの学習には一切利用されません
+                  </p>
+                </div>
+
+                {/* PDF圧縮ツール紹介セクション */}
+                <div className="bg-gradient-to-br from-indigo-50 to-violet-50 border-2 border-indigo-200 rounded-xl p-4 sm:p-6 mb-4 max-w-2xl mx-auto">
+                  <h4 className="text-sm font-bold text-indigo-800 mb-3 flex items-center justify-center">
+                    <FileText className="w-4 h-4 mr-2" />
+                    PDFが重すぎる場合の圧縮ツール
+                  </h4>
+                  <p className="text-xs text-indigo-700 mb-4 text-center">
+                    PDFファイルが4MBを超える場合は、以下の無料ツールで圧縮してからアップロードしてください
+                  </p>
+                  <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 sm:gap-4">
+                    {/* iLovePDF */}
+                    <a
+                      href="https://www.ilovepdf.com/ja/compress-pdf"
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="bg-white rounded-lg p-3 sm:p-4 border-2 border-indigo-200 hover:border-indigo-400 hover:shadow-lg transition-all duration-300 group"
+                    >
+                      <div className="flex flex-col items-center text-center">
+                        <div className="w-12 h-12 sm:w-16 sm:h-16 bg-red-100 rounded-lg flex items-center justify-center mb-2 group-hover:scale-110 transition-transform">
+                          <FileText className="w-6 h-6 sm:w-8 sm:h-8 text-red-600" />
+                        </div>
+                        <span className="text-xs sm:text-sm font-bold text-indigo-800">iLovePDF</span>
+                        <span className="text-[10px] text-indigo-600 mt-1">無料</span>
+                      </div>
+                    </a>
+                    {/* SmallPDF */}
+                    <a
+                      href="https://smallpdf.com/ja/compress-pdf"
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="bg-white rounded-lg p-3 sm:p-4 border-2 border-indigo-200 hover:border-indigo-400 hover:shadow-lg transition-all duration-300 group"
+                    >
+                      <div className="flex flex-col items-center text-center">
+                        <div className="w-12 h-12 sm:w-16 sm:h-16 bg-orange-100 rounded-lg flex items-center justify-center mb-2 group-hover:scale-110 transition-transform">
+                          <FileText className="w-6 h-6 sm:w-8 sm:h-8 text-orange-600" />
+                        </div>
+                        <span className="text-xs sm:text-sm font-bold text-indigo-800">SmallPDF</span>
+                        <span className="text-[10px] text-indigo-600 mt-1">無料</span>
+                      </div>
+                    </a>
+                    {/* PDF24 */}
+                    <a
+                      href="https://tools.pdf24.org/ja/compress-pdf"
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="bg-white rounded-lg p-3 sm:p-4 border-2 border-indigo-200 hover:border-indigo-400 hover:shadow-lg transition-all duration-300 group"
+                    >
+                      <div className="flex flex-col items-center text-center">
+                        <div className="w-12 h-12 sm:w-16 sm:h-16 bg-blue-100 rounded-lg flex items-center justify-center mb-2 group-hover:scale-110 transition-transform">
+                          <FileText className="w-6 h-6 sm:w-8 sm:h-8 text-blue-600" />
+                        </div>
+                        <span className="text-xs sm:text-sm font-bold text-indigo-800">PDF24</span>
+                        <span className="text-[10px] text-indigo-600 mt-1">無料</span>
+                      </div>
+                    </a>
+                    {/* Adobe Acrobat Online */}
+                    <a
+                      href="https://www.adobe.com/jp/acrobat/online/compress-pdf.html"
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="bg-white rounded-lg p-3 sm:p-4 border-2 border-indigo-200 hover:border-indigo-400 hover:shadow-lg transition-all duration-300 group"
+                    >
+                      <div className="flex flex-col items-center text-center">
+                        <div className="w-12 h-12 sm:w-16 sm:h-16 bg-purple-100 rounded-lg flex items-center justify-center mb-2 group-hover:scale-110 transition-transform">
+                          <FileText className="w-6 h-6 sm:w-8 sm:h-8 text-purple-600" />
+                        </div>
+                        <span className="text-xs sm:text-sm font-bold text-indigo-800">Adobe</span>
+                        <span className="text-[10px] text-indigo-600 mt-1">無料</span>
+                      </div>
+                    </a>
+                  </div>
+                  <p className="text-xs text-indigo-600 mt-3 text-center">
+                    💡 各ツールのリンクをクリックすると、新しいタブで圧縮ページが開きます
                   </p>
                 </div>
 

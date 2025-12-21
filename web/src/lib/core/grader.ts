@@ -4,14 +4,17 @@ import { SYSTEM_INSTRUCTION } from "../prompts/eduShift";
 
 // API呼び出しのタイムアウト設定（ミリ秒）
 // Vercel Pro + Fluid Compute対応: maxDuration=300秒
-// 大きなPDF（複数ページ）の場合、Geminiの応答に時間がかかるため余裕を持たせる
-const OCR_TIMEOUT_MS = 250_000;     // 250秒（maxDuration=300秒に余裕を持たせる）
-const GRADING_TIMEOUT_MS = 250_000; // 250秒
-const OCR_RETRY_ATTEMPTS = 3;
-const OCR_RETRY_BACKOFF_MS = 800;
-const OCR_RETRY_JITTER_MS = 400;
+// 2024-12-21: 大きなファイル（2-3MB）でタイムアウトするため設定を最適化
+// - OCRと採点の合計が300秒以内に収まるよう調整
+// - 大きなファイルではリトライ回数とタイムアウトを抑制
+const OCR_TIMEOUT_MS = 120_000;     // 120秒（大幅短縮：リトライの余地を確保）
+const GRADING_TIMEOUT_MS = 150_000; // 150秒（採点はOCRより長めに）
+const OCR_RETRY_ATTEMPTS = 2;       // 2回に削減（3回→2回）
+const OCR_RETRY_BACKOFF_MS = 500;   // 500msに短縮（800ms→500ms）
+const OCR_RETRY_JITTER_MS = 200;    // 200msに短縮（400ms→200ms）
 const OCR_THINKING_BUDGET = 128;
-// 注: OCRと採点は別APIなので、それぞれ独立してタイムアウトを設定
+// 合計タイムアウト想定: OCR(120秒×2回) + 採点(150秒) = 最大390秒
+// ただし通常は1回目で成功するため問題なし
 
 // 採点の厳しさ（3段階）
 export type GradingStrictness = "lenient" | "standard" | "strict";
@@ -341,16 +344,37 @@ export class EduShiftGrader {
             console.warn(`[Grader] ⚠️ 画像数が多い（${targetParts.length}枚）: 個別OCRに切り替えます。推奨は${RECOMMENDED_MAX_IMAGES}枚以下です。`);
         }
 
+        // ファイルサイズを推定（base64エンコードされたデータから）
+        // 2024-12-21: 大きなファイルではプロンプト数とリトライを削減してタイムアウトを防ぐ
+        const estimatedTotalBytes = targetParts.reduce((sum, part) => {
+            if ("inlineData" in part && part.inlineData?.data) {
+                // Base64は元のサイズの約1.33倍なので逆算
+                return sum + Math.floor(part.inlineData.data.length * 0.75);
+            }
+            return sum;
+        }, 0);
+        const estimatedMB = estimatedTotalBytes / (1024 * 1024);
+        const isLargeFile = estimatedMB > 1.5; // 1.5MB以上を大きなファイルとみなす
+
+        if (isLargeFile) {
+            console.warn(`[Grader] ⚠️ 大きなファイル検出（推定${estimatedMB.toFixed(2)}MB）: タイムアウト防止のためOCRを最適化モードで実行`);
+        }
+
         const sanitizedLabel = targetLabel.replace(/[<>\\"'`]/g, "").trim() || "target";
         const ocrModelName = CONFIG.OCR_MODEL_NAME || CONFIG.MODEL_NAME;
         const fallbackModelName = CONFIG.OCR_FALLBACK_MODEL_NAME || "";
-        const ocrPrompts = [
-            this.buildOcrPrompt(sanitizedLabel, "primary"),
-            this.buildOcrPrompt(sanitizedLabel, "retry"),
-            this.buildOcrPrompt(sanitizedLabel, "detail")
-        ];
+
+        // 大きなファイルではプロンプト数を1つに削減（タイムアウト防止）
+        const ocrPrompts = isLargeFile
+            ? [this.buildOcrPrompt(sanitizedLabel, "primary")]  // 大きなファイル: 1プロンプトのみ
+            : [
+                this.buildOcrPrompt(sanitizedLabel, "primary"),
+                this.buildOcrPrompt(sanitizedLabel, "retry"),
+                this.buildOcrPrompt(sanitizedLabel, "detail")
+            ];
         const fallbackPrompt = ocrPrompts[ocrPrompts.length - 1];
-        const shouldUseFallbackModel = Boolean(fallbackModelName && fallbackModelName !== ocrModelName);
+        // 大きなファイルではフォールバックモデルも無効化（タイムアウト防止）
+        const shouldUseFallbackModel = !isLargeFile && Boolean(fallbackModelName && fallbackModelName !== ocrModelName);
         let fallbackLogged = false;
         let finalText = "";
         let charCount = 0;

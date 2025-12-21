@@ -516,6 +516,21 @@ export async function POST(req: NextRequest) {
         // ファイルをバッファに変換（役割情報を付与）
         const fileBuffers = await convertFilesToBuffers(files, pdfPageInfo, fileRoles);
 
+        // 2024-12-21: ファイルサイズと問題数のログ（並列処理により5問程度まで対応可能）
+        const totalFileSize = fileBuffers.reduce((sum, f) => sum + f.buffer.length, 0);
+        const totalFileSizeMB = totalFileSize / (1024 * 1024);
+        const questionCount = sanitizedLabels.length;
+
+        // 並列処理のため、問題数が多くても対応可能（ただしログは残す）
+        if (totalFileSizeMB > 1.5 && questionCount > 1) {
+            logger.info(`[API] 大きなファイル（${totalFileSizeMB.toFixed(2)}MB）で${questionCount}問を並列採点`);
+        }
+
+        // 極端なケース（6問以上 or 4MB以上）のみ警告
+        if (questionCount > 5 || totalFileSizeMB > 4) {
+            logger.warn(`[API] ⚠️ 大規模リクエスト: ${totalFileSizeMB.toFixed(2)}MB / ${questionCount}問`);
+        }
+
         // 画像数の警告（6枚以上でOCR精度が低下する傾向がある）
         const RECOMMENDED_MAX_IMAGES = 5;
         const imageFileCount = fileBuffers.filter(f => f.mimeType.startsWith('image/')).length;
@@ -525,11 +540,12 @@ export async function POST(req: NextRequest) {
             logger.warn(`[API] ⚠️ 画像数警告: ${imageFileCount}枚（推奨: ${RECOMMENDED_MAX_IMAGES}枚以下）`);
         }
 
-        // 採点実行
+        // 採点実行（2024-12-21: 並列処理に変更 - 3〜5問を同時処理可能に）
         const grader = new EduShiftGrader();
-        const results: GradingApiResultItem[] = [];
 
-        for (const label of sanitizedLabels) {
+        // 各問題の採点を並列実行
+        logger.info(`[API] ${sanitizedLabels.length}問を並列処理開始`);
+        const gradingPromises = sanitizedLabels.map(async (label): Promise<GradingApiResultItem> => {
             try {
                 let result;
 
@@ -551,32 +567,62 @@ export async function POST(req: NextRequest) {
                 const resultObj = result as { incomplete_grading?: boolean; missing_fields?: string[] } | undefined;
                 if (resultObj?.incomplete_grading) {
                     logger.warn(`[API] Incomplete grading for ${label}: missing ${resultObj.missing_fields?.join(', ')}`);
-                    results.push({
+                    return {
                         label,
                         result,
                         strictness,
                         incompleteGrading: true,
                         missingFields: resultObj.missing_fields,
                         error: resultObj.missing_fields ? `採点結果が不完全: ${resultObj.missing_fields.join(', ')}` : '採点結果が不完全です'
-                    });
+                    };
                 } else {
-                    results.push({ label, result, strictness });
+                    return { label, result, strictness };
                 }
             } catch (error: unknown) {
                 const message = error instanceof Error ? error.message : 'Unknown error';
                 logger.error(`Error grading ${label}:`, error);
-                results.push({ label, error: message, status: 'error', strictness });
+                return { label, error: message, status: 'error', strictness };
             }
-        }
+        });
+
+        // 全ての採点を並列で待機（Promise.allSettledで個別のエラーも処理）
+        const settledResults = await Promise.allSettled(gradingPromises);
+        const results: GradingApiResultItem[] = settledResults.map((settled, index) => {
+            if (settled.status === 'fulfilled') {
+                return settled.value;
+            } else {
+                // Promise自体が reject された場合（通常は発生しないが安全のため）
+                const label = sanitizedLabels[index];
+                const message = settled.reason instanceof Error ? settled.reason.message : 'Unknown error';
+                logger.error(`Promise rejected for ${label}:`, settled.reason);
+                return { label, error: message, status: 'error', strictness };
+            }
+        });
+
+        logger.info(`[API] 並列処理完了: ${results.filter(r => r.result && !r.error).length}/${results.length}問成功`);
 
         // 採点成功時に利用回数をインクリメント（不完全な採点は除外）
         const successfulGradings = results.filter(r => r.result && !r.error && !r.incompleteGrading);
         
+        // #region agent log
+        const logBeforeIncrement = {location:'route.ts:572',message:'Before increment_usage',data:{successfulGradingsCount:successfulGradings.length,freeRegradeLabels:Array.from(freeRegradeByLabel.keys()),userId:user.id},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'A'};
+        logger.info('[DEBUG] Before increment_usage:', logBeforeIncrement);
+        fetch('http://127.0.0.1:7242/ingest/e78e9fd7-3fa2-45c5-b036-a4f10b20798a',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(logBeforeIncrement)}).catch((err) => logger.warn('[DEBUG] Failed to send log:', err));
+        // #endregion
+        
         for (const grading of successfulGradings) {
             // 無料再採点の場合は消費しない
             if (freeRegradeByLabel.has(grading.label)) {
+                // #region agent log
+                fetch('http://127.0.0.1:7242/ingest/e78e9fd7-3fa2-45c5-b036-a4f10b20798a',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'route.ts:577',message:'Skipping increment (free regrade)',data:{label:grading.label},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'C'})}).catch(()=>{});
+                // #endregion
                 continue;
             }
+            // #region agent log
+            const logCallingIncrement = {location:'route.ts:580',message:'Calling increment_usage',data:{label:grading.label,userId:user.id},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'A'};
+            logger.info('[DEBUG] Calling increment_usage:', logCallingIncrement);
+            fetch('http://127.0.0.1:7242/ingest/e78e9fd7-3fa2-45c5-b036-a4f10b20798a',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(logCallingIncrement)}).catch((err) => logger.warn('[DEBUG] Failed to send log:', err));
+            // #endregion
             const { error: incrementError } = await supabaseRpc
                 .rpc('increment_usage', { 
                     p_user_id: user.id,
@@ -587,18 +633,37 @@ export async function POST(req: NextRequest) {
                     }
                 });
             
+            // #region agent log
+            const logIncrementResult = {location:'route.ts:590',message:'increment_usage result',data:{label:grading.label,hasError:!!incrementError,errorMessage:incrementError?.message||null},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'A'};
+            logger.info('[DEBUG] increment_usage result:', logIncrementResult);
+            fetch('http://127.0.0.1:7242/ingest/e78e9fd7-3fa2-45c5-b036-a4f10b20798a',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(logIncrementResult)}).catch((err) => logger.warn('[DEBUG] Failed to send log:', err));
+            // #endregion
+            
             if (incrementError) {
                 logger.error('Failed to increment usage:', incrementError);
             }
         }
 
         // 更新後の利用情報を取得
+        // #region agent log
+        const logBeforeCanUse = {location:'route.ts:598',message:'Before can_use_service call',data:{userId:user.id},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'B'};
+        logger.info('[DEBUG] Before can_use_service call:', logBeforeCanUse);
+        fetch('http://127.0.0.1:7242/ingest/e78e9fd7-3fa2-45c5-b036-a4f10b20798a',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(logBeforeCanUse)}).catch((err) => logger.warn('[DEBUG] Failed to send log:', err));
+        // #endregion
         let updatedUsageRows: CanUseServiceResult[] | null = null;
         try {
             const { data: updatedUsageData } = await supabaseRpc
                 .rpc('can_use_service', { p_user_id: user.id });
             updatedUsageRows = updatedUsageData as CanUseServiceResult[] | null;
-        } catch {
+            // #region agent log
+            const logCanUseResult = {location:'route.ts:600',message:'can_use_service result',data:{hasData:!!updatedUsageRows,usageCount:updatedUsageRows?.[0]?.usage_count??null,remainingCount:updatedUsageRows?.[0]?.remaining_count??null,usageLimit:updatedUsageRows?.[0]?.usage_limit??null},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'B'};
+            logger.info('[DEBUG] can_use_service result:', logCanUseResult);
+            fetch('http://127.0.0.1:7242/ingest/e78e9fd7-3fa2-45c5-b036-a4f10b20798a',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(logCanUseResult)}).catch((err) => logger.warn('[DEBUG] Failed to send log:', err));
+            // #endregion
+        } catch (error) {
+            // #region agent log
+            fetch('http://127.0.0.1:7242/ingest/e78e9fd7-3fa2-45c5-b036-a4f10b20798a',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'route.ts:602',message:'can_use_service error',data:{errorMessage:error instanceof Error?error.message:'Unknown'},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'B'})}).catch(()=>{});
+            // #endregion
             // 無視（無料再採点のみでプランが無い等の場合に備える）
         }
         
@@ -608,6 +673,12 @@ export async function POST(req: NextRequest) {
             usageLimit: updatedUsageRows[0].usage_limit,
             planName: updatedUsageRows[0].plan_name,
         } : null;
+        
+        // #region agent log
+        const logFinalUsageInfo = {location:'route.ts:610',message:'Final usageInfo to return',data:{usageInfo:usageInfo?{remainingCount:usageInfo.remainingCount,usageCount:usageInfo.usageCount,usageLimit:usageInfo.usageLimit}:null},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'B'};
+        logger.info('[DEBUG] Final usageInfo to return:', logFinalUsageInfo);
+        fetch('http://127.0.0.1:7242/ingest/e78e9fd7-3fa2-45c5-b036-a4f10b20798a',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(logFinalUsageInfo)}).catch((err) => logger.warn('[DEBUG] Failed to send log:', err));
+        // #endregion
 
         // 再採点トークンを発行／更新（成功したラベルのみ）
         if (regradeSecret) {

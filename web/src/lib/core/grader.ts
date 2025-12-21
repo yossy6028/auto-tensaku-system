@@ -302,6 +302,10 @@ export class EduShiftGrader {
     ): Promise<{ text: string; fullText: string; matchedTarget: boolean }> {
         console.log("[Grader] Stage 1: OCR開始");
 
+        // #region agent log
+        fetch('http://127.0.0.1:7242/ingest/e78e9fd7-3fa2-45c5-b036-a4f10b20798a',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'grader.ts:performOcr:entry',message:'OCR開始',data:{targetLabel,studentFilesCount:categorizedFiles?.studentFiles.length,studentFileNames:categorizedFiles?.studentFiles.map(f=>({name:f.name,role:f.role})),problemFilesCount:categorizedFiles?.problemFiles.length,modelFilesCount:categorizedFiles?.modelAnswerFiles.length,hasAllRole:categorizedFiles?.studentFiles.some(f=>f.role==='all')},timestamp:Date.now(),sessionId:'debug-session',hypothesisId:'B,D'})}).catch(()=>{});
+        // #endregion
+
         // OCR対象を選択（答案優先、なければ全画像）
         let targetParts: ContentPart[];
         if (categorizedFiles && categorizedFiles.studentFiles.length > 0) {
@@ -318,6 +322,9 @@ export class EduShiftGrader {
             if (selectedAnswers.length < categorizedFiles.studentFiles.length) {
                 console.warn(`[Grader] 複数の答案が指定されたため、先頭から最大${MAX_ANSWER_PAGES}件を使用してOCRを実行します`);
             }
+            // #region agent log
+            fetch('http://127.0.0.1:7242/ingest/e78e9fd7-3fa2-45c5-b036-a4f10b20798a',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'grader.ts:performOcr:targetSelect',message:'OCR対象ファイル選択',data:{selectedCount:selectedAnswers.length,selectedFiles:selectedAnswers.map(f=>({name:f.name,role:f.role}))},timestamp:Date.now(),sessionId:'debug-session',hypothesisId:'B'})}).catch(()=>{});
+            // #endregion
             targetParts = selectedAnswers.map(file => this.toGenerativePart(file));
         } else {
             const answerParts = imageParts.filter((part, idx) => {
@@ -364,13 +371,20 @@ export class EduShiftGrader {
         const ocrModelName = CONFIG.OCR_MODEL_NAME || CONFIG.MODEL_NAME;
         const fallbackModelName = CONFIG.OCR_FALLBACK_MODEL_NAME || "";
 
+        // 複合ファイル（role='all'）かどうかをチェック
+        const hasAllRole = categorizedFiles?.studentFiles.some(f => f.role === 'all') ?? false;
+        
+        // #region agent log
+        fetch('http://127.0.0.1:7242/ingest/e78e9fd7-3fa2-45c5-b036-a4f10b20798a',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'grader.ts:performOcr:hasAllRoleCheck',message:'複合ファイルチェック',data:{hasAllRole,sanitizedLabel},timestamp:Date.now(),sessionId:'debug-session',hypothesisId:'A,C'})}).catch(()=>{});
+        // #endregion
+
         // 大きなファイルではプロンプト数を1つに削減（タイムアウト防止）
         const ocrPrompts = isLargeFile
-            ? [this.buildOcrPrompt(sanitizedLabel, "primary")]  // 大きなファイル: 1プロンプトのみ
+            ? [this.buildOcrPrompt(sanitizedLabel, "primary", hasAllRole)]  // 大きなファイル: 1プロンプトのみ
             : [
-                this.buildOcrPrompt(sanitizedLabel, "primary"),
-                this.buildOcrPrompt(sanitizedLabel, "retry"),
-                this.buildOcrPrompt(sanitizedLabel, "detail")
+                this.buildOcrPrompt(sanitizedLabel, "primary", hasAllRole),
+                this.buildOcrPrompt(sanitizedLabel, "retry", hasAllRole),
+                this.buildOcrPrompt(sanitizedLabel, "detail", hasAllRole)
             ];
         const fallbackPrompt = ocrPrompts[ocrPrompts.length - 1];
         // 大きなファイルではフォールバックモデルも無効化（タイムアウト防止）
@@ -461,6 +475,10 @@ export class EduShiftGrader {
 
         console.log("[Grader] OCR結果:", { text: finalText.substring(0, 100), charCount });
 
+        // #region agent log
+        fetch('http://127.0.0.1:7242/ingest/e78e9fd7-3fa2-45c5-b036-a4f10b20798a',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'grader.ts:performOcr:result',message:'OCR結果',data:{hasAllRole,charCount,textPreview:finalText.substring(0,200),textFull:finalText.substring(0,500)},timestamp:Date.now(),sessionId:'debug-session',hypothesisId:'A,E'})}).catch(()=>{});
+        // #endregion
+
         if (!finalText || this.isOcrFailure(finalText)) {
             console.error("[Grader] ❌ OCRが空の結果を返しました");
             const fallbackText = "（回答を読み取れませんでした）";
@@ -476,7 +494,7 @@ export class EduShiftGrader {
         return { text: finalText, fullText: finalText, matchedTarget: true };
     }
 
-    private buildOcrPrompt(label: string, mode: "primary" | "retry" | "detail"): string {
+    private buildOcrPrompt(label: string, mode: "primary" | "retry" | "detail", hasAllRole?: boolean): string {
         const jsonInstruction = "JSONのみで返してください: {\"text\":\"<verbatim>\",\"char_count\":<空白改行除外の文字数>}";
         const baseLines = [
             `「${label}」の解答欄のみを対象に、手書き文字を一字一句そのまま書き出してください。`,
@@ -487,6 +505,17 @@ export class EduShiftGrader {
             jsonInstruction
         ];
 
+        // 複合ファイル（問題・答案・解答が1つのファイル）の場合の追加指示
+        if (hasAllRole) {
+            baseLines.unshift(
+                "【重要】この画像には「問題文」「生徒の答案（手書き）」「模範解答」がすべて含まれています。",
+                "読み取るのは「生徒の答案」（手書き部分）のみです。",
+                "問題文（印刷された設問）や模範解答（印刷されたテキスト）は絶対に読み取らないでください。",
+                "手書き文字と印刷文字を区別し、手書き部分のみを出力してください。",
+                ""
+            );
+        }
+
         if (mode === "retry") {
             baseLines.unshift("前回の読み取りが不十分だったため、特に慎重にOCRを実行してください。");
         }
@@ -495,6 +524,10 @@ export class EduShiftGrader {
             baseLines.unshift("最終パスです。1文字ずつ確認し、数字・記号・単位・送り仮名まで原文通りに転写してください。");
             baseLines.splice(baseLines.length - 1, 0, "解答欄以外の問題文・注釈・欄外メモは含めないでください。");
         }
+
+        // #region agent log
+        fetch('http://127.0.0.1:7242/ingest/e78e9fd7-3fa2-45c5-b036-a4f10b20798a',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'grader.ts:buildOcrPrompt',message:'OCRプロンプト構築',data:{label,mode,hasAllRole,promptPreview:baseLines.slice(0,5).join(' | ')},timestamp:Date.now(),sessionId:'debug-session',hypothesisId:'A,C,D'})}).catch(()=>{});
+        // #endregion
 
         return baseLines.join("\n");
     }
@@ -1417,12 +1450,19 @@ export class EduShiftGrader {
             otherFiles: []
         };
 
+        // #region agent log
+        fetch('http://127.0.0.1:7242/ingest/e78e9fd7-3fa2-45c5-b036-a4f10b20798a',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'grader.ts:categorizeFiles:entry',message:'categorizeFiles開始',data:{fileCount:files.length,files:files.map(f=>({name:f.name,role:f.role,pageNumber:f.pageNumber})),pdfPageInfo},timestamp:Date.now(),sessionId:'debug-session',hypothesisId:'A,B'})}).catch(()=>{});
+        // #endregion
+
         for (const file of files) {
             const name = file.name || "";
             const pageNumber = file.pageNumber;
 
             // 1. ユーザー指定の役割を最優先
             if (file.role) {
+                // #region agent log
+                fetch('http://127.0.0.1:7242/ingest/e78e9fd7-3fa2-45c5-b036-a4f10b20798a',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'grader.ts:categorizeFiles:roleCheck',message:'ファイルロール処理',data:{fileName:name,role:file.role},timestamp:Date.now(),sessionId:'debug-session',hypothesisId:'A'})}).catch(()=>{});
+                // #endregion
                 // 単一役割
                 if (file.role === 'answer') { buckets.studentFiles.push(file); continue; }
                 if (file.role === 'problem') { buckets.problemFiles.push(file); continue; }
@@ -1441,6 +1481,9 @@ export class EduShiftGrader {
                     continue;
                 }
                 if (file.role === 'all') {
+                    // #region agent log
+                    fetch('http://127.0.0.1:7242/ingest/e78e9fd7-3fa2-45c5-b036-a4f10b20798a',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'grader.ts:categorizeFiles:roleAll',message:'複合ファイル(all)を3カテゴリに追加',data:{fileName:name},timestamp:Date.now(),sessionId:'debug-session',hypothesisId:'A,B,C'})}).catch(()=>{});
+                    // #endregion
                     buckets.studentFiles.push(file);
                     buckets.problemFiles.push(file);
                     buckets.modelAnswerFiles.push(file);

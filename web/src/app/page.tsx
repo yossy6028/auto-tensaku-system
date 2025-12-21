@@ -107,6 +107,7 @@ export default function Home() {
   // 無料再採点トークン（labelごと）
   const [regradeByLabel, setRegradeByLabel] = useState<Record<string, { token: string; remaining: number }>>({});
   const [isLoading, setIsLoading] = useState(false);
+  const [regradingLabel, setRegradingLabel] = useState<string | null>(null);  // 再採点中のラベル
   const [results, setResults] = useState<GradingResponseItem[] | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [requirePlan, setRequirePlan] = useState(false);
@@ -284,13 +285,26 @@ export default function Home() {
 
     // 画像をbase64に変換
     let imageDataUrl = '';
+    let isPdfFile = false;
+    let hasFile = false;
     const answerFile = answerFileIndex !== null ? uploadedFiles[answerFileIndex] : uploadedFiles[0];
-    if (answerFile && answerFile.type.startsWith('image/')) {
-      const reader = new FileReader();
-      imageDataUrl = await new Promise<string>((resolve) => {
-        reader.onload = () => resolve(reader.result as string);
-        reader.readAsDataURL(answerFile);
-      });
+
+    if (answerFile) {
+      hasFile = true;
+      if (answerFile.type === 'application/pdf') {
+        isPdfFile = true;
+      } else if (answerFile.type.startsWith('image/')) {
+        try {
+          const reader = new FileReader();
+          imageDataUrl = await new Promise<string>((resolve, reject) => {
+            reader.onload = () => resolve(reader.result as string);
+            reader.onerror = () => reject(new Error('Failed to read file'));
+            reader.readAsDataURL(answerFile);
+          });
+        } catch (error) {
+          console.error('Failed to convert image to base64:', error);
+        }
+      }
     }
 
     const res = results?.[index];
@@ -619,7 +633,13 @@ export default function Home() {
     <div class="section section-answer">
       <div class="section-title">提出された答案</div>
       <div class="section-content">
-        ${imageDataUrl ? `<img src="${imageDataUrl}" alt="提出答案" class="answer-image">` : '<p style="color: #94a3b8; text-align: center;">画像なし</p>'}
+        ${imageDataUrl
+          ? `<img src="${imageDataUrl}" alt="提出答案" class="answer-image">`
+          : isPdfFile
+            ? '<div style="text-align: center; padding: 30px; background: #f1f5f9; border-radius: 8px;"><p style="color: #475569; font-weight: bold;">📄 PDFファイル</p><p style="color: #64748b; font-size: 10pt; margin-top: 5px;">答案PDFは別途印刷するか、画像に変換してください</p></div>'
+            : hasFile
+              ? '<p style="color: #94a3b8; text-align: center;">対応していないファイル形式です</p>'
+              : '<p style="color: #94a3b8; text-align: center;">ファイルがアップロードされていません</p>'}
       </div>
     </div>
   </div>
@@ -1680,8 +1700,18 @@ export default function Home() {
         if (Array.isArray(data.results)) ingestRegradeInfo(data.results);
 
         // 回数消費情報をログ出力・保存
+        // #region agent log
+        const logData = {location:'page.tsx:1683',message:'API response usageInfo',data:{hasUsageInfo:!!data.usageInfo,usageInfo:data.usageInfo?{remainingCount:data.usageInfo.remainingCount,usageCount:data.usageInfo.usageCount,usageLimit:data.usageInfo.usageLimit}:null,currentUsageInfo:usageInfo?{remainingCount:usageInfo.remainingCount,usageCount:usageInfo.usageCount,usageLimit:usageInfo.usageLimit}:null},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'D'};
+        console.log('[DEBUG] API response usageInfo:', logData);
+        fetch('http://127.0.0.1:7242/ingest/e78e9fd7-3fa2-45c5-b036-a4f10b20798a',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(logData)}).catch((err) => console.warn('[DEBUG] Failed to send log:', err));
+        // #endregion
         if (data.usageInfo) {
           console.log('[Page] Usage info from API:', data.usageInfo);
+          console.log('[DEBUG] usageInfo details:', {
+            remainingCount: data.usageInfo.remainingCount,
+            usageCount: data.usageInfo.usageCount,
+            usageLimit: data.usageInfo.usageLimit
+          });
           // 現在の使用回数を保存（APIから返された最新情報）
           setUsageConsumed({
             consumed: true,
@@ -1693,7 +1723,23 @@ export default function Home() {
         }
 
         // 利用情報を更新（エラーが発生しても続行、非同期で実行）
-        refreshUsageInfo().catch((err) => {
+        // #region agent log
+        const logBeforeRefresh = {location:'page.tsx:1696',message:'Before refreshUsageInfo call',data:{currentUsageInfo:usageInfo?{remainingCount:usageInfo.remainingCount,usageCount:usageInfo.usageCount,usageLimit:usageInfo.usageLimit}:null},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'D'};
+        console.log('[DEBUG] Before refreshUsageInfo call:', logBeforeRefresh);
+        fetch('http://127.0.0.1:7242/ingest/e78e9fd7-3fa2-45c5-b036-a4f10b20798a',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(logBeforeRefresh)}).catch((err) => console.warn('[DEBUG] Failed to send log:', err));
+        // #endregion
+        refreshUsageInfo().then(() => {
+          // #region agent log
+          const logAfterRefresh = {location:'page.tsx:1696',message:'After refreshUsageInfo success',data:{},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'D'};
+          console.log('[DEBUG] After refreshUsageInfo success:', logAfterRefresh);
+          fetch('http://127.0.0.1:7242/ingest/e78e9fd7-3fa2-45c5-b036-a4f10b20798a',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(logAfterRefresh)}).catch((err) => console.warn('[DEBUG] Failed to send log:', err));
+          // #endregion
+        }).catch((err) => {
+          // #region agent log
+          const logRefreshError = {location:'page.tsx:1697',message:'refreshUsageInfo error',data:{errorMessage:err instanceof Error?err.message:'Unknown'},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'D'};
+          console.warn('[DEBUG] refreshUsageInfo error:', logRefreshError);
+          fetch('http://127.0.0.1:7242/ingest/e78e9fd7-3fa2-45c5-b036-a4f10b20798a',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(logRefreshError)}).catch((logErr) => console.warn('[DEBUG] Failed to send log:', logErr));
+          // #endregion
           console.warn('[Page] Failed to refresh usage info:', err);
         });
       }
@@ -1732,6 +1778,7 @@ export default function Home() {
     setIsLoading(true);
     setError(null);
     setRequirePlan(false);
+    setRegradingLabel(label);  // 再採点中のラベルをセット
 
     const hasImages = uploadedFiles.some(f => isImageFile(f));
     const hasPdf = uploadedFiles.some(f => f.type === 'application/pdf');
@@ -1830,6 +1877,7 @@ export default function Home() {
       setError('再採点中にエラーが発生しました。');
     } finally {
       setIsLoading(false);
+      setRegradingLabel(null);  // 再採点中のラベルをクリア
     }
   };
 
@@ -3226,6 +3274,16 @@ export default function Home() {
                               </span>
                             )}
                           </div>
+                          
+                          {/* 再採点中の表示 */}
+                          {regradingLabel === res.label && (
+                            <div className="flex items-center justify-end gap-2 mb-3 px-4 py-3 bg-gradient-to-r from-amber-50 to-orange-50 rounded-lg border border-amber-200 shadow-sm">
+                              <div className="animate-spin h-5 w-5 border-2 border-amber-500 border-t-transparent rounded-full"></div>
+                              <span className="text-amber-700 font-bold text-sm">再採点中...</span>
+                              <span className="text-amber-600 text-xs">AIが採点をやり直しています</span>
+                            </div>
+                          )}
+                          
                           <div className="flex flex-wrap gap-2 justify-end">
                             <button
                               type="button"
@@ -3593,6 +3651,14 @@ export default function Home() {
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
                 </svg>
                 採点回数を1回消費しました
+                {(() => {
+                  // #region agent log
+                  if (typeof window !== 'undefined') {
+                    fetch('http://127.0.0.1:7242/ingest/e78e9fd7-3fa2-45c5-b036-a4f10b20798a',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'page.tsx:3596',message:'Rendering usageInfo display',data:{usageInfo:usageInfo?{remainingCount:usageInfo.remainingCount,usageCount:usageInfo.usageCount,usageLimit:usageInfo.usageLimit}:null},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'D'})}).catch(()=>{});
+                  }
+                  // #endregion
+                  return null;
+                })()}
                 {usageInfo && usageInfo.usageLimit !== null && usageInfo.usageLimit > 0 && (
                   <span className="ml-1">
                     （残り <span className="font-bold">{usageInfo.remainingCount ?? 0}</span>回 / {usageInfo.usageLimit}回）

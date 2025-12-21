@@ -3386,27 +3386,27 @@ export default function Home() {
                       あなたの答案
                     </h3>
 
-                    {/* Image Preview (Full Width) - 選択した答案を表示 */}
+                    {/* Image Preview (Full Width) - 選択した答案を表示（画像のみ、PDFは非対応） */}
                     <div className="bg-slate-100 rounded-2xl p-5 border border-slate-200 mb-8">
                       {uploadedFiles.length > 0 && answerFileIndex !== null && uploadedFiles[answerFileIndex] ? (
                         (() => {
                           const answerFile = uploadedFiles[answerFileIndex];
+                          // PDFファイルの場合は表示しない
+                          if (answerFile.type === 'application/pdf') {
+                            return (
+                              <div className="bg-white rounded-xl p-6 text-center">
+                                <p className="text-slate-500">PDFファイルのプレビューは非対応です。</p>
+                                <p className="text-sm text-slate-400 mt-2">下記の「AI読み取り結果」で答案内容をご確認ください。</p>
+                              </div>
+                            );
+                          }
                           return (
                             <div className="bg-white rounded-xl p-2">
-                              {answerFile.type === 'application/pdf' ? (
-                                <iframe
-                                  src={`${URL.createObjectURL(answerFile)}#page=1`}
-                                  className="w-full h-[640px] rounded-lg"
-                                  title="Student Answer"
-                                  style={{ pointerEvents: 'none' }}
-                                />
-                              ) : (
-                                <img
-                                  src={URL.createObjectURL(answerFile)}
-                                  alt="Student Answer"
-                                  className="w-full h-auto rounded-lg object-contain max-h-[720px] mx-auto"
-                                />
-                              )}
+                              <img
+                                src={URL.createObjectURL(answerFile)}
+                                alt="Student Answer"
+                                className="w-full h-auto rounded-lg object-contain max-h-[720px] mx-auto"
+                              />
                               <p className="text-center text-xs text-slate-400 mt-2">提出された答案</p>
                             </div>
                           );

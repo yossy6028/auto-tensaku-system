@@ -384,24 +384,11 @@ export const GradingReport = React.forwardRef<HTMLDivElement, GradingReportProps
                     <h2 className="text-lg font-bold border-l-4 border-slate-400 pl-3 mb-4 print:break-after-avoid print:text-base">提出された答案</h2>
                     <div className="border border-slate-200 rounded-xl overflow-hidden bg-slate-50 p-3 print:break-inside-avoid print:bg-white print:border-slate-300">
                         {studentFile && isPdf ? (
-                            /* PDF: 画面表示用iframe + 印刷用メッセージ */
-                            <div className="w-full">
-                                {/* 画面表示用: iframe */}
-                                <iframe
-                                    src={`${URL.createObjectURL(studentFile)}#page=1&toolbar=0&navpanes=0&scrollbar=0`}
-                                    className="w-full h-[600px] rounded-lg print:hidden"
-                                    title="Student Answer"
-                                    style={{ pointerEvents: 'none' }}
-                                />
-                                {/* 印刷用: PDFは印刷できないため説明を表示 */}
-                                <div className="hidden print:block text-center py-8 bg-slate-100 rounded-lg">
-                                    <p className="text-slate-600 font-medium">📄 PDFファイル</p>
-                                    <p className="text-sm text-slate-500 mt-1">
-                                        答案PDFは別途印刷するか、画像に変換してください
-                                    </p>
-                                </div>
-                                <p className="text-xs text-slate-500 mt-2 text-center print:hidden">
-                                    ※PDFの最初のページ（答案）のみを表示しています
+                            /* PDF: プレビュー非対応 */
+                            <div className="w-full text-center py-8 bg-slate-100 rounded-lg">
+                                <p className="text-slate-600 font-medium">📄 PDFファイル</p>
+                                <p className="text-sm text-slate-500 mt-1">
+                                    PDFファイルのプレビューは非対応です
                                 </p>
                             </div>
                         ) : imageDataUrl ? (

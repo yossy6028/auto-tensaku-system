@@ -24,3 +24,62 @@ body {
   color: var(--foreground);
   font-family: Arial, Helvetica, sans-serif;
 }
+
+/* 印刷用スタイル */
+@media print {
+  /* 背景色を印刷 */
+  * {
+    -webkit-print-color-adjust: exact !important;
+    print-color-adjust: exact !important;
+    color-adjust: exact !important;
+  }
+
+  /* ダークモードを無効化 */
+  :root {
+    --background: #ffffff !important;
+    --foreground: #171717 !important;
+  }
+
+  body {
+    background: white !important;
+    color: black !important;
+  }
+
+  /* 画像を確実に印刷 */
+  img {
+    max-width: 100% !important;
+    page-break-inside: avoid !important;
+    break-inside: avoid !important;
+  }
+
+  /* iframeはスクリーンのみ（印刷ではprint-answer-imageを使用） */
+  iframe {
+    display: none !important;
+  }
+
+  /* 印刷時に表示する答案画像 */
+  .print-answer-image {
+    display: block !important;
+    max-width: 100% !important;
+    height: auto !important;
+    page-break-inside: avoid !important;
+  }
+
+  /* 印刷時に非表示にする要素 */
+  .print\\:hidden, .no-print {
+    display: none !important;
+  }
+
+  /* ページ区切りの制御 */
+  .page-break-before {
+    page-break-before: always !important;
+  }
+
+  .page-break-after {
+    page-break-after: always !important;
+  }
+
+  .avoid-page-break {
+    page-break-inside: avoid !important;
+  }
+}

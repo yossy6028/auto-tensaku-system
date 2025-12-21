@@ -1,19 +1,6 @@
-/* eslint-disable @next/next/no-img-element */
-import React, { useEffect, useState } from 'react';
+import React from 'react';
 import Image from 'next/image';
 import logo from '@/../public/logo.jpg';
-
-/**
- * ファイルをBase64データURLに変換（印刷時の互換性向上のため）
- */
-const fileToDataUrl = (file: File): Promise<string> => {
-    return new Promise((resolve, reject) => {
-        const reader = new FileReader();
-        reader.onload = () => resolve(reader.result as string);
-        reader.onerror = reject;
-        reader.readAsDataURL(file);
-    });
-};
 
 interface DeductionDetail {
     reason?: string;
@@ -59,7 +46,6 @@ interface GradingResult {
 interface GradingReportProps {
     result: { grading_result?: GradingResult } | null;
     targetLabel: string;
-    studentFile: File | null;
     studentName?: string;
     teacherName?: string;
     editedFeedback?: {
@@ -93,22 +79,7 @@ const getGradeColor = (grade: string): string => {
 };
 
 export const GradingReport = React.forwardRef<HTMLDivElement, GradingReportProps>(
-    ({ result, targetLabel, studentFile, studentName, teacherName, editedFeedback }, ref) => {
-        const [imageDataUrl, setImageDataUrl] = useState<string | null>(null);
-        const [isPdf, setIsPdf] = useState(false);
-
-        // ファイルをBase64に変換（印刷互換性のため）
-        useEffect(() => {
-            if (studentFile) {
-                setIsPdf(studentFile.type === 'application/pdf');
-                if (studentFile.type !== 'application/pdf') {
-                    fileToDataUrl(studentFile)
-                        .then(setImageDataUrl)
-                        .catch(console.error);
-                }
-            }
-        }, [studentFile]);
-
+    ({ result, targetLabel, studentName, teacherName, editedFeedback }, ref) => {
         const gradingResult = result?.grading_result;
         if (!gradingResult) return null;
 
@@ -380,42 +351,7 @@ export const GradingReport = React.forwardRef<HTMLDivElement, GradingReportProps
                     </div>
                 </div>
 
-                <div className="break-inside-avoid print:break-inside-avoid">
-                    <h2 className="text-lg font-bold border-l-4 border-slate-400 pl-3 mb-4 print:break-after-avoid print:text-base">提出された答案</h2>
-                    <div className="border border-slate-200 rounded-xl overflow-hidden bg-slate-50 p-3 print:break-inside-avoid print:bg-white print:border-slate-300">
-                        {studentFile && isPdf ? (
-                            /* PDF: プレビュー非対応 */
-                            <div className="w-full text-center py-8 bg-slate-100 rounded-lg">
-                                <p className="text-slate-600 font-medium">📄 PDFファイル</p>
-                                <p className="text-sm text-slate-500 mt-1">
-                                    PDFファイルのプレビューは非対応です
-                                </p>
-                            </div>
-                        ) : imageDataUrl ? (
-                            /* 画像: Base64データURLを使用（印刷互換性向上） */
-                            <img
-                                src={imageDataUrl}
-                                alt="Student Answer"
-                                className="w-full h-auto object-contain max-h-[520px] print:max-h-none print:max-w-full bg-white mx-auto print:break-inside-avoid print-answer-image"
-                                style={{
-                                    printColorAdjust: 'exact',
-                                    WebkitPrintColorAdjust: 'exact'
-                                }}
-                            />
-                        ) : studentFile ? (
-                            /* フォールバック: Blob URLを使用 */
-                            <img
-                                src={URL.createObjectURL(studentFile)}
-                                alt="Student Answer"
-                                className="w-full h-auto object-contain max-h-[520px] print:max-h-none print:max-w-full bg-white mx-auto print:break-inside-avoid"
-                                style={{
-                                    printColorAdjust: 'exact',
-                                    WebkitPrintColorAdjust: 'exact'
-                                }}
-                            />
-                        ) : null}
-                    </div>
-                </div>
+                {/* 提出された答案セクションは撤廃（AI読み取り結果のみ表示） */}
             </div>
         );
     }

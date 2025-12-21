@@ -283,65 +283,6 @@ export default function Home() {
     const printWindow = window.open('', '_blank');
     if (!printWindow) return;
 
-    // GradingReportのDOM内から画像のbase64データを取得（より確実な方法）
-    let imageDataUrl = '';
-    let isPdfFile = false;
-    let hasFile = false;
-
-    // まずGradingReportのDOM内の画像を探す
-    const imgElement = componentRef.current.querySelector('img[alt="Student Answer"]') as HTMLImageElement | null;
-    if (imgElement && imgElement.src) {
-      if (imgElement.src.startsWith('data:')) {
-        // 既にbase64データURL
-        imageDataUrl = imgElement.src;
-        hasFile = true;
-      } else if (imgElement.src.startsWith('blob:')) {
-        // blob URLの場合はfetchしてbase64に変換
-        try {
-          const response = await fetch(imgElement.src);
-          const blob = await response.blob();
-          imageDataUrl = await new Promise<string>((resolve, reject) => {
-            const reader = new FileReader();
-            reader.onload = () => resolve(reader.result as string);
-            reader.onerror = () => reject(new Error('Failed to read blob'));
-            reader.readAsDataURL(blob);
-          });
-          hasFile = true;
-        } catch (error) {
-          console.error('Failed to convert blob to base64:', error);
-        }
-      }
-    }
-
-    // DOM内にPDF表示がある場合をチェック
-    const pdfElement = componentRef.current.querySelector('iframe[title="PDF答案"]');
-    if (pdfElement) {
-      isPdfFile = true;
-      hasFile = true;
-    }
-
-    // フォールバック: DOM内で画像が見つからなければ、元の方法でファイルから読み込む
-    if (!imageDataUrl && !isPdfFile) {
-      const answerFile = answerFileIndex !== null ? uploadedFiles[answerFileIndex] : uploadedFiles[0];
-      if (answerFile) {
-        hasFile = true;
-        if (answerFile.type === 'application/pdf') {
-          isPdfFile = true;
-        } else if (answerFile.type.startsWith('image/')) {
-          try {
-            const reader = new FileReader();
-            imageDataUrl = await new Promise<string>((resolve, reject) => {
-              reader.onload = () => resolve(reader.result as string);
-              reader.onerror = () => reject(new Error('Failed to read file'));
-              reader.readAsDataURL(answerFile);
-            });
-          } catch (error) {
-            console.error('Failed to convert image to base64:', error);
-          }
-        }
-      }
-    }
-
     const res = results?.[index];
     const gradingResult = res?.result?.grading_result;
     if (!gradingResult) return;
@@ -392,6 +333,20 @@ export default function Home() {
       .report-container {
         max-width: 100%;
         padding: 0;
+      }
+      .brand-row {
+        display: flex;
+        align-items: center;
+        gap: 12px;
+        margin-bottom: 12px;
+      }
+      .brand-logo {
+        width: 40px;
+        height: 40px;
+        border-radius: 8px;
+        border: 1px solid #e2e8f0;
+        object-fit: cover;
+        box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
       }
       .header-label {
         display: inline-block;
@@ -519,7 +474,6 @@ export default function Home() {
       .section-ai .section-title::before { background: #60a5fa; }
       .section-deduction .section-title::before { background: #f87171; }
       .section-rewrite .section-title::before { background: #fbbf24; }
-      .section-answer .section-title::before { background: #94a3b8; }
       .section-content {
         padding: 15px;
         border-radius: 10px;
@@ -532,9 +486,6 @@ export default function Home() {
       .section-rewrite .section-content {
         background: #fefce8;
         border-color: #fef08a;
-      }
-      .section-answer .section-content {
-        background: #f8fafc;
       }
       .mono-text {
         font-family: 'SF Mono', 'Monaco', 'Consolas', monospace;
@@ -575,14 +526,6 @@ export default function Home() {
         color: #1e293b;
         font-family: 'Hiragino Mincho ProN', 'Yu Mincho', serif;
       }
-      .answer-image {
-        max-width: 100%;
-        max-height: 400px;
-        object-fit: contain;
-        display: block;
-        margin: 0 auto;
-        background: white;
-      }
       .page-break {
         page-break-before: always;
       }
@@ -607,6 +550,9 @@ export default function Home() {
 </head>
 <body>
   <div class="report-container">
+    <div class="brand-row">
+      <img src="/logo.jpg" alt="EduShift" class="brand-logo" />
+    </div>
     <div class="header-label">${safeLabel}</div>
     
     <div class="header-section">
@@ -662,19 +608,6 @@ export default function Home() {
       <div class="section-title">満点の書き直し例</div>
       <div class="section-content">
         <p class="rewrite-text">${feedback.rewrite_example}</p>
-      </div>
-    </div>
-
-    <div class="section section-answer">
-      <div class="section-title">提出された答案</div>
-      <div class="section-content">
-        ${imageDataUrl
-          ? `<img src="${imageDataUrl}" alt="提出答案" class="answer-image">`
-          : isPdfFile
-            ? '<div style="text-align: center; padding: 30px; background: #f1f5f9; border-radius: 8px;"><p style="color: #475569; font-weight: bold;">📄 PDFファイル</p><p style="color: #64748b; font-size: 10pt; margin-top: 5px;">答案PDFは別途印刷するか、画像に変換してください</p></div>'
-            : hasFile
-              ? '<p style="color: #94a3b8; text-align: center;">対応していないファイル形式です</p>'
-              : '<p style="color: #94a3b8; text-align: center;">ファイルがアップロードされていません</p>'}
       </div>
     </div>
   </div>
@@ -3369,7 +3302,6 @@ export default function Home() {
                     <GradingReport
                       result={res.result ?? null}
                       targetLabel={res.label}
-                      studentFile={(answerFileIndex !== null ? uploadedFiles[answerFileIndex] : uploadedFiles[0]) || null}
                       studentName={studentName || undefined}
                       teacherName={teacherName || undefined}
                       editedFeedback={editedFeedbacks[index]}
@@ -3379,43 +3311,8 @@ export default function Home() {
 
                 <div className="p-8 md:p-14">
 
-                  {/* Original Answer & Correction Section */}
+                  {/* Recognized Text Section */}
                   <div className="mb-16">
-                    <h3 className="text-xl font-bold text-slate-800 mb-6 flex items-center">
-                      <span className="bg-indigo-100 text-indigo-600 rounded-lg w-8 h-8 flex items-center justify-center mr-3">📝</span>
-                      あなたの答案
-                    </h3>
-
-                    {/* Image Preview (Full Width) - 選択した答案を表示（画像のみ、PDFは非対応） */}
-                    <div className="bg-slate-100 rounded-2xl p-5 border border-slate-200 mb-8">
-                      {uploadedFiles.length > 0 && answerFileIndex !== null && uploadedFiles[answerFileIndex] ? (
-                        (() => {
-                          const answerFile = uploadedFiles[answerFileIndex];
-                          // PDFファイルの場合は表示しない
-                          if (answerFile.type === 'application/pdf') {
-                            return (
-                              <div className="bg-white rounded-xl p-6 text-center">
-                                <p className="text-slate-500">PDFファイルのプレビューは非対応です。</p>
-                                <p className="text-sm text-slate-400 mt-2">下記の「AI読み取り結果」で答案内容をご確認ください。</p>
-                              </div>
-                            );
-                          }
-                          return (
-                            <div className="bg-white rounded-xl p-2">
-                              <img
-                                src={URL.createObjectURL(answerFile)}
-                                alt="Student Answer"
-                                className="w-full h-auto rounded-lg object-contain max-h-[720px] mx-auto"
-                              />
-                              <p className="text-center text-xs text-slate-400 mt-2">提出された答案</p>
-                            </div>
-                          );
-                        })()
-                      ) : (
-                        <p className="text-center text-slate-400 py-8">ファイルがアップロードされていません</p>
-                      )}
-                    </div>
-
                     {/* Recognized Text Section */}
                     { (gradingResult.recognized_text || gradingResult.recognized_text_full) && (
                       <div className="mb-16">

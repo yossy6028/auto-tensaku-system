@@ -50,9 +50,16 @@ export const GradingReport = React.forwardRef<HTMLDivElement, GradingReportProps
                 className="p-8 bg-white text-slate-800 font-sans max-w-[210mm] mx-auto print:max-w-none h-full"
             >
                 <div className="border-b-2 border-slate-800 pb-4 mb-8 flex justify-between items-end">
-                    <div>
-                        <h1 className="text-2xl font-bold mb-2">採点レポート</h1>
-                        <p className="text-slate-500 text-sm">{targetLabel}</p>
+                    <div className="flex items-end gap-4">
+                        <img
+                            src="/logo.jpg"
+                            alt="EduShift"
+                            className="w-10 h-10 rounded-lg border border-slate-200 shadow-sm object-cover"
+                        />
+                        <div>
+                            <h1 className="text-2xl font-bold mb-2">採点レポート</h1>
+                            <p className="text-slate-500 text-sm">{targetLabel}</p>
+                        </div>
                     </div>
                     <div className="text-right">
                         <p className="text-sm text-slate-500">実施日: {today}</p>

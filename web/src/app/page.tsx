@@ -283,26 +283,61 @@ export default function Home() {
     const printWindow = window.open('', '_blank');
     if (!printWindow) return;
 
-    // 画像をbase64に変換
+    // GradingReportのDOM内から画像のbase64データを取得（より確実な方法）
     let imageDataUrl = '';
     let isPdfFile = false;
     let hasFile = false;
-    const answerFile = answerFileIndex !== null ? uploadedFiles[answerFileIndex] : uploadedFiles[0];
 
-    if (answerFile) {
-      hasFile = true;
-      if (answerFile.type === 'application/pdf') {
-        isPdfFile = true;
-      } else if (answerFile.type.startsWith('image/')) {
+    // まずGradingReportのDOM内の画像を探す
+    const imgElement = componentRef.current.querySelector('img[alt="Student Answer"]') as HTMLImageElement | null;
+    if (imgElement && imgElement.src) {
+      if (imgElement.src.startsWith('data:')) {
+        // 既にbase64データURL
+        imageDataUrl = imgElement.src;
+        hasFile = true;
+      } else if (imgElement.src.startsWith('blob:')) {
+        // blob URLの場合はfetchしてbase64に変換
         try {
-          const reader = new FileReader();
+          const response = await fetch(imgElement.src);
+          const blob = await response.blob();
           imageDataUrl = await new Promise<string>((resolve, reject) => {
+            const reader = new FileReader();
             reader.onload = () => resolve(reader.result as string);
-            reader.onerror = () => reject(new Error('Failed to read file'));
-            reader.readAsDataURL(answerFile);
+            reader.onerror = () => reject(new Error('Failed to read blob'));
+            reader.readAsDataURL(blob);
           });
+          hasFile = true;
         } catch (error) {
-          console.error('Failed to convert image to base64:', error);
+          console.error('Failed to convert blob to base64:', error);
+        }
+      }
+    }
+
+    // DOM内にPDF表示がある場合をチェック
+    const pdfElement = componentRef.current.querySelector('iframe[title="PDF答案"]');
+    if (pdfElement) {
+      isPdfFile = true;
+      hasFile = true;
+    }
+
+    // フォールバック: DOM内で画像が見つからなければ、元の方法でファイルから読み込む
+    if (!imageDataUrl && !isPdfFile) {
+      const answerFile = answerFileIndex !== null ? uploadedFiles[answerFileIndex] : uploadedFiles[0];
+      if (answerFile) {
+        hasFile = true;
+        if (answerFile.type === 'application/pdf') {
+          isPdfFile = true;
+        } else if (answerFile.type.startsWith('image/')) {
+          try {
+            const reader = new FileReader();
+            imageDataUrl = await new Promise<string>((resolve, reject) => {
+              reader.onload = () => resolve(reader.result as string);
+              reader.onerror = () => reject(new Error('Failed to read file'));
+              reader.readAsDataURL(answerFile);
+            });
+          } catch (error) {
+            console.error('Failed to convert image to base64:', error);
+          }
         }
       }
     }

@@ -66,7 +66,7 @@ body {
   }
 
   /* 印刷時に非表示にする要素 */
-  .print\\:hidden, .no-print {
+  .no-print {
     display: none !important;
   }
 

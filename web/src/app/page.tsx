@@ -1746,6 +1746,25 @@ export default function Home() {
             hasGradingResult: !!(r.result as Record<string, unknown>)?.grading_result,
             error: r.error
           });
+          // #region agent log
+          const gradingRes = (r.result as Record<string, unknown>)?.grading_result as Record<string, unknown> | undefined;
+          const scoreLogData = {
+            location:'page.tsx:APIResponse',
+            message:'スコア情報（API受信直後）',
+            data:{
+              label:r.label,
+              score:gradingRes?.score,
+              scoreType:typeof gradingRes?.score,
+              deductionDetails:gradingRes?.deduction_details,
+              deductionDetailsLength:Array.isArray(gradingRes?.deduction_details)?gradingRes.deduction_details.length:0
+            },
+            timestamp:Date.now(),
+            sessionId:'debug-session',
+            hypothesisId:'A,B,C,D'
+          };
+          console.log('[DEBUG] Score info from API:', scoreLogData);
+          fetch('http://127.0.0.1:7242/ingest/e78e9fd7-3fa2-45c5-b036-a4f10b20798a',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(scoreLogData)}).catch(()=>{});
+          // #endregion
         });
         setResults(data.results);
         if (Array.isArray(data.results)) ingestRegradeInfo(data.results);
@@ -1939,8 +1958,23 @@ export default function Home() {
   };
 
   const normalizeScore = (score: number): number => {
+    // #region agent log
+    console.log('[Page] normalizeScore入力:', { score, scoreType: typeof score });
+    fetch('http://127.0.0.1:7242/ingest/e78e9fd7-3fa2-45c5-b036-a4f10b20798a',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'page.tsx:normalizeScore:entry',message:'normalizeScore入力',data:{score,scoreType:typeof score},timestamp:Date.now(),sessionId:'debug-session',hypothesisId:'A'})}).catch(()=>{});
+    // #endregion
     if (typeof score !== 'number' || Number.isNaN(score)) return 0;
-    if (score <= 10) return Math.min(100, Math.round(score * 10));
+    if (score <= 10) {
+      const result = Math.min(100, Math.round(score * 10));
+      // #region agent log
+      console.log('[Page] normalizeScore: score<=10なので10倍', { score, result });
+      fetch('http://127.0.0.1:7242/ingest/e78e9fd7-3fa2-45c5-b036-a4f10b20798a',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'page.tsx:normalizeScore:multiply',message:'score<=10なので10倍',data:{score,result},timestamp:Date.now(),sessionId:'debug-session',hypothesisId:'A'})}).catch(()=>{});
+      // #endregion
+      return result;
+    }
+    // #region agent log
+    console.log('[Page] normalizeScore: score>10なのでそのまま', { score, result: Math.min(100, Math.round(score)) });
+    fetch('http://127.0.0.1:7242/ingest/e78e9fd7-3fa2-45c5-b036-a4f10b20798a',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'page.tsx:normalizeScore:passthrough',message:'score>10なのでそのまま',data:{score,result:Math.min(100,Math.round(score))},timestamp:Date.now(),sessionId:'debug-session',hypothesisId:'A'})}).catch(()=>{});
+    // #endregion
     return Math.min(100, Math.round(score));
   };
 
@@ -3349,7 +3383,41 @@ export default function Home() {
           }
 
           const deductionDetails: DeductionDetail[] = gradingResult.deduction_details ?? [];
+          // #region agent log
+          console.log('[Page] 表示前スコア情報:', {
+            label: res.label,
+            rawScore: gradingResult.score,
+            rawScoreType: typeof gradingResult.score,
+            deductionDetails: deductionDetails.map(d => ({ reason: d.reason, percentage: d.deduction_percentage })),
+            totalDeductionPct: deductionDetails.reduce((s, d) => s + (Number(d.deduction_percentage) || 0), 0)
+          });
+          fetch('http://127.0.0.1:7242/ingest/e78e9fd7-3fa2-45c5-b036-a4f10b20798a',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({
+            location:'page.tsx:ResultDisplay',
+            message:'表示前スコア情報',
+            data:{
+              label:res.label,
+              rawScore:gradingResult.score,
+              rawScoreType:typeof gradingResult.score,
+              deductionDetails:deductionDetails.map(d=>({reason:d.reason,percentage:d.deduction_percentage})),
+              totalDeductionPct:deductionDetails.reduce((s,d)=>s+(Number(d.deduction_percentage)||0),0)
+            },
+            timestamp:Date.now(),
+            sessionId:'debug-session',
+            hypothesisId:'A,B,C,D'
+          })}).catch(()=>{});
+          // #endregion
           const normalizedScore = normalizeScore(gradingResult.score);
+          // #region agent log
+          console.log('[Page] normalizeScore後:', { rawScore: gradingResult.score, normalizedScore });
+          fetch('http://127.0.0.1:7242/ingest/e78e9fd7-3fa2-45c5-b036-a4f10b20798a',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({
+            location:'page.tsx:afterNormalize',
+            message:'normalizeScore後',
+            data:{rawScore:gradingResult.score,normalizedScore},
+            timestamp:Date.now(),
+            sessionId:'debug-session',
+            hypothesisId:'A'
+          })}).catch(()=>{});
+          // #endregion
           const maxPoints = problemPoints[res.label];
           const safeMaxPoints = Number.isFinite(maxPoints) && maxPoints > 0 ? maxPoints : null;
           const earnedPoints = safeMaxPoints ? (normalizedScore / 100) * safeMaxPoints : null;

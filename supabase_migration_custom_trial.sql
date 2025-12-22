@@ -280,3 +280,5 @@ BEGIN
     RAISE NOTICE '確認クエリ:';
     RAISE NOTICE 'SELECT u.email, up.role, cus.* FROM auth.users u JOIN user_profiles up ON u.id = up.id CROSS JOIN LATERAL can_use_service(u.id) cus WHERE up.role = ''admin'' OR u.email LIKE ''trial%'';';
 END $$;
+
+

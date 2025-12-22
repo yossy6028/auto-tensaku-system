@@ -1383,6 +1383,10 @@ export class EduShiftGrader {
         
         const deductions = Array.isArray(gradingResult.deduction_details) ? gradingResult.deduction_details : [];
         
+        // #region agent log
+        fetch('http://127.0.0.1:7242/ingest/e78e9fd7-3fa2-45c5-b036-a4f10b20798a',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'grader.ts:computeFinalScore:entry',message:'computeFinalScore開始',data:{deductionsCount:deductions.length,deductions:deductions.map(d=>({reason:d.reason,percentage:d.deduction_percentage,percentageType:typeof d.deduction_percentage})),aiScore:gradingResult.score,aiScoreType:typeof gradingResult.score},timestamp:Date.now(),sessionId:'debug-session',hypothesisId:'B,C,D'})}).catch(()=>{});
+        // #endregion
+        
         const totalDeduction = deductions.reduce((sum, d) => {
             const n = typeof d?.deduction_percentage === "number" 
                 ? d.deduction_percentage 
@@ -1390,19 +1394,31 @@ export class EduShiftGrader {
             return Number.isFinite(n) ? sum + n : sum;
         }, 0);
 
+        // #region agent log
+        fetch('http://127.0.0.1:7242/ingest/e78e9fd7-3fa2-45c5-b036-a4f10b20798a',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'grader.ts:computeFinalScore:totalDeduction',message:'減点合計計算',data:{totalDeduction,willComputeFromDeductions:totalDeduction>0},timestamp:Date.now(),sessionId:'debug-session',hypothesisId:'B,C'})}).catch(()=>{});
+        // #endregion
+
         // 減点がある場合は減点スコアを計算（5%刻みで切り捨て）
         // 例: 5%減点 → 95%、7%減点 → 95%、10%減点 → 90%
         if (totalDeduction > 0) {
             const rawScore = 100 - totalDeduction;
             const finalScore = Math.floor(rawScore / 5) * 5;
-            return Math.max(0, Math.min(100, finalScore));
+            const result = Math.max(0, Math.min(100, finalScore));
+            // #region agent log
+            fetch('http://127.0.0.1:7242/ingest/e78e9fd7-3fa2-45c5-b036-a4f10b20798a',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'grader.ts:computeFinalScore:fromDeductions',message:'減点からスコア計算',data:{totalDeduction,rawScore,finalScore,result},timestamp:Date.now(),sessionId:'debug-session',hypothesisId:'B,C'})}).catch(()=>{});
+            // #endregion
+            return result;
         }
         
         // モデルが返したスコアを正規化
         const normalized = this.normalizeScore(gradingResult.score);
         if (normalized !== null) {
             // 5%刻みに切り捨て
-            return Math.max(0, Math.min(100, Math.floor(normalized / 5) * 5));
+            const result = Math.max(0, Math.min(100, Math.floor(normalized / 5) * 5));
+            // #region agent log
+            fetch('http://127.0.0.1:7242/ingest/e78e9fd7-3fa2-45c5-b036-a4f10b20798a',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'grader.ts:computeFinalScore:fromAIScore',message:'AIスコアから計算',data:{aiScore:gradingResult.score,normalized,result},timestamp:Date.now(),sessionId:'debug-session',hypothesisId:'B,D'})}).catch(()=>{});
+            // #endregion
+            return result;
         }
         
         return null;

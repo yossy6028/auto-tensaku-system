@@ -15,7 +15,7 @@ DO $$
 DECLARE
     v_user_id UUID;
     v_email TEXT := 'trial1@example.com';
-    v_password TEXT := 'Trial1@2024';
+    -- パスワードはSupabaseダッシュボードで設定するため、ここでは使用しない
 BEGIN
     -- auth.usersにユーザーを作成（Supabase Admin APIを使用する場合は別途実装が必要）
     -- 注意: auth.usersへの直接INSERTは通常できないため、
@@ -50,7 +50,7 @@ DO $$
 DECLARE
     v_user_id UUID;
     v_email TEXT := 'trial2@example.com';
-    v_password TEXT := 'Trial2@2024';
+    -- パスワードはSupabaseダッシュボードで設定するため、ここでは使用しない
 BEGIN
     SELECT id INTO v_user_id 
     FROM auth.users 
@@ -78,7 +78,7 @@ DO $$
 DECLARE
     v_user_id UUID;
     v_email TEXT := 'trial3@example.com';
-    v_password TEXT := 'Trial3@2024';
+    -- パスワードはSupabaseダッシュボードで設定するため、ここでは使用しない
 BEGIN
     SELECT id INTO v_user_id 
     FROM auth.users 
@@ -116,6 +116,12 @@ FROM auth.users u
 JOIN user_profiles up ON u.id = up.id
 WHERE u.email IN ('trial1@example.com', 'trial2@example.com', 'trial3@example.com')
 ORDER BY u.email;
+
+
+
+
+
+
 
 
 

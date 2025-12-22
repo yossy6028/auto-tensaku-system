@@ -57,8 +57,20 @@ interface GradingReportProps {
 }
 
 const normalizeScore = (score: number): number => {
+    // #region agent log
+    console.log('[GradingReport] normalizeScore入力:', { score, scoreType: typeof score });
+    // #endregion
     if (typeof score !== 'number' || Number.isNaN(score)) return 0;
-    if (score <= 10) return Math.min(100, Math.round(score * 10));
+    if (score <= 10) {
+        const result = Math.min(100, Math.round(score * 10));
+        // #region agent log
+        console.log('[GradingReport] normalizeScore: score<=10なので10倍', { score, result });
+        // #endregion
+        return result;
+    }
+    // #region agent log
+    console.log('[GradingReport] normalizeScore: score>10なのでそのまま', { score, result: Math.min(100, Math.round(score)) });
+    // #endregion
     return Math.min(100, Math.round(score));
 };
 

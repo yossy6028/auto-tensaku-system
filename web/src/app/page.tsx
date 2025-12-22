@@ -1912,7 +1912,7 @@ export default function Home() {
     return Math.min(100, Math.round(score));
   };
 
-  // 次の問題へ進むためのリセット関数
+  // 次の問題へ進むためのリセット関数（ファイルも全てリセット）
   const handleNextProblem = () => {
     // フォーム状態をリセット
     setUploadedFiles([]);
@@ -1931,6 +1931,9 @@ export default function Home() {
     setEditingFields([]);
     setPdfPageInfo({ answerPage: '', problemPage: '', modelAnswerPage: '' });
     setUsageConsumed(null);
+    // 問題選択もリセット
+    setSelectedProblems([]);
+    setProblemPoints({});
 
     // 使用情報を再取得（回数消費が確定したことを表示に反映）
     refreshUsageInfo().catch((err) => {
@@ -1939,6 +1942,35 @@ export default function Home() {
 
     // ページ上部にスクロール
     window.scrollTo({ top: 0, behavior: 'smooth' });
+  };
+
+  // 同じファイルで別の設問を採点するためのリセット関数（ファイルは保持）
+  const handleSameFilesNewProblem = () => {
+    // 採点関連の状態のみリセット（ファイルは保持）
+    setResults(null);
+    setError(null);
+    setRequirePlan(false);
+    setOcrFlowStep('idle');
+    setOcrResults({});
+    setConfirmedTexts({});
+    setCurrentOcrLabel('');
+    setOcrEditModal(null);
+    setRegradeByLabel({});
+    setEditedFeedbacks([]);
+    setEditingFields([]);
+    setUsageConsumed(null);
+    // 問題選択をリセット（別の設問を選ぶため）
+    setSelectedProblems([]);
+    setProblemPoints({});
+    // PDFページ情報はそのまま保持（同じファイルなので）
+
+    // 使用情報を再取得
+    refreshUsageInfo().catch((err) => {
+      console.warn('[Page] Failed to refresh usage info:', err);
+    });
+
+    // フォームの位置にスクロール（問題選択セクションへ）
+    window.scrollTo({ top: 400, behavior: 'smooth' });
   };
 
   // ローディング中
@@ -2289,6 +2321,25 @@ export default function Home() {
           <div className="absolute top-0 left-0 w-full h-2 bg-gradient-to-r from-indigo-500 via-violet-500 to-fuchsia-500"></div>
           <div className="p-8 md:p-14">
             <form onSubmit={handleOcrStart} className="space-y-12">
+
+              {/* 採点可能問題数の案内 */}
+              <div className="max-w-2xl mx-auto">
+                <div className="bg-gradient-to-r from-indigo-50 via-violet-50 to-purple-50 border-2 border-indigo-200 rounded-2xl p-5 shadow-sm">
+                  <div className="flex items-center justify-center gap-3">
+                    <div className="flex-shrink-0 w-10 h-10 bg-indigo-100 rounded-full flex items-center justify-center">
+                      <span className="text-xl">📝</span>
+                    </div>
+                    <div className="text-center sm:text-left">
+                      <p className="text-sm font-bold text-indigo-800">
+                        一度に採点できる問題数は<span className="text-lg mx-1 text-violet-600">2問まで</span>です
+                      </p>
+                      <p className="text-xs text-indigo-600 mt-1">
+                        3問以上の採点が必要な場合は、採点完了後に同じファイルで続けて採点できます
+                      </p>
+                    </div>
+                  </div>
+                </div>
+              </div>
 
               {/* 生徒名・添削担当者名入力 */}
               <div className="max-w-2xl mx-auto">
@@ -3653,7 +3704,7 @@ export default function Home() {
           <div className="mt-16 mb-8 text-center">
             <div className="bg-gradient-to-r from-indigo-50 via-violet-50 to-purple-50 rounded-3xl p-8 border border-indigo-100 shadow-lg">
               <p className="text-slate-600 mb-4 text-lg">
-                採点が完了しました。別の問題を採点しますか？
+                採点が完了しました。続けて採点しますか？
               </p>
 
               {/* 回数消費確認表示 - 常に表示 */}
@@ -3680,17 +3731,35 @@ export default function Home() {
                 )}
               </div>
 
-              <div className="block">
+              {/* 2つのボタン: 同じファイルで別の設問 / 別のファイルで採点 */}
+              <div className="flex flex-col sm:flex-row gap-4 justify-center items-center">
+                {/* 同じファイルで別の設問を採点（メイン推奨） */}
                 <button
-                  onClick={handleNextProblem}
+                  onClick={handleSameFilesNewProblem}
                   className="inline-flex items-center px-8 py-4 bg-gradient-to-r from-indigo-600 to-violet-600 text-white rounded-2xl font-bold text-lg hover:from-indigo-700 hover:to-violet-700 transition-all shadow-xl hover:shadow-2xl hover:scale-105 transform"
                 >
                   <svg xmlns="http://www.w3.org/2000/svg" className="h-6 w-6 mr-3" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2" />
+                  </svg>
+                  同じファイルで別の設問を採点
+                </button>
+
+                {/* 別のファイルで採点（サブ） */}
+                <button
+                  onClick={handleNextProblem}
+                  className="inline-flex items-center px-6 py-3 bg-white text-indigo-600 rounded-xl font-bold text-base border-2 border-indigo-200 hover:border-indigo-400 hover:bg-indigo-50 transition-all shadow-md hover:shadow-lg"
+                >
+                  <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5 mr-2" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
                   </svg>
-                  次の問題を採点する
+                  別のファイルで採点する
                 </button>
               </div>
+
+              {/* 説明テキスト */}
+              <p className="text-xs text-slate-500 mt-4">
+                💡 「同じファイルで別の設問を採点」を選ぶと、アップロードした問題用紙・答案・解答をそのまま使って別の設問を採点できます
+              </p>
             </div>
           </div>
         )}

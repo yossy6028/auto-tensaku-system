@@ -320,7 +320,7 @@ export default function Home() {
     const safeLabel = escapeHtml(res.label);
     const maxPoints = problemPoints[res.label];
     const safeMaxPoints = Number.isFinite(maxPoints) && maxPoints > 0 ? maxPoints : null;
-    const earnedPoints = safeMaxPoints ? (score / 100) * safeMaxPoints : null;
+    const earnedPoints = safeMaxPoints ? Math.round((score / 100) * safeMaxPoints) : null;
     
     const feedback = {
       good_point: escapeHtml(editedFeedbacks[index]?.good_point ?? gradingResult.feedback_content.good_point ?? ''),
@@ -3420,7 +3420,7 @@ export default function Home() {
           // #endregion
           const maxPoints = problemPoints[res.label];
           const safeMaxPoints = Number.isFinite(maxPoints) && maxPoints > 0 ? maxPoints : null;
-          const earnedPoints = safeMaxPoints ? (normalizedScore / 100) * safeMaxPoints : null;
+          const earnedPoints = safeMaxPoints ? Math.round((normalizedScore / 100) * safeMaxPoints) : null;
           const totalDeduction = deductionDetails.reduce((sum: number, item: DeductionDetail) => {
             return sum + (Number(item?.deduction_percentage) || 0);
           }, 0);

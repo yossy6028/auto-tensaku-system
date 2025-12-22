@@ -109,7 +109,7 @@ export const GradingReport = React.forwardRef<HTMLDivElement, GradingReportProps
 
         const score = normalizeScore(gradingResult.score);
         const safeMaxPoints = typeof maxPoints === 'number' && Number.isFinite(maxPoints) && maxPoints > 0 ? maxPoints : null;
-        const earnedPoints = safeMaxPoints ? (score / 100) * safeMaxPoints : null;
+        const earnedPoints = safeMaxPoints ? Math.round((score / 100) * safeMaxPoints) : null;
         const deductionDetails = gradingResult.deduction_details ?? [];
 
         // 編集されたフィードバックを優先して使用

@@ -1946,6 +1946,9 @@ export default function Home() {
 
   // 次の問題へ進むためのリセット関数（ファイルも全てリセット）
   const handleNextProblem = () => {
+    // リクエストロックをリセット
+    requestLockRef.current = false;
+    
     // フォーム状態をリセット
     setUploadedFiles([]);
     setAnswerFileIndex(null);
@@ -1959,13 +1962,18 @@ export default function Home() {
     setCurrentOcrLabel('');
     setOcrEditModal(null);
     setRegradeByLabel({});
-    setEditedFeedbacks([]);
-    setEditingFields([]);
+    setEditedFeedbacks({});
+    setEditingFields({});
     setPdfPageInfo({ answerPage: '', problemPage: '', modelAnswerPage: '' });
     setUsageConsumed(null);
+    setIsLoading(false);
+    setRegradingLabel(null);
+    
     // 問題選択もリセット
     setSelectedProblems([]);
     setProblemPoints({});
+    setCurrentPoints('');
+    setFreeInput('');
 
     // 使用情報を再取得（回数消費が確定したことを表示に反映）
     refreshUsageInfo().catch((err) => {
@@ -1978,6 +1986,9 @@ export default function Home() {
 
   // 同じファイルで別の設問を採点するためのリセット関数（ファイルは保持）
   const handleSameFilesNewProblem = () => {
+    // リクエストロックをリセット
+    requestLockRef.current = false;
+    
     // 採点関連の状態のみリセット（ファイルは保持）
     setResults(null);
     setError(null);
@@ -1988,12 +1999,20 @@ export default function Home() {
     setCurrentOcrLabel('');
     setOcrEditModal(null);
     setRegradeByLabel({});
-    setEditedFeedbacks([]);
-    setEditingFields([]);
+    setEditedFeedbacks({});
+    setEditingFields({});
     setUsageConsumed(null);
+    setIsLoading(false);
+    setRegradingLabel(null);
+    
     // 問題選択をリセット（別の設問を選ぶため）
     setSelectedProblems([]);
     setProblemPoints({});
+    setCurrentPoints('');
+    // 問題番号は維持（次の問題を連続して採点しやすいように）
+    // ただしfreeInputはクリア
+    setFreeInput('');
+    
     // PDFページ情報はそのまま保持（同じファイルなので）
 
     // 使用情報を再取得

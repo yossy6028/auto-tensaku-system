@@ -1,6 +1,6 @@
-type QueueTask<T> = {
-    run: () => Promise<T>;
-    resolve: (value: T) => void;
+type QueueTask = {
+    run: () => Promise<unknown>;
+    resolve: (value: unknown) => void;
     reject: (reason?: unknown) => void;
 };
 
@@ -16,7 +16,7 @@ const MAX_QUEUE_LENGTH = Number.isFinite(parsedQueueLength) && parsedQueueLength
     ? parsedQueueLength
     : DEFAULT_MAX_QUEUE_LENGTH;
 
-const queue: QueueTask<unknown>[] = [];
+const queue: QueueTask[] = [];
 let activeCount = 0;
 
 export class QueueFullError extends Error {
@@ -52,7 +52,12 @@ export function enqueueGradingJob<T>(run: () => Promise<T>): { promise: Promise<
         reject = rej;
     });
 
-    queue.push({ run, resolve, reject });
+    const task: QueueTask = {
+        run: () => run(),
+        resolve: (value) => resolve(value as T),
+        reject,
+    };
+    queue.push(task);
     const position = queue.length;
     runNext();
     return { promise, position };

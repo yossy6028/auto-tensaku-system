@@ -190,7 +190,7 @@ export default function UsagePage() {
                   <ul className="space-y-2 text-green-700">
                     <li className="flex items-start">
                       <CheckCircle className="w-4 h-4 mr-2 flex-shrink-0 mt-0.5" />
-                      <span>得点（100点満点）</span>
+                      <span>得点（％表示。配点入力時は点数も表示）</span>
                     </li>
                     <li className="flex items-start">
                       <CheckCircle className="w-4 h-4 mr-2 flex-shrink-0 mt-0.5" />
@@ -267,4 +267,3 @@ export default function UsagePage() {
     </main>
   );
 }
-

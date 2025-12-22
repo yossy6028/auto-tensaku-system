@@ -3248,6 +3248,9 @@ export default function Home() {
 
           const deductionDetails: DeductionDetail[] = gradingResult.deduction_details ?? [];
           const normalizedScore = normalizeScore(gradingResult.score);
+          const maxPoints = problemPoints[res.label];
+          const safeMaxPoints = Number.isFinite(maxPoints) && maxPoints > 0 ? maxPoints : null;
+          const earnedPoints = safeMaxPoints ? (normalizedScore / 100) * safeMaxPoints : null;
           const totalDeduction = deductionDetails.reduce((sum: number, item: DeductionDetail) => {
             return sum + (Number(item?.deduction_percentage) || 0);
           }, 0);
@@ -3444,6 +3447,11 @@ export default function Home() {
                         </span>
                         <span className="text-2xl font-medium ml-2 opacity-80">%</span>
                       </div>
+                      {safeMaxPoints && earnedPoints !== null && (
+                        <p className="mt-1 text-sm text-indigo-100/90 font-semibold">
+                          得点: {formatPointsValue(earnedPoints)} / {formatPointsValue(safeMaxPoints)} 点
+                        </p>
+                      )}
 
                       <div className="relative z-10">
                         <div className="flex justify-between text-xs font-bold text-indigo-200 mb-2">

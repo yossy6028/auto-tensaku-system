@@ -3,7 +3,8 @@ import { createServerClient } from '@supabase/ssr';
 import { cookies } from 'next/headers';
 import { EduShiftGrader, type FileRole, type GradingStrictness } from '@/lib/core/grader';
 import type { Database } from '@/lib/supabase/types';
-import { checkRateLimit, GRADING_RATE_LIMIT } from '@/lib/security/rateLimit';
+import { checkRateLimit, GRADING_BURST_RATE_LIMIT, GRADING_RATE_LIMIT } from '@/lib/security/rateLimit';
+import { enqueueGradingJob, QueueFullError, getQueueState } from '@/lib/security/gradingQueue';
 import { logger } from '@/lib/security/logger';
 import { createRegradeToken, verifyRegradeToken } from '@/lib/security/regradeToken';
 import { isHeicMimeType, hasHeicExtension, convertHeicBufferToJpeg } from '@/lib/utils/serverHeicConverter';
@@ -300,8 +301,28 @@ export async function POST(req: NextRequest) {
             );
         }
 
-        // レートリミットチェック
-        const rateLimitResult = checkRateLimit(user.id, GRADING_RATE_LIMIT);
+        // レートリミットチェック（短時間バースト + 分単位）
+        const burstLimitResult = checkRateLimit(`${user.id}:burst`, GRADING_BURST_RATE_LIMIT);
+        if (!burstLimitResult.success) {
+            return NextResponse.json(
+                { 
+                    status: 'error', 
+                    message: `リクエストが多すぎます。${burstLimitResult.retryAfter}秒後に再試行してください。`,
+                    retryAfter: burstLimitResult.retryAfter
+                },
+                { 
+                    status: 429,
+                    headers: {
+                        'Retry-After': String(burstLimitResult.retryAfter),
+                        'X-RateLimit-Limit': String(GRADING_BURST_RATE_LIMIT.maxRequests),
+                        'X-RateLimit-Remaining': '0',
+                        'X-RateLimit-Reset': String(Math.ceil(burstLimitResult.resetTime / 1000)),
+                    }
+                }
+            );
+        }
+
+        const rateLimitResult = checkRateLimit(`${user.id}:minute`, GRADING_RATE_LIMIT);
         if (!rateLimitResult.success) {
             return NextResponse.json(
                 { 
@@ -516,10 +537,12 @@ export async function POST(req: NextRequest) {
         // ファイルをバッファに変換（役割情報を付与）
         const fileBuffers = await convertFilesToBuffers(files, pdfPageInfo, fileRoles);
 
-        // 2024-12-21: ファイルサイズと問題数のログ（並列処理により5問程度まで対応可能）
-        const totalFileSize = fileBuffers.reduce((sum, f) => sum + f.buffer.length, 0);
-        const totalFileSizeMB = totalFileSize / (1024 * 1024);
-        const questionCount = sanitizedLabels.length;
+        try {
+            const queuedJob = enqueueGradingJob(async () => {
+                // 2024-12-21: ファイルサイズと問題数のログ（並列処理により5問程度まで対応可能）
+                const totalFileSize = fileBuffers.reduce((sum, f) => sum + f.buffer.length, 0);
+                const totalFileSizeMB = totalFileSize / (1024 * 1024);
+                const questionCount = sanitizedLabels.length;
 
         // 並列処理のため、問題数が多くても対応可能（ただしログは残す）
         if (totalFileSizeMB > 1.5 && questionCount > 1) {
@@ -728,12 +751,39 @@ export async function POST(req: NextRequest) {
             }
         }
 
-        return NextResponse.json({
-            status: 'success',
-            results,
-            usageInfo,
-            warnings: imageCountWarning ? [imageCountWarning] : undefined
-        });
+                return {
+                    status: 'success',
+                    results,
+                    usageInfo,
+                    warnings: imageCountWarning ? [imageCountWarning] : undefined
+                };
+            });
+
+            const payload = await queuedJob.promise;
+            const queueState = getQueueState();
+            return NextResponse.json(payload, {
+                headers: {
+                    'X-Queue-Position': String(queuedJob.position),
+                    'X-Queue-Size': String(queueState.queuedCount),
+                }
+            });
+        } catch (error) {
+            if (error instanceof QueueFullError) {
+                const queueState = getQueueState();
+                return NextResponse.json(
+                    {
+                        status: 'error',
+                        message: 'ただいま混雑しています。しばらく待ってから再度お試しください。',
+                        queue: {
+                            queued: queueState.queuedCount,
+                            maxQueue: queueState.maxQueueLength,
+                        }
+                    },
+                    { status: 429 }
+                );
+            }
+            throw error;
+        }
 
     } catch (error: unknown) {
         logger.error('API Error:', error);

@@ -132,6 +132,7 @@ export default function Home() {
   const [ocrResults, setOcrResults] = useState<Record<string, { text: string; charCount: number }>>({});
   const [confirmedTexts, setConfirmedTexts] = useState<Record<string, string>>({});
   const [currentOcrLabel, setCurrentOcrLabel] = useState<string>('');
+  const requestLockRef = useRef(false);
 
   // OCR手動修正モーダル（問題条件オーバーライド対応）
   const [ocrEditModal, setOcrEditModal] = useState<{ 
@@ -276,6 +277,16 @@ export default function Home() {
       "'": '&#39;',
     };
     return text.replace(/[&<>"']/g, (char) => htmlEscapes[char] || char);
+  };
+
+  const acquireRequestLock = (): boolean => {
+    if (requestLockRef.current) return false;
+    requestLockRef.current = true;
+    return true;
+  };
+
+  const releaseRequestLock = (): void => {
+    requestLockRef.current = false;
   };
 
   const handlePrint = async (index: number) => {
@@ -904,6 +915,10 @@ export default function Home() {
       return;
     }
 
+    if (!acquireRequestLock()) {
+      return;
+    }
+
     setIsLoading(true);
     setError(null);
     setRequirePlan(false);
@@ -961,6 +976,7 @@ export default function Home() {
       }
     } finally {
       setIsLoading(false);
+      releaseRequestLock();
     }
   };
 
@@ -1411,6 +1427,10 @@ export default function Home() {
       return;
     }
 
+    if (!acquireRequestLock()) {
+      return;
+    }
+
     setOcrFlowStep('grading');
     setIsLoading(true);
     setError(null);
@@ -1462,6 +1482,7 @@ export default function Home() {
       setError(hasPdf ? `${baseMessage} ${PDF_SIZE_ADVICE}` : baseMessage);
       setIsLoading(false);
       setOcrFlowStep('idle');
+      releaseRequestLock();
       return;
     }
 
@@ -1525,6 +1546,7 @@ export default function Home() {
     } finally {
       setIsLoading(false);
       setOcrFlowStep('idle');
+      releaseRequestLock();
     }
   };
 
@@ -1635,6 +1657,10 @@ export default function Home() {
       const hasPdf = filesToUse.some(f => f.type === 'application/pdf');
       const baseMessage = `ファイルの合計サイズが大きすぎます（${totalMB}MB）。合計${maxMB}MB以下になるように、ファイルを分割してください。`;
       setError(hasPdf ? `${baseMessage} ${PDF_SIZE_ADVICE}` : baseMessage);
+      return;
+    }
+
+    if (!acquireRequestLock()) {
       return;
     }
 
@@ -1779,6 +1805,7 @@ export default function Home() {
     } finally {
       console.log('[Page] Grading process complete, clearing loading state');
       setIsLoading(false);
+      releaseRequestLock();
     }
   };
 
@@ -1797,6 +1824,10 @@ export default function Home() {
     const tokenInfo = regradeByLabel[label];
     if (!tokenInfo?.token || tokenInfo.remaining <= 0) {
       setError('無料再採点の回数が残っていません。');
+      return;
+    }
+
+    if (!acquireRequestLock()) {
       return;
     }
 
@@ -1903,6 +1934,7 @@ export default function Home() {
     } finally {
       setIsLoading(false);
       setRegradingLabel(null);  // 再採点中のラベルをクリア
+      releaseRequestLock();
     }
   };
 

@@ -65,6 +65,14 @@ export const GRADING_RATE_LIMIT: RateLimitConfig = {
 };
 
 /**
+ * 採点APIの短時間バースト抑止（連打対策）
+ */
+export const GRADING_BURST_RATE_LIMIT: RateLimitConfig = {
+    maxRequests: 2,      // 10秒あたり2リクエスト
+    windowMs: 10 * 1000, // 10秒
+};
+
+/**
  * 認証関連のレートリミット設定（ブルートフォース対策）
  */
 export const AUTH_RATE_LIMIT: RateLimitConfig = {
@@ -142,7 +150,6 @@ export function resetRateLimit(identifier: string): void {
 export function clearAllRateLimits(): void {
     rateLimitStore.clear();
 }
-
 
 
 

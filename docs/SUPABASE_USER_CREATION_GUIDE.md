@@ -229,3 +229,4 @@ Supabaseには、ユーザー作成時に自動的に`user_profiles`テーブル
 
 
 
+

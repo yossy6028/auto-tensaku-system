@@ -139,6 +139,7 @@ async function runMigration() {
     } else {
       console.warn('⚠️  ユニーク制約が見つかりませんでした。手動で確認してください。');
     }
+    
 
     // 重複チェック
     console.log('\n🔍 重複データがないか確認中...');

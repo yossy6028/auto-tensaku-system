@@ -1123,6 +1123,10 @@ export default function Home() {
     }
     setSelectedProblems([...selectedProblems, label]);
     const parsedPoints = parsePointsValue(currentPoints);
+    // #region agent log
+    console.log('[Page] 問題追加時の配点設定:', { label, currentPoints, parsedPoints });
+    fetch('http://127.0.0.1:7242/ingest/e78e9fd7-3fa2-45c5-b036-a4f10b20798a',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'page.tsx:addProblem',message:'問題追加時の配点設定',data:{label,currentPoints,parsedPoints},timestamp:Date.now(),sessionId:'debug-session',hypothesisId:'E'})}).catch(()=>{});
+    // #endregion
     setProblemPoints((prev) => {
       if (parsedPoints === null) {
         return prev;
@@ -3420,6 +3424,17 @@ export default function Home() {
           // #endregion
           const maxPoints = problemPoints[res.label];
           const safeMaxPoints = Number.isFinite(maxPoints) && maxPoints > 0 ? maxPoints : null;
+          // #region agent log
+          console.log('[Page] 配点情報:', { label: res.label, problemPointsKeys: Object.keys(problemPoints), maxPoints, safeMaxPoints });
+          fetch('http://127.0.0.1:7242/ingest/e78e9fd7-3fa2-45c5-b036-a4f10b20798a',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({
+            location:'page.tsx:maxPoints',
+            message:'配点情報',
+            data:{label:res.label,problemPointsKeys:Object.keys(problemPoints),maxPoints,safeMaxPoints},
+            timestamp:Date.now(),
+            sessionId:'debug-session',
+            hypothesisId:'E'
+          })}).catch(()=>{});
+          // #endregion
           const earnedPoints = safeMaxPoints ? Math.round((normalizedScore / 100) * safeMaxPoints) : null;
           const totalDeduction = deductionDetails.reduce((sum: number, item: DeductionDetail) => {
             return sum + (Number(item?.deduction_percentage) || 0);

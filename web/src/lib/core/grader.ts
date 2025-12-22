@@ -922,133 +922,52 @@ export class EduShiftGrader {
     }
 
     /**
-     * 語彙チェック（同じ単語・表現の繰り返し検出）
-     * プログラムで確実に検出する
+     * 語彙チェック（違和感のある繰り返し表現のみ検出）
+     * 
+     * 【方針】柔軟に判断し、実際に違和感が生じる繰り返しのみを減点する
+     * - 「〜から〜から」のように同じ接続助詞が近接して繰り返される場合 → 減点
+     * - 文章全体で同じ単語が複数回出現しても、自然な文脈なら減点しない
+     * - 「〜ている」「〜ていた」などの補助動詞の繰り返しは自然なので減点しない
      */
     private checkVocabularyProgrammatically(text: string): VocabularyCheckResult {
         const repeatedWords: Array<{ word: string; count: number }> = [];
 
-        // 1. 形容詞・名詞の反復チェック
-        const wordsToCheck = [
-            "あたたかい", "あたたか", "温かい", "暖かい",
-            "うれしい", "嬉しい", "楽しい", "たのしい",
-            "すばらしい", "素晴らしい", "素敵", "すてき",
-            "大切", "たいせつ", "大事", "だいじ",
-            "好き", "すき", "きれい", "綺麗",
-            "やさしい", "優しい", "親切", "しんせつ",
-            "安心", "あんしん", "幸せ", "しあわせ",
-            "特別", "とくべつ", "大好き", "だいすき",
+        // 【重要】違和感が生じる「近接した同一表現の繰り返し」のみを検出
+        // パターン: 同じ接続助詞が20文字以内に連続して出現する場合
+        const awkwardPatterns = [
+            // 「〜から〜から」パターン（因果の「から」が近接して繰り返される）
+            { pattern: /から.{1,15}から/g, display: "「から」の連続使用" },
+            // 「〜ので〜ので」パターン
+            { pattern: /ので.{1,15}ので/g, display: "「ので」の連続使用" },
+            // 「〜ため〜ため」パターン
+            { pattern: /ため.{1,15}ため/g, display: "「ため」の連続使用" },
+            // 「〜けど〜けど」「〜けれど〜けれど」パターン
+            { pattern: /けれ?ど.{1,15}けれ?ど/g, display: "「けど/けれど」の連続使用" },
+            // 「〜のに〜のに」パターン
+            { pattern: /のに.{1,15}のに/g, display: "「のに」の連続使用" },
+            // 「〜と思う〜と思う」パターン（短文内での繰り返し）
+            { pattern: /と思[うっ].{1,20}と思[うっ]/g, display: "「と思う」の連続使用" },
+            // 「〜という〜という」パターン
+            { pattern: /という.{1,15}という/g, display: "「という」の連続使用" },
+            // 「〜ている〜ている〜ている」3回以上の過度な繰り返し（2回は自然）
+            { pattern: /ている.{1,20}ている.{1,20}ている/g, display: "「ている」の過度な繰り返し" },
         ];
 
-        for (const word of wordsToCheck) {
-            const regex = new RegExp(word, 'g');
-            const matches = text.match(regex);
-            if (matches && matches.length >= 2) {
-                repeatedWords.push({ word, count: matches.length });
-            }
-        }
-
-        // 2. 動詞の活用形の反復チェック（語幹ベース）
-        // 例: 「思いこんでいた」「思いこんだ」→「思いこ」で検出
-        const verbStemsToCheck = [
-            { stem: "思いこ", display: "思いこむ" },      // 思いこんでいた、思いこんだ
-            { stem: "思い込", display: "思い込む" },      // 思い込んでいた、思い込んだ
-            { stem: "感じ", display: "感じる" },          // 感じた、感じている
-            { stem: "考え", display: "考える" },          // 考えた、考えている
-            { stem: "思っ", display: "思う" },            // 思った、思っている
-            { stem: "信じ", display: "信じる" },          // 信じた、信じている
-            { stem: "気づ", display: "気づく" },          // 気づいた、気づいている
-            { stem: "気付", display: "気付く" },          // 気付いた、気付いている
-            { stem: "理解", display: "理解する" },        // 理解した、理解している
-            { stem: "納得", display: "納得する" },        // 納得した、納得している
-        ];
-
-        for (const { stem, display } of verbStemsToCheck) {
-            const regex = new RegExp(stem, 'g');
-            const matches = text.match(regex);
-            if (matches && matches.length >= 2) {
+        for (const { pattern, display } of awkwardPatterns) {
+            const matches = text.match(pattern);
+            if (matches && matches.length >= 1) {
                 // 既に同じ表示名で登録されていなければ追加
                 if (!repeatedWords.some(w => w.word === display)) {
-                    repeatedWords.push({ word: display, count: matches.length });
+                    repeatedWords.push({ word: display, count: matches.length + 1 });
                 }
             }
         }
 
-        // 3. 同じ機能を持つ表現群の反復チェック
-        // 異なる表現でも同じ機能なら反復とみなす
-        const functionalGroups = [
-            {
-                name: "因果関係",
-                patterns: [/ので/g, /ため/g, /から/g, /によって/g, /ことで/g],
-                display: "因果表現（ので/ため/から等）"
-            },
-            {
-                name: "逆接",
-                patterns: [/しかし/g, /だが/g, /けれど/g, /けど/g, /ものの/g, /のに/g],
-                display: "逆接表現（しかし/だが/けれど等）"
-            },
-            {
-                name: "推測・断定",
-                patterns: [/だろう/g, /であろう/g, /と思う/g, /と考える/g, /ではないか/g],
-                display: "推測表現（だろう/と思う等）"
-            }
-        ];
-
-        for (const group of functionalGroups) {
-            let totalCount = 0;
-            const foundPatterns: string[] = [];
-            
-            for (const pattern of group.patterns) {
-                const matches = text.match(pattern);
-                if (matches && matches.length > 0) {
-                    totalCount += matches.length;
-                    // パターンから表示用文字列を抽出
-                    const patternStr = pattern.source;
-                    if (!foundPatterns.includes(patternStr)) {
-                        foundPatterns.push(patternStr);
-                    }
-                }
-            }
-            
-            // 同じ機能の表現が2回以上使われている場合
-            if (totalCount >= 2 && !repeatedWords.some(w => w.word === group.display)) {
-                repeatedWords.push({ 
-                    word: `${group.display}：${foundPatterns.join("、")}`, 
-                    count: totalCount 
-                });
-            }
-        }
-
-        // 4. 汎用的な反復検出（3文字以上の同一文字列が2回以上出現）
-        const threeCharPatterns = text.match(/(.{3,}?).*\1/g);
-        if (threeCharPatterns) {
-            for (const pattern of threeCharPatterns) {
-                const match = pattern.match(/(.{3,}?).*\1/);
-                if (match && match[1]) {
-                    const repeated = match[1];
-                    // 助詞や接続詞、機能表現は除外（上で検出済み）
-                    const excludePatterns = [
-                        "ている", "ていた", "である", "ですが", "ますが", 
-                        "のです", "のだと", "ので", "ため", "から"
-                    ];
-                    if (!excludePatterns.includes(repeated) && !repeatedWords.some(w => w.word.includes(repeated))) {
-                        const fullMatches = text.match(new RegExp(repeated.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'), 'g'));
-                        if (fullMatches && fullMatches.length >= 2) {
-                            repeatedWords.push({ word: repeated, count: fullMatches.length });
-                        }
-                    }
-                }
-            }
-        }
-
-        // 減点計算: 2回→5%, 3回以上→10%
+        // 減点計算: 違和感のある繰り返しが見つかった場合のみ5%減点
+        // （過度に厳しくしない）
         let deduction = 0;
-        for (const item of repeatedWords) {
-            if (item.count >= 3) {
-                deduction = Math.max(deduction, 10);
-            } else if (item.count === 2) {
-                deduction = Math.max(deduction, 5);
-            }
+        if (repeatedWords.length > 0) {
+            deduction = 5;
         }
 
         return {

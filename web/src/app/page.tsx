@@ -80,6 +80,8 @@ export default function Home() {
   const [smallFormat, setSmallFormat] = useState<'number' | 'paren-number' | 'paren-alpha' | 'number-sub'>('number');
 
   const [selectedProblems, setSelectedProblems] = useState<string[]>([]);
+  const [currentPoints, setCurrentPoints] = useState('');
+  const [problemPoints, setProblemPoints] = useState<Record<string, number>>({});
   const [currentBig, setCurrentBig] = useState(1);
   const [currentSmall, setCurrentSmall] = useState(1);
   const [currentSub, setCurrentSub] = useState(1); // サブ番号（問1-2の「2」）
@@ -305,6 +307,9 @@ export default function Home() {
     const safeStudentName = studentName ? escapeHtml(studentName) : '';
     const safeTeacherName = teacherName ? escapeHtml(teacherName) : '';
     const safeLabel = escapeHtml(res.label);
+    const maxPoints = problemPoints[res.label];
+    const safeMaxPoints = Number.isFinite(maxPoints) && maxPoints > 0 ? maxPoints : null;
+    const earnedPoints = safeMaxPoints ? (score / 100) * safeMaxPoints : null;
     
     const feedback = {
       good_point: escapeHtml(editedFeedbacks[index]?.good_point ?? gradingResult.feedback_content.good_point ?? ''),
@@ -407,6 +412,12 @@ export default function Home() {
         font-size: 18pt;
         color: #94a3b8;
         margin-left: 2px;
+      }
+      .score-points {
+        margin-top: 6px;
+        font-size: 10pt;
+        color: #475569;
+        font-weight: 600;
       }
       .deduction-list {
         font-size: 9pt;
@@ -570,6 +581,7 @@ export default function Home() {
       <div class="score-box">
         <div class="score-label">総合スコア (100%満点)</div>
         <div><span class="score-value">${score}</span><span class="score-unit">%</span></div>
+        ${safeMaxPoints && earnedPoints !== null ? `<div class="score-points">得点: ${formatPointsValue(earnedPoints)} / ${formatPointsValue(safeMaxPoints)} 点</div>` : ''}
         ${deductionDetails.length > 0 ? `<ul class="deduction-list">${deductionListItems}</ul>` : ''}
       </div>
       <div class="feedback-column">
@@ -1075,12 +1087,32 @@ export default function Home() {
     }
   };
 
+  const parsePointsValue = (value: string): number | null => {
+    const trimmed = value.trim();
+    if (!trimmed) return null;
+    const parsed = Number(trimmed);
+    if (!Number.isFinite(parsed) || parsed <= 0) return null;
+    return parsed;
+  };
+
+  const formatPointsValue = (value: number): string => {
+    const rounded = Math.round(value * 10) / 10;
+    return Number.isInteger(rounded) ? String(rounded) : rounded.toFixed(1).replace(/\.0$/, '');
+  };
+
   const addProblem = () => {
     const label = generateProblemLabel();
     if (!label || selectedProblems.includes(label)) {
       return; // 空または重複チェック
     }
     setSelectedProblems([...selectedProblems, label]);
+    const parsedPoints = parsePointsValue(currentPoints);
+    setProblemPoints((prev) => {
+      if (parsedPoints === null) {
+        return prev;
+      }
+      return { ...prev, [label]: parsedPoints };
+    });
     // 自由入力の場合はクリア
     if (problemFormat === 'free') {
       setFreeInput('');
@@ -1125,18 +1157,37 @@ export default function Home() {
     
     if (newLabels.length > 0) {
       setSelectedProblems([...selectedProblems, ...newLabels]);
+      const parsedPoints = parsePointsValue(currentPoints);
+      if (parsedPoints !== null) {
+        setProblemPoints((prev) => {
+          const next = { ...prev };
+          newLabels.forEach((label) => {
+            next[label] = parsedPoints;
+          });
+          return next;
+        });
+      }
     }
   };
 
   // 全クリア
   const clearAllProblems = () => {
     setSelectedProblems([]);
+    setProblemPoints({});
   };
 
   const removeProblem = (index: number) => {
     const newProblems = [...selectedProblems];
+    const removedLabel = newProblems[index];
     newProblems.splice(index, 1);
     setSelectedProblems(newProblems);
+    if (removedLabel) {
+      setProblemPoints((prev) => {
+        const next = { ...prev };
+        delete next[removedLabel];
+        return next;
+      });
+    }
   };
 
   const openAuthModal = (mode: 'signin' | 'signup') => {
@@ -1171,6 +1222,12 @@ export default function Home() {
         return;
       }
       targetLabels = [currentLabel];
+    }
+    if (targetLabels.length === 1 && selectedProblems.length === 0) {
+      const parsedPoints = parsePointsValue(currentPoints);
+      if (parsedPoints !== null) {
+        setProblemPoints((prev) => ({ ...prev, [targetLabels[0]]: parsedPoints }));
+      }
     }
     
     // 画像ファイルを圧縮（10枚対応）
@@ -2520,6 +2577,16 @@ export default function Home() {
                     </>
                   )}
 
+                  <input
+                    type="number"
+                    min="1"
+                    step="0.1"
+                    value={currentPoints}
+                    onChange={(e) => setCurrentPoints(e.target.value)}
+                    placeholder="配点"
+                    className="w-24 text-center bg-white border border-slate-200 text-slate-700 py-3 px-3 rounded-xl leading-tight focus:outline-none focus:ring-2 focus:ring-indigo-500 font-bold"
+                  />
+
                   {/* 追加ボタン（単一 or 一括） */}
                   {isBatchMode && problemFormat !== 'free' ? (
                     <button
@@ -2563,6 +2630,9 @@ export default function Home() {
                         {selectedProblems.map((label, index) => (
                           <div key={index} className="bg-indigo-50 text-indigo-700 px-4 py-2 rounded-full font-bold text-sm flex items-center shadow-sm border border-indigo-100">
                             {label}
+                            {Number.isFinite(problemPoints[label]) ? (
+                              <span className="ml-2 text-xs text-indigo-500 font-semibold">配点{formatPointsValue(problemPoints[label])}点</span>
+                            ) : null}
                             <button
                               type="button"
                               onClick={() => removeProblem(index)}
@@ -3305,6 +3375,7 @@ export default function Home() {
                       studentName={studentName || undefined}
                       teacherName={teacherName || undefined}
                       editedFeedback={editedFeedbacks[index]}
+                      maxPoints={problemPoints[res.label] ?? null}
                     />
                   </div>
                 </div>

@@ -22,6 +22,7 @@ interface GradingReportProps {
     result: { grading_result?: GradingResult } | null;
     targetLabel: string;
     studentFile: File | null;
+    maxPoints?: number | null;
 }
 
 const normalizeScore = (score: number): number => {
@@ -30,8 +31,13 @@ const normalizeScore = (score: number): number => {
     return Math.min(100, Math.round(score));
 };
 
+const formatPoints = (value: number): string => {
+    const rounded = Math.round(value * 10) / 10;
+    return Number.isInteger(rounded) ? String(rounded) : rounded.toFixed(1).replace(/\.0$/, '');
+};
+
 export const GradingReport = React.forwardRef<HTMLDivElement, GradingReportProps>(
-    ({ result, targetLabel, studentFile }, ref) => {
+    ({ result, targetLabel, studentFile, maxPoints }, ref) => {
         const gradingResult = result?.grading_result;
         if (!gradingResult) return null;
 
@@ -42,6 +48,8 @@ export const GradingReport = React.forwardRef<HTMLDivElement, GradingReportProps
         });
 
         const score = normalizeScore(gradingResult.score);
+        const safeMaxPoints = typeof maxPoints === 'number' && Number.isFinite(maxPoints) && maxPoints > 0 ? maxPoints : null;
+        const earnedPoints = safeMaxPoints ? (score / 100) * safeMaxPoints : null;
         const deductionDetails = gradingResult.deduction_details ?? [];
 
         return (
@@ -75,6 +83,11 @@ export const GradingReport = React.forwardRef<HTMLDivElement, GradingReportProps
                             <span className="text-6xl font-black text-slate-800">{score}</span>
                             <span className="text-xl font-bold text-slate-400 ml-1">%</span>
                         </div>
+                        {safeMaxPoints && earnedPoints !== null && (
+                            <p className="mt-2 text-sm text-slate-600 font-semibold">
+                                得点: {formatPoints(earnedPoints)} / {formatPoints(safeMaxPoints)} 点
+                            </p>
+                        )}
                         {deductionDetails.length > 0 && (
                             <ul className="mt-3 text-sm text-slate-600 space-y-1">
                                 {deductionDetails.map((item) => (

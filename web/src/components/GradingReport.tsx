@@ -48,6 +48,7 @@ interface GradingReportProps {
     targetLabel: string;
     studentName?: string;
     teacherName?: string;
+    maxPoints?: number | null;
     editedFeedback?: {
         good_point?: string;
         improvement_advice?: string;
@@ -59,6 +60,11 @@ const normalizeScore = (score: number): number => {
     if (typeof score !== 'number' || Number.isNaN(score)) return 0;
     if (score <= 10) return Math.min(100, Math.round(score * 10));
     return Math.min(100, Math.round(score));
+};
+
+const formatPoints = (value: number): string => {
+    const rounded = Math.round(value * 10) / 10;
+    return Number.isInteger(rounded) ? String(rounded) : rounded.toFixed(1).replace(/\.0$/, '');
 };
 
 const getGradeColor = (grade: string): string => {
@@ -79,7 +85,7 @@ const getGradeColor = (grade: string): string => {
 };
 
 export const GradingReport = React.forwardRef<HTMLDivElement, GradingReportProps>(
-    ({ result, targetLabel, studentName, teacherName, editedFeedback }, ref) => {
+    ({ result, targetLabel, studentName, teacherName, editedFeedback, maxPoints }, ref) => {
         const gradingResult = result?.grading_result;
         if (!gradingResult) return null;
 
@@ -90,6 +96,8 @@ export const GradingReport = React.forwardRef<HTMLDivElement, GradingReportProps
         });
 
         const score = normalizeScore(gradingResult.score);
+        const safeMaxPoints = typeof maxPoints === 'number' && Number.isFinite(maxPoints) && maxPoints > 0 ? maxPoints : null;
+        const earnedPoints = safeMaxPoints ? (score / 100) * safeMaxPoints : null;
         const deductionDetails = gradingResult.deduction_details ?? [];
 
         // 編集されたフィードバックを優先して使用
@@ -155,6 +163,11 @@ export const GradingReport = React.forwardRef<HTMLDivElement, GradingReportProps
                             <span className="text-6xl font-black text-slate-800 print:text-5xl">{score}</span>
                             <span className="text-xl font-bold text-slate-400 ml-1 print:text-lg">%</span>
                         </div>
+                        {safeMaxPoints && earnedPoints !== null && (
+                            <p className="mt-2 text-sm text-slate-600 font-semibold print:text-xs">
+                                得点: {formatPoints(earnedPoints)} / {formatPoints(safeMaxPoints)} 点
+                            </p>
+                        )}
                         {gradingResult.problem_type === 'essay' && (
                             <div className="mt-2 inline-block bg-purple-100 text-purple-700 px-2 py-1 rounded text-xs font-medium print:text-[10px]">
                                 📝 作文・自由記述

@@ -7,9 +7,11 @@ import { Upload, FileText, CheckCircle, AlertCircle, Loader2, Sparkles, ArrowRig
 import { clsx } from 'clsx';
 
 export default function Home() {
-  const [selectedProblems, setSelectedProblems] = useState<{ big: number; small: number }[]>([]);
+  const [selectedProblems, setSelectedProblems] = useState<{ big: number; small: number; points?: number | null }[]>([]);
   const [currentBig, setCurrentBig] = useState(1);
   const [currentSmall, setCurrentSmall] = useState(1);
+  const [currentPoints, setCurrentPoints] = useState('');
+  const [submittedProblems, setSubmittedProblems] = useState<{ big: number; small: number; points?: number | null }[]>([]);
 
   const [studentFile, setStudentFile] = useState<File | null>(null);
   const [answerKeyFile, setAnswerKeyFile] = useState<File | null>(null);
@@ -30,11 +32,27 @@ export default function Home() {
     }
   };
 
+  const parsePointsValue = (value: string): number | null => {
+    const trimmed = value.trim();
+    if (!trimmed) return null;
+    const parsed = Number(trimmed);
+    if (!Number.isFinite(parsed) || parsed <= 0) return null;
+    return parsed;
+  };
+
+  const formatPointsValue = (value: number): string => {
+    const rounded = Math.round(value * 10) / 10;
+    return Number.isInteger(rounded) ? String(rounded) : rounded.toFixed(1).replace(/\.0$/, '');
+  };
+
   const addProblem = () => {
     if (selectedProblems.some(p => p.big === currentBig && p.small === currentSmall)) {
       return; // Duplicate check
     }
-    setSelectedProblems([...selectedProblems, { big: currentBig, small: currentSmall }]);
+    setSelectedProblems([
+      ...selectedProblems,
+      { big: currentBig, small: currentSmall, points: parsePointsValue(currentPoints) },
+    ]);
   };
 
   const removeProblem = (index: number) => {
@@ -53,8 +71,10 @@ export default function Home() {
     // If no problems are explicitly added to the list, use the currently selected one from dropdowns
     let targetProblems = selectedProblems;
     if (targetProblems.length === 0) {
-      targetProblems = [{ big: currentBig, small: currentSmall }];
+      targetProblems = [{ big: currentBig, small: currentSmall, points: parsePointsValue(currentPoints) }];
     }
+
+    setSubmittedProblems(targetProblems);
 
     setIsLoading(true);
     setError(null);
@@ -177,6 +197,15 @@ export default function Home() {
                       <svg className="fill-current h-4 w-4" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20"><path d="M9.293 12.95l.707.707L15.657 8l-1.414-1.414L10 10.828 5.757 6.586 4.343 8z" /></svg>
                     </div>
                   </div>
+                  <input
+                    type="number"
+                    min="1"
+                    step="0.1"
+                    value={currentPoints}
+                    onChange={(e) => setCurrentPoints(e.target.value)}
+                    placeholder="配点"
+                    className="w-24 text-center bg-white border border-slate-200 text-slate-700 py-3 px-3 rounded-xl leading-tight focus:outline-none focus:border-indigo-500 font-bold"
+                  />
                   <button
                     type="button"
                     onClick={addProblem}
@@ -192,6 +221,9 @@ export default function Home() {
                     {selectedProblems.map((p, index) => (
                       <div key={index} className="bg-indigo-50 text-indigo-700 px-4 py-2 rounded-full font-bold text-sm flex items-center shadow-sm border border-indigo-100">
                         大問{p.big} 問{p.small}
+                        {p.points !== null && p.points !== undefined ? (
+                          <span className="ml-2 text-xs text-indigo-500 font-semibold">配点{formatPointsValue(p.points)}点</span>
+                        ) : null}
                         <button
                           type="button"
                           onClick={() => removeProblem(index)}
@@ -369,6 +401,9 @@ export default function Home() {
 
           const deductionDetails = gradingResult?.deduction_details ?? [];
           const normalizedScore = gradingResult ? normalizeScore(gradingResult.score) : 0;
+          const maxPoints = submittedProblems[index]?.points;
+          const safeMaxPoints = typeof maxPoints === 'number' && Number.isFinite(maxPoints) && maxPoints > 0 ? maxPoints : null;
+          const earnedPoints = safeMaxPoints ? (normalizedScore / 100) * safeMaxPoints : null;
           const totalDeduction = deductionDetails.reduce(
             (sum: number, item: any) => sum + (Number(item?.deduction_percentage) || 0),
             0
@@ -408,6 +443,7 @@ export default function Home() {
                     result={res.result}
                     targetLabel={res.label}
                     studentFile={studentFile}
+                    maxPoints={submittedProblems[index]?.points ?? null}
                   />
                 </div>
 
@@ -496,6 +532,11 @@ export default function Home() {
                         </span>
                         <span className="text-2xl font-medium ml-2 opacity-80">%</span>
                       </div>
+                      {safeMaxPoints && earnedPoints !== null && (
+                        <p className="mt-2 text-sm text-indigo-100/90 font-semibold">
+                          得点: {formatPointsValue(earnedPoints)} / {formatPointsValue(safeMaxPoints)} 点
+                        </p>
+                      )}
                       <div className="mt-4 w-full bg-black/20 rounded-full h-2 overflow-hidden">
                         <div
                           className="bg-white h-full rounded-full transition-all duration-1000 ease-out"

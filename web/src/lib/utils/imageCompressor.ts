@@ -68,7 +68,14 @@ export const LOW_QUALITY_OPTIONS: CompressionOptions = {
  * 画像ファイルかどうかを判定
  */
 export function isImageFile(file: File): boolean {
-    return file.type.startsWith('image/');
+    // MIMEタイプでチェック
+    if (file.type.startsWith('image/')) {
+        return true;
+    }
+    // MIMEタイプが不正/未設定の場合、拡張子でチェック（スマホHEIC対応）
+    const name = file.name.toLowerCase();
+    const imageExtensions = ['.jpg', '.jpeg', '.png', '.gif', '.webp', '.bmp', '.heic', '.heif'];
+    return imageExtensions.some(ext => name.endsWith(ext));
 }
 
 /**

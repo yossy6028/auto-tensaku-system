@@ -38,10 +38,10 @@ export type CompressionOptions = {
  * ★重要: 解像度を下げすぎると手書き文字のOCRが失敗する
  */
 export const DEFAULT_COMPRESSION_OPTIONS: CompressionOptions = {
-    maxSizeMB: 0.6,
-    maxWidthOrHeight: IS_MOBILE ? 1600 : 2048,  // スマホ1600px、PC2048px（OCR精度確保）
+    maxSizeMB: 0.4,
+    maxWidthOrHeight: IS_MOBILE ? 1400 : 1600,  // スマホ1400px、PC1600px
     useWebWorker: false,
-    initialQuality: 0.8,
+    initialQuality: 0.65,
 };
 
 /**
@@ -58,10 +58,21 @@ export const HIGH_QUALITY_OPTIONS: CompressionOptions = {
  * 低品質圧縮設定（ファイル数が多い場合）
  */
 export const LOW_QUALITY_OPTIONS: CompressionOptions = {
-    maxSizeMB: 0.25,
-    maxWidthOrHeight: IS_MOBILE ? 1200 : 1400,  // スマホ1200px、PC1400px（最低限OCR可能）
+    maxSizeMB: 0.2,
+    maxWidthOrHeight: IS_MOBILE ? 1000 : 1200,  // より積極的に圧縮
     useWebWorker: false,
-    initialQuality: 0.6,
+    initialQuality: 0.5,
+};
+
+
+/**
+ * 超低品質圧縮設定（10枚以上の大量ファイル向け）
+ */
+export const ULTRA_LOW_OPTIONS: CompressionOptions = {
+    maxSizeMB: 0.15,
+    maxWidthOrHeight: IS_MOBILE ? 800 : 1000,  // 最小限の解像度
+    useWebWorker: false,
+    initialQuality: 0.4,
 };
 
 /**
@@ -313,7 +324,7 @@ export async function compressImage(
         console.log(`[Compress] HEIC detected: ${file.name}, converting to JPEG first...`);
         if (onProgress) onProgress(5);
 
-        const converted = await convertHeicToJpeg(file, 0.9);
+        const converted = await convertHeicToJpeg(file, 0.7);
         if (converted) {
             workingFile = converted;
             console.log(`[Compress] HEIC→JPEG conversion successful: ${file.name} → ${converted.name}`);
@@ -326,7 +337,7 @@ export async function compressImage(
     const fileSizeMB = workingFile.size / 1024 / 1024;
 
     // 小さいファイルはスキップ（ただしHEIC変換後は必ず返す）
-    if (fileSizeMB <= options.maxSizeMB && fileSizeMB < 0.5) {
+    if (fileSizeMB <= options.maxSizeMB && fileSizeMB < 0.15) {
         console.log(`[Compress] Skip compression: ${workingFile.name} (${fileSizeMB.toFixed(2)}MB)`);
         if (onProgress) onProgress(100);
         return workingFile;
@@ -429,9 +440,9 @@ export async function compressImage(
  * ファイル数に応じて最適な圧縮設定を選択
  */
 export function getOptimalCompressionOptions(fileCount: number): CompressionOptions {
-    if (fileCount <= 2) return HIGH_QUALITY_OPTIONS;
-    if (fileCount <= 5) return DEFAULT_COMPRESSION_OPTIONS;
-    return LOW_QUALITY_OPTIONS;
+    if (fileCount <= 2) return DEFAULT_COMPRESSION_OPTIONS;  // 2枚以下でもデフォルト
+    if (fileCount <= 4) return LOW_QUALITY_OPTIONS;          // 3-4枚は低品質
+    return ULTRA_LOW_OPTIONS;                                // 5枚以上は超低品質
 }
 
 /**

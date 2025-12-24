@@ -641,10 +641,10 @@ export default function Home() {
     printWindow.document.close();
     printWindow.focus();
 
-    // 画像読み込みを待つ
+    // 画像読み込みを待ってから印刷ダイアログを開く
+    // スマホではprint()が非同期のため、close()は呼ばない（ユーザーが手動で閉じる）
     setTimeout(() => {
       printWindow.print();
-      printWindow.close();
     }, 500);
   };
 

@@ -313,7 +313,7 @@ export async function compressImage(
         console.log(`[Compress] HEIC detected: ${file.name}, converting to JPEG first...`);
         if (onProgress) onProgress(5);
 
-        const converted = await convertHeicToJpeg(file, 0.9);
+        const converted = await convertHeicToJpeg(file, 0.7);
         if (converted) {
             workingFile = converted;
             console.log(`[Compress] HEIC→JPEG conversion successful: ${file.name} → ${converted.name}`);
@@ -326,7 +326,7 @@ export async function compressImage(
     const fileSizeMB = workingFile.size / 1024 / 1024;
 
     // 小さいファイルはスキップ（ただしHEIC変換後は必ず返す）
-    if (fileSizeMB <= options.maxSizeMB && fileSizeMB < 0.5) {
+    if (fileSizeMB <= options.maxSizeMB && fileSizeMB < 0.12) {
         console.log(`[Compress] Skip compression: ${workingFile.name} (${fileSizeMB.toFixed(2)}MB)`);
         if (onProgress) onProgress(100);
         return workingFile;
@@ -429,9 +429,21 @@ export async function compressImage(
  * ファイル数に応じて最適な圧縮設定を選択
  */
 export function getOptimalCompressionOptions(fileCount: number): CompressionOptions {
-    if (fileCount <= 2) return HIGH_QUALITY_OPTIONS;
-    if (fileCount <= 5) return DEFAULT_COMPRESSION_OPTIONS;
-    return LOW_QUALITY_OPTIONS;
+    // 10枚対応: ファイル数に応じて積極的に圧縮
+    if (fileCount <= 2) {
+        return DEFAULT_COMPRESSION_OPTIONS;
+    }
+    if (fileCount <= 4) {
+        // 3-4枚: 低品質設定
+        return LOW_QUALITY_OPTIONS;
+    }
+    // 5枚以上: 超低品質（動的生成でSSR問題回避）
+    return {
+        maxSizeMB: 0.15,
+        maxWidthOrHeight: 1000,
+        useWebWorker: false,
+        initialQuality: 0.4,
+    };
 }
 
 /**

@@ -1108,12 +1108,13 @@ export default function Home() {
     if (!trimmed) return null;
     const parsed = Number(trimmed);
     if (!Number.isFinite(parsed) || parsed <= 0) return null;
-    return parsed;
+    // 整数に丸める（小数点は不要）
+    return Math.floor(parsed);
   };
 
   const formatPointsValue = (value: number): string => {
-    const rounded = Math.round(value * 10) / 10;
-    return Number.isInteger(rounded) ? String(rounded) : rounded.toFixed(1).replace(/\.0$/, '');
+    // 整数のみを表示（小数点は不要）
+    return String(Math.floor(value));
   };
 
   const addProblem = () => {
@@ -2720,9 +2721,18 @@ export default function Home() {
                   <input
                     type="number"
                     min="1"
-                    step="0.1"
+                    step="1"
                     value={currentPoints}
-                    onChange={(e) => setCurrentPoints(e.target.value)}
+                    onChange={(e) => {
+                      const value = e.target.value;
+                      // 小数点を含む場合は整数部分のみを取得
+                      if (value.includes('.')) {
+                        const intValue = value.split('.')[0];
+                        setCurrentPoints(intValue);
+                      } else {
+                        setCurrentPoints(value);
+                      }
+                    }}
                     placeholder="配点"
                     className="w-24 text-center bg-white border border-slate-200 text-slate-700 py-3 px-3 rounded-xl leading-tight focus:outline-none focus:ring-2 focus:ring-indigo-500 font-bold"
                   />

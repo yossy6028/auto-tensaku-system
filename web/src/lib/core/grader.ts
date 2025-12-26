@@ -509,8 +509,30 @@ export class EduShiftGrader {
         gridInfo?: { columns: number; rows: number }
     ): string {
         const jsonInstruction = "JSONのみで返してください: {\"text\":\"<verbatim>\",\"char_count\":<空白改行除外の文字数>}";
+        
+        // 複合ラベル（大問X問Y形式）をパースして詳細な指示を生成
+        const compound = this.parseCompoundLabel(label);
+        let targetDescription: string;
+        
+        if (compound.mainNum !== null && compound.subNum !== null) {
+            // 複合ラベルの場合: より具体的に指定
+            const mainVariants = this.numberVariants(compound.mainNum).slice(0, 3).join("/");
+            const subVariants = this.numberVariants(compound.subNum).slice(0, 3).join("/");
+            targetDescription = [
+                `【重要: 対象の特定】`,
+                `この答案用紙には複数の大問があります。`,
+                `読み取るのは「大問${mainVariants}」の中の「問${subVariants}」の解答欄のみです。`,
+                `他の大問（大問${compound.mainNum - 1 > 0 ? compound.mainNum - 1 : compound.mainNum + 1}など）の問${compound.subNum}は絶対に読み取らないでください。`,
+                ``,
+                `「${label}」（大問${compound.mainNum}の問${compound.subNum}）の解答欄のみを対象に、手書き文字を一字一句そのまま書き出してください。`
+            ].join("\n");
+        } else {
+            // 通常のラベル
+            targetDescription = `「${label}」の解答欄のみを対象に、手書き文字を一字一句そのまま書き出してください。`;
+        }
+        
         const baseLines = [
-            `「${label}」の解答欄のみを対象に、手書き文字を一字一句そのまま書き出してください。`,
+            targetDescription,
             "要約・補完・修正は禁止です。",
             "",
             "【読み取り方法】",

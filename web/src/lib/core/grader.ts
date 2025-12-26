@@ -378,13 +378,21 @@ export class EduShiftGrader {
         fetch('http://127.0.0.1:7242/ingest/e78e9fd7-3fa2-45c5-b036-a4f10b20798a',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'grader.ts:performOcr:hasAllRoleCheck',message:'複合ファイルチェック',data:{hasAllRole,sanitizedLabel},timestamp:Date.now(),sessionId:'debug-session',hypothesisId:'A,C'})}).catch(()=>{});
         // #endregion
 
+        // 2段階OCR: まずマス目構造を分析（大きなファイルではスキップ）
+        let gridInfo: { columns: number; rows: number } | null = null;
+        if (!isLargeFile) {
+            console.log("[Grader] マス目構造分析を開始...");
+            gridInfo = await this.analyzeGridStructure(targetParts, ocrModelName);
+            // 分析結果はログに出力済み（成功/失敗問わず既存フローを続行）
+        }
+
         // 大きなファイルではプロンプト数を1つに削減（タイムアウト防止）
         const ocrPrompts = isLargeFile
             ? [this.buildOcrPrompt(sanitizedLabel, "primary", hasAllRole)]  // 大きなファイル: 1プロンプトのみ
             : [
-                this.buildOcrPrompt(sanitizedLabel, "primary", hasAllRole),
-                this.buildOcrPrompt(sanitizedLabel, "retry", hasAllRole),
-                this.buildOcrPrompt(sanitizedLabel, "detail", hasAllRole)
+                this.buildOcrPrompt(sanitizedLabel, "primary", hasAllRole, gridInfo ?? undefined),
+                this.buildOcrPrompt(sanitizedLabel, "retry", hasAllRole, gridInfo ?? undefined),
+                this.buildOcrPrompt(sanitizedLabel, "detail", hasAllRole, gridInfo ?? undefined)
             ];
         const fallbackPrompt = ocrPrompts[ocrPrompts.length - 1];
         // 大きなファイルではフォールバックモデルも無効化（タイムアウト防止）
@@ -494,7 +502,12 @@ export class EduShiftGrader {
         return { text: finalText, fullText: finalText, matchedTarget: true };
     }
 
-    private buildOcrPrompt(label: string, mode: "primary" | "retry" | "detail", hasAllRole?: boolean): string {
+    private buildOcrPrompt(
+        label: string,
+        mode: "primary" | "retry" | "detail",
+        hasAllRole?: boolean,
+        gridInfo?: { columns: number; rows: number }
+    ): string {
         const jsonInstruction = "JSONのみで返してください: {\"text\":\"<verbatim>\",\"char_count\":<空白改行除外の文字数>}";
         const baseLines = [
             `「${label}」の解答欄のみを対象に、手書き文字を一字一句そのまま書き出してください。`,
@@ -519,6 +532,16 @@ export class EduShiftGrader {
                 "読み取るのは「生徒の答案」（手書き部分）のみです。",
                 "問題文（印刷された設問）や模範解答（印刷されたテキスト）は絶対に読み取らないでください。",
                 "手書き文字と印刷文字を区別し、手書き部分のみを出力してください。",
+                ""
+            );
+        }
+
+        // マス目構造が判明している場合、具体的な情報を追加
+        if (gridInfo) {
+            const maxChars = gridInfo.columns * gridInfo.rows;
+            baseLines.unshift(
+                `【マス目情報】この解答欄は${gridInfo.columns}列×${gridInfo.rows}行のマス目です（最大${maxChars}文字）。`,
+                `各列を右から左へ順番に、各列は上から下へ${gridInfo.rows}文字ずつ読み取ってください。`,
                 ""
             );
         }
@@ -549,6 +572,65 @@ export class EduShiftGrader {
         const normalized = text.replace(/\s+/g, "");
         if (!normalized) return true;
         return /読み取れませんでした|読めません|判読不能|不鮮明|見つかりません|認識できません|空です/.test(text);
+    }
+
+    /**
+     * マス目構造を分析する（2段階OCRの1段階目）
+     * 失敗してもnullを返し、既存のOCRフローに影響を与えない
+     */
+    private async analyzeGridStructure(
+        parts: ContentPart[],
+        modelName?: string
+    ): Promise<{ columns: number; rows: number } | null> {
+        const resolvedModel = modelName || CONFIG.OCR_MODEL_NAME || CONFIG.MODEL_NAME;
+        
+        // シンプルなプロンプト（過去の教訓: 複雑なプロンプトは失敗する）
+        const prompt = `この画像にマス目（原稿用紙形式）があるか確認してください。
+マス目がある場合: {"has_grid": true, "columns": <列数>, "rows": <1列の行数>}
+マス目がない場合: {"has_grid": false}
+JSONのみ出力してください。`;
+
+        try {
+            const result = await withTimeout(
+                this.ai.models.generateContent({
+                    model: resolvedModel,
+                    contents: [{ role: "user", parts: [{ text: prompt }, ...parts] }],
+                    config: {
+                        ...this.ocrConfig,
+                        systemInstruction: this.ocrSystemInstruction
+                    }
+                }),
+                30000, // 30秒タイムアウト（構造分析は軽い処理）
+                "マス目構造分析"
+            );
+
+            const raw = result?.text?.trim() ?? "";
+            if (!raw) {
+                console.log("[Grader] マス目構造分析: 応答が空");
+                return null;
+            }
+
+            const parsed = this.extractJsonFromText(raw);
+            if (!parsed || parsed.has_grid === false) {
+                console.log("[Grader] マス目構造分析: マス目なし");
+                return null;
+            }
+
+            const columns = typeof parsed.columns === "number" ? parsed.columns : null;
+            const rows = typeof parsed.rows === "number" ? parsed.rows : null;
+
+            if (columns && rows && columns > 0 && rows > 0) {
+                console.log(`[Grader] ✅ マス目構造検出: ${columns}列 × ${rows}行 = 最大${columns * rows}文字`);
+                return { columns, rows };
+            }
+
+            console.log("[Grader] マス目構造分析: 無効な値", { columns, rows });
+            return null;
+        } catch (error) {
+            // 失敗しても既存フローに影響を与えない
+            console.warn("[Grader] マス目構造分析失敗（既存フローで続行）:", error instanceof Error ? error.message : error);
+            return null;
+        }
     }
 
     private parseOcrResponse(raw: string): { text: string; charCount: number } {

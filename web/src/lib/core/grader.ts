@@ -778,7 +778,55 @@ JSONのみ出力してください。`;
     /**
      * ラベル文字列から数値を抽出（例: "問9" -> 9, "問九" -> 9）
      */
+
+    /**
+     * 数字文字列（半角/全角/漢数字）を数値に変換
+     */
+    private parseNumberString(numStr: string): number | null {
+        // 全角数字を半角に変換
+        const halfWidth = numStr.replace(/[０-９]/g, d => String.fromCharCode(d.charCodeAt(0) - 0xFEE0));
+        
+        // 半角数字の場合
+        if (/^[0-9]+$/.test(halfWidth)) {
+            const parsed = parseInt(halfWidth, 10);
+            return Number.isFinite(parsed) ? parsed : null;
+        }
+
+        // 漢数字の場合
+        const map: Record<string, number> = {
+            "零": 0, "一": 1, "二": 2, "三": 3, "四": 4,
+            "五": 5, "六": 6, "七": 7, "八": 8, "九": 9, "十": 10
+        };
+
+        if (numStr === "十") return 10;
+        if (numStr.length === 1 && map[numStr] !== undefined) return map[numStr];
+        if (numStr.includes("十")) {
+            const [tens, ones] = numStr.split("十");
+            const tensValue = tens ? map[tens] ?? 1 : 1;
+            const onesValue = ones ? map[ones] ?? 0 : 0;
+            const total = tensValue * 10 + onesValue;
+            return Number.isFinite(total) ? total : null;
+        }
+
+        return null;
+    }
+
     private parseLabelNumber(label: string): number | null {
+        const cleanedLabel = label.replace(/\s+/g, "");
+
+        // パターン1: 「大問X問Y」「大問X-問Y」形式 → Y（小問番号）を返す
+        const daimonPattern = cleanedLabel.match(/大問[0-9０-９一二三四五六七八九十]+[の\-ー]?問([0-9０-９一二三四五六七八九十]+)/);
+        if (daimonPattern) {
+            return this.parseNumberString(daimonPattern[1]);
+        }
+
+        // パターン2: 「問X(Y)」「問X-Y」「問X（Y）」形式 → Y（枝番号）を返す
+        const subPattern = cleanedLabel.match(/問[0-9０-９一二三四五六七八九十]+[\(（\-ー]([0-9０-９一二三四五六七八九十]+)/);
+        if (subPattern) {
+            return this.parseNumberString(subPattern[1]);
+        }
+
+        // パターン3: 複合でない場合、最初の数値を返す（既存の動作）
         const digitMatch = label.match(/[0-9０-９]+/);
         if (digitMatch) {
             const halfWidth = digitMatch[0].replace(/[０-９]/g, d => String.fromCharCode(d.charCodeAt(0) - 0xFEE0));
@@ -786,6 +834,7 @@ JSONのみ出力してください。`;
             return Number.isFinite(parsed) ? parsed : null;
         }
 
+        // 漢数字のフォールバック
         const kanjiMatch = label.match(/[一二三四五六七八九十百千]+/);
         if (kanjiMatch) {
             const kanji = kanjiMatch[0];

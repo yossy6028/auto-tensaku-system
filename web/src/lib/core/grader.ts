@@ -392,13 +392,12 @@ export class EduShiftGrader {
         let fallbackLogged = false;
         let finalText = "";
         let charCount = 0;
-        let finalGridInfo: { has_grid?: boolean; chars_per_column?: number; columns_used?: number; column_readings?: string[] } | undefined = undefined;
 
         if (usePerImageOnly) {
             const perImageTexts: string[] = [];
             for (const part of targetParts) {
-                let bestValid: { text: string; charCount: number; gridInfo?: { has_grid?: boolean; chars_per_column?: number; columns_used?: number; column_readings?: string[] } } | null = null;
-                let bestFallback: { text: string; charCount: number; gridInfo?: { has_grid?: boolean; chars_per_column?: number; columns_used?: number; column_readings?: string[] } } | null = null;
+                let bestValid: { text: string; charCount: number } | null = null;
+                let bestFallback: { text: string; charCount: number } | null = null;
                 let bestFallbackCount = -1;
 
                 for (const prompt of ocrPrompts) {
@@ -436,8 +435,8 @@ export class EduShiftGrader {
 
             finalText = perImageTexts.join("\n").trim();
         } else {
-            let bestValid: { text: string; charCount: number; gridInfo?: { has_grid?: boolean; chars_per_column?: number; columns_used?: number; column_readings?: string[] } } | null = null;
-            let bestFallback: { text: string; charCount: number; gridInfo?: { has_grid?: boolean; chars_per_column?: number; columns_used?: number; column_readings?: string[] } } | null = null;
+            let bestValid: { text: string; charCount: number } | null = null;
+            let bestFallback: { text: string; charCount: number } | null = null;
             let bestValidCount = -1;
             let bestFallbackCount = -1;
 
@@ -472,19 +471,12 @@ export class EduShiftGrader {
 
             finalText = bestValid?.text ?? bestFallback?.text ?? "";
             charCount = bestValid?.charCount ?? bestFallback?.charCount ?? 0;
-            finalGridInfo = bestValid?.gridInfo ?? bestFallback?.gridInfo;
         }
 
-        console.log("[Grader] OCR結果:", {
-            text: finalText.substring(0, 100),
-            charCount,
-            hasGrid: finalGridInfo?.has_grid,
-            columnsUsed: finalGridInfo?.columns_used,
-            charsPerColumn: finalGridInfo?.chars_per_column
-        });
+        console.log("[Grader] OCR結果:", { text: finalText.substring(0, 100), charCount });
 
         // #region agent log
-        fetch('http://127.0.0.1:7242/ingest/e78e9fd7-3fa2-45c5-b036-a4f10b20798a',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'grader.ts:performOcr:result',message:'OCR結果',data:{hasAllRole,charCount,textPreview:finalText.substring(0,200),textFull:finalText.substring(0,500),gridInfo:finalGridInfo},timestamp:Date.now(),sessionId:'debug-session',hypothesisId:'A,E'})}).catch(()=>{});
+        fetch('http://127.0.0.1:7242/ingest/e78e9fd7-3fa2-45c5-b036-a4f10b20798a',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'grader.ts:performOcr:result',message:'OCR結果',data:{hasAllRole,charCount,textPreview:finalText.substring(0,200),textFull:finalText.substring(0,500)},timestamp:Date.now(),sessionId:'debug-session',hypothesisId:'A,E'})}).catch(()=>{});
         // #endregion
 
         if (!finalText || this.isOcrFailure(finalText)) {
@@ -503,35 +495,12 @@ export class EduShiftGrader {
     }
 
     private buildOcrPrompt(label: string, mode: "primary" | "retry" | "detail", hasAllRole?: boolean): string {
-        const jsonInstruction = `JSONのみで返してください:
-{
-  "text": "<verbatim>",
-  "char_count": <空白改行除外の文字数>,
-  "grid_info": {
-    "has_grid": <true/false マス目形式かどうか>,
-    "chars_per_column": <1列あたりの文字数（マス目がある場合）>,
-    "columns_used": <使用した列数（マス目がある場合）>,
-    "column_readings": ["列1の文字", "列2の文字", ...] (マス目がある場合)
-  }
-}`;
-
+        const jsonInstruction = "JSONのみで返してください: {\"text\":\"<verbatim>\",\"char_count\":<空白改行除外の文字数>}";
         const baseLines = [
             `「${label}」の解答欄のみを対象に、手書き文字を一字一句そのまま書き出してください。`,
             "要約・補完・修正は禁止です。",
-            "",
-            "【マス目（原稿用紙形式）の場合の読み取り方法】",
-            "- 縦書き: 右の列から左へ、各列は上から下へ読む",
-            "- 1マス1文字として、すべてのマスを順番に読み取る",
-            "- 空白マスも含めて、マスの位置を正確に数える",
-            "- 句読点も1文字（1マス）として数える",
-            "- 判読不能な文字は「〓」に置き換える",
-            "- 推測や補完は絶対に禁止",
-            "- grid_infoに列ごとの読み取り結果を記録する",
-            "",
-            "【マス目がない場合】",
-            "- 通常通り、右から左へ、上から下へ読む",
-            "- grid_info.has_grid = false とする",
-            "",
+            "縦書きは右から左へ、上から下へ読みます。",
+            "判読不能な文字は「〓」に置き換えてください。",
             "textは空にせず、何も読めない場合は「〓」のみを出力してください。",
             jsonInstruction
         ];
@@ -549,12 +518,10 @@ export class EduShiftGrader {
 
         if (mode === "retry") {
             baseLines.unshift("前回の読み取りが不十分だったため、特に慎重にOCRを実行してください。");
-            baseLines.unshift("【重要】マス目がある場合は、各マスを1つずつ確認して読み取ってください。");
         }
 
         if (mode === "detail") {
             baseLines.unshift("最終パスです。1文字ずつ確認し、数字・記号・単位・送り仮名まで原文通りに転写してください。");
-            baseLines.unshift("【最重要】マス目形式の場合、各列の全マスを上から下まで漏れなく読み取ってください。");
             baseLines.splice(baseLines.length - 1, 0, "解答欄以外の問題文・注釈・欄外メモは含めないでください。");
         }
 
@@ -571,59 +538,25 @@ export class EduShiftGrader {
         return /読み取れませんでした|読めません|判読不能|不鮮明|見つかりません|認識できません|空です/.test(text);
     }
 
-    private parseOcrResponse(raw: string): { text: string; charCount: number; gridInfo?: { has_grid?: boolean; chars_per_column?: number; columns_used?: number; column_readings?: string[] } } {
+    private parseOcrResponse(raw: string): { text: string; charCount: number } {
         const parsed = this.extractJsonFromText(raw);
         const parsedText = typeof parsed?.text === "string" ? parsed.text : "";
-
-        // grid_infoから列ごとの読み取り結果を取得
-        const gridInfo = parsed?.grid_info as {
-            has_grid?: boolean;
-            chars_per_column?: number;
-            columns_used?: number;
-            column_readings?: string[];
-        } | undefined;
-
-        let finalText = parsedText;
-
-        // マス目形式の場合、column_readingsから復元したテキストを優先
-        if (gridInfo?.has_grid && gridInfo.column_readings && Array.isArray(gridInfo.column_readings)) {
-            const rebuiltText = gridInfo.column_readings.join("");
-            if (rebuiltText.length > finalText.length) {
-                console.log(`[Grader] ✅ grid_info.column_readingsからテキストを復元: ${rebuiltText.length}文字 (元: ${finalText.length}文字)`);
-                console.log(`[Grader] マス目詳細: 列数=${gridInfo.columns_used}, 1列あたり=${gridInfo.chars_per_column}文字`);
-                finalText = rebuiltText;
-
-                // grid_infoの整合性チェック
-                const expectedChars = gridInfo.column_readings.reduce((sum, col, idx) => {
-                    const isLast = idx === gridInfo.column_readings!.length - 1;
-                    return sum + (isLast ? col.length : (gridInfo.chars_per_column || col.length));
-                }, 0);
-
-                if (rebuiltText.replace(/\s+/g, "").length !== expectedChars) {
-                    console.warn(`[Grader] ⚠️ grid_info不整合: 期待${expectedChars}文字 / 実際${rebuiltText.replace(/\s+/g, "").length}文字`);
-                }
-            }
-        } else if (gridInfo?.has_grid) {
-            console.warn("[Grader] ⚠️ マス目形式と認識されましたが、column_readingsが空です");
-        }
-
-        const baseText = finalText || raw;
+        const baseText = parsedText || raw;
         const normalized = baseText.replace(/[\r\n]+/g, "").trim();
         const parsedCount = typeof parsed?.char_count === "number" ? parsed.char_count : null;
         const charCount = parsedCount !== null && Number.isFinite(parsedCount)
             ? parsedCount
             : normalized.replace(/\s+/g, "").length;
-
-        return { text: normalized, charCount, gridInfo };
+        return { text: normalized, charCount };
     }
 
     private async runOcrAttempt(
         prompt: string,
         parts: ContentPart[],
         modelName?: string
-    ): Promise<{ text: string; charCount: number; gridInfo?: { has_grid?: boolean; chars_per_column?: number; columns_used?: number; column_readings?: string[] } }> {
+    ): Promise<{ text: string; charCount: number }> {
         const resolvedModel = modelName || CONFIG.OCR_MODEL_NAME || CONFIG.MODEL_NAME;
-        let best: { text: string; charCount: number; gridInfo?: { has_grid?: boolean; chars_per_column?: number; columns_used?: number; column_readings?: string[] } } | null = null;
+        let best: { text: string; charCount: number } | null = null;
         let bestCount = -1;
         let lastError: unknown = null;
 
@@ -735,7 +668,7 @@ export class EduShiftGrader {
             console.error("[Grader] OCR処理に失敗しました:", lastError);
         }
 
-        return { text: "", charCount: 0, gridInfo: undefined };
+        return { text: "", charCount: 0 };
     }
 
     /**

@@ -894,17 +894,61 @@ JSONのみ出力してください。`;
     }
 
     /**
+     * 複合ラベル（大問X問Y形式）から大問番号と小問番号の両方を抽出
+     */
+    private parseCompoundLabel(label: string): { mainNum: number | null; subNum: number | null } {
+        const cleanedLabel = label.replace(/\s+/g, "");
+
+        // パターン: 「大問X問Y」「大問X-問Y」「大問Xの問Y」形式
+        const daimonPattern = cleanedLabel.match(/大問([0-9０-９一二三四五六七八九十]+)[の\-ー]?問([0-9０-９一二三四五六七八九十]+)/);
+        if (daimonPattern) {
+            return {
+                mainNum: this.parseNumberString(daimonPattern[1]),
+                subNum: this.parseNumberString(daimonPattern[2])
+            };
+        }
+
+        // 複合ラベルでない場合はnullを返す
+        return { mainNum: null, subNum: null };
+    }
+
+    /**
      * ターゲット設問の開始行を検出する正規表現を構築
      */
     private buildTargetLabelPatterns(targetLabel: string, parsedNumber: number | null): RegExp[] {
-        const escape = (value: string) => value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+        const escape = (value: string) => value.replace(/[.*+?^${}()|[\\]\\]/g, "\\$&");
         const cleaned = targetLabel.replace(/\s+/g, "");
 
         const patterns: RegExp[] = [
             new RegExp(`^\\s*${escape(cleaned)}[\\s:：．\\.、)）】】\\]\\}]?`, "i")
         ];
 
-        if (parsedNumber !== null) {
+        // 複合ラベル（大問X問Y形式）をチェック
+        const compound = this.parseCompoundLabel(targetLabel);
+        
+        if (compound.mainNum !== null && compound.subNum !== null) {
+            // 複合ラベルの場合: 大問番号と小問番号の両方を使ってマッチング
+            const mainVariants = this.numberVariants(compound.mainNum)
+                .map(v => escape(v))
+                .join("|");
+            const subVariants = this.numberVariants(compound.subNum)
+                .map(v => escape(v))
+                .join("|");
+
+            // パターン: 「大問X」の後に「問Y」が続く形式
+            patterns.push(new RegExp(
+                `^\\s*(?:第\\s*)?大問\\s*[\\(（【\\[\\{]?\\s*(?:${mainVariants})\\s*[\\)）】\\]\\}]?[\\s:：．\\.、の\\-ー]*問\\s*[\\(（【\\[\\{]?\\s*(?:${subVariants})\\s*[\\)）】\\]\\}]?`,
+                "i"
+            ));
+            
+            // パターン: 「大問X-問Y」「大問X問Y」などの連続形式
+            patterns.push(new RegExp(
+                `大問\\s*(?:${mainVariants})[\\s\\-ー]*問\\s*(?:${subVariants})`,
+                "i"
+            ));
+
+        } else if (parsedNumber !== null) {
+            // 単純なラベルの場合: 既存の動作
             const variants = this.numberVariants(parsedNumber)
                 .map(v => escape(v))
                 .join("|");

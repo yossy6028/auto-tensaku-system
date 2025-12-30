@@ -136,6 +136,15 @@ export default function Home() {
   const [confirmedTexts, setConfirmedTexts] = useState<Record<string, string>>({});
   const [currentOcrLabel, setCurrentOcrLabel] = useState<string>('');
   const requestLockRef = useRef(false);
+  const isMountedRef = useRef(true);
+
+  // コンポーネントのマウント状態を追跡（メモリリーク防止）
+  useEffect(() => {
+    isMountedRef.current = true;
+    return () => {
+      isMountedRef.current = false;
+    };
+  }, []);
 
   // OCR手動修正モーダル（問題条件オーバーライド対応）
   const [ocrEditModal, setOcrEditModal] = useState<{ 
@@ -1006,17 +1015,41 @@ export default function Home() {
   }, []);
 
   // ファイル処理の共通ロジック
+  const MAX_FILE_SIZE = 50 * 1024 * 1024; // 50MB
+  const MAX_FILES = 10;
+  const VALID_EXTENSIONS = /\.(jpg|jpeg|png|gif|webp|bmp|heic|heif|pdf)$/i;
+
   const processFiles = useCallback(async (files: File[]) => {
     console.log(`[Page] File selected: ${files.length} files`);
 
-    // 画像またはPDFのみをフィルタリング
-    const validFiles = files.filter(f =>
-      f.type.startsWith('image/') || f.type === 'application/pdf'
-    );
+    // ファイル数の上限チェック
+    if (files.length > MAX_FILES) {
+      setError(`一度にアップロードできるファイルは${MAX_FILES}個までです。`);
+      return;
+    }
+
+    // 画像またはPDFのみをフィルタリング（MIMEタイプ + 拡張子 + サイズ）
+    const validFiles = files.filter(f => {
+      const validMimeType = f.type.startsWith('image/') || f.type === 'application/pdf';
+      const validExtension = VALID_EXTENSIONS.test(f.name);
+      const validSize = f.size <= MAX_FILE_SIZE;
+      return (validMimeType || validExtension) && validSize;
+    });
+
+    // フィルタリングされたファイル数をカウント
+    const filteredCount = files.length - validFiles.length;
 
     if (validFiles.length === 0) {
       console.log('[Page] No valid files (image/PDF) found');
+      if (isMountedRef.current) {
+        setError('画像ファイル（JPG、PNG、HEIC等）またはPDFファイルのみアップロードできます。（最大50MB）');
+      }
       return;
+    }
+
+    // 一部のファイルが除外された場合の警告
+    if (filteredCount > 0) {
+      console.warn(`[Page] ${filteredCount} invalid files filtered out`);
     }
 
     // 画像ファイルがある場合は圧縮処理
@@ -1025,16 +1058,21 @@ export default function Home() {
     let processedFiles = validFiles;
 
     if (shouldCompress) {
-      setIsCompressing(true);
-      setCompressionProgress(0);
-      setCompressionFileName('');
+      if (isMountedRef.current) {
+        setIsCompressing(true);
+        setCompressionProgress(0);
+        setCompressionFileName('');
+      }
 
       try {
         processedFiles = await compressWithTimeout(
           validFiles,
           (progress, fileName) => {
-            setCompressionProgress(progress);
-            setCompressionFileName(fileName);
+            // 非同期コールバック内でのアンマウントチェック
+            if (isMountedRef.current) {
+              setCompressionProgress(progress);
+              setCompressionFileName(fileName);
+            }
           }
         );
 
@@ -1044,9 +1082,11 @@ export default function Home() {
         console.error('[Page] Compression error:', err);
         processedFiles = validFiles;
       } finally {
-        setIsCompressing(false);
-        setCompressionProgress(0);
-        setCompressionFileName('');
+        if (isMountedRef.current) {
+          setIsCompressing(false);
+          setCompressionProgress(0);
+          setCompressionFileName('');
+        }
       }
     }
 
@@ -1069,10 +1109,12 @@ export default function Home() {
       }
     });
 
-    // ポップアップを表示
-    setPendingFiles(processedFiles);
-    setPendingFileRoles(initialRoles);
-    setShowFileRoleModal(true);
+    // ポップアップを表示（アンマウント後の更新を防止）
+    if (isMountedRef.current) {
+      setPendingFiles(processedFiles);
+      setPendingFileRoles(initialRoles);
+      setShowFileRoleModal(true);
+    }
   }, []);
 
   const handleFileChange = useCallback(async (e: React.ChangeEvent<HTMLInputElement>) => {

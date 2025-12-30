@@ -126,6 +126,9 @@ export default function Home() {
   const [compressionProgress, setCompressionProgress] = useState(0);
   const [compressionFileName, setCompressionFileName] = useState('');
 
+  // ドラッグ＆ドロップ状態
+  const [isDragging, setIsDragging] = useState(false);
+
   // OCR確認フロー用のステート
   type OcrFlowStep = 'idle' | 'ocr-loading' | 'confirm' | 'grading';
   const [ocrFlowStep, setOcrFlowStep] = useState<OcrFlowStep>('idle');
@@ -980,71 +983,118 @@ export default function Home() {
     }
   };
 
+  // ドラッグ＆ドロップ用のイベントハンドラー
+  const handleDragOver = useCallback((e: React.DragEvent<HTMLDivElement>) => {
+    e.preventDefault();
+    e.stopPropagation();
+  }, []);
+
+  const handleDragEnter = useCallback((e: React.DragEvent<HTMLDivElement>) => {
+    e.preventDefault();
+    e.stopPropagation();
+    setIsDragging(true);
+  }, []);
+
+  const handleDragLeave = useCallback((e: React.DragEvent<HTMLDivElement>) => {
+    e.preventDefault();
+    e.stopPropagation();
+    // ドロップゾーン内の子要素間を移動する際にleaveイベントが発火するのを防ぐ
+    if (e.currentTarget.contains(e.relatedTarget as Node)) {
+      return;
+    }
+    setIsDragging(false);
+  }, []);
+
+  // ファイル処理の共通ロジック
+  const processFiles = useCallback(async (files: File[]) => {
+    console.log(`[Page] File selected: ${files.length} files`);
+
+    // 画像またはPDFのみをフィルタリング
+    const validFiles = files.filter(f =>
+      f.type.startsWith('image/') || f.type === 'application/pdf'
+    );
+
+    if (validFiles.length === 0) {
+      console.log('[Page] No valid files (image/PDF) found');
+      return;
+    }
+
+    // 画像ファイルがある場合は圧縮処理
+    const hasImages = validFiles.some(f => isImageFile(f));
+    const shouldCompress = hasImages && shouldCompressImages(validFiles);
+    let processedFiles = validFiles;
+
+    if (shouldCompress) {
+      setIsCompressing(true);
+      setCompressionProgress(0);
+      setCompressionFileName('');
+
+      try {
+        processedFiles = await compressWithTimeout(
+          validFiles,
+          (progress, fileName) => {
+            setCompressionProgress(progress);
+            setCompressionFileName(fileName);
+          }
+        );
+
+        const totalSize = processedFiles.reduce((sum, f) => sum + f.size, 0);
+        console.log(`[Page] Compression complete: ${(totalSize / 1024 / 1024).toFixed(2)}MB`);
+      } catch (err) {
+        console.error('[Page] Compression error:', err);
+        processedFiles = validFiles;
+      } finally {
+        setIsCompressing(false);
+        setCompressionProgress(0);
+        setCompressionFileName('');
+      }
+    }
+
+    // 新しいファイルに対して役割を自動推定（初期値として）
+    const initialRoles: Record<number, FileRole> = {};
+    processedFiles.forEach((file, i) => {
+      const idx = i; // モーダル内でのインデックス
+      const name = file.name.toLowerCase();
+      if (/(answer|ans|student|解答|答案|生徒)/.test(name)) {
+        initialRoles[idx] = 'answer';
+      } else if (/(problem|question|課題|設問|問題|本文)/.test(name)) {
+        initialRoles[idx] = 'problem';
+      } else if (/(model|key|模範|解説|正解|解答例)/.test(name)) {
+        initialRoles[idx] = 'model';
+      } else {
+        // デフォルト: 1つ目は答案、2つ目以降は問題+模範解答
+        const existingAnswers = Object.values(initialRoles).filter(r => r === 'answer' || r === 'answer_problem' || r === 'all').length;
+        if (existingAnswers === 0) initialRoles[idx] = 'answer';
+        else initialRoles[idx] = 'problem_model';  // 問題と模範解答が一緒のケースが多い
+      }
+    });
+
+    // ポップアップを表示
+    setPendingFiles(processedFiles);
+    setPendingFileRoles(initialRoles);
+    setShowFileRoleModal(true);
+  }, []);
+
   const handleFileChange = useCallback(async (e: React.ChangeEvent<HTMLInputElement>) => {
     if (e.target.files && e.target.files.length > 0) {
       const files = Array.from(e.target.files);
-      console.log(`[Page] File selected: ${files.length} files`);
-      
-      // 画像ファイルがある場合は圧縮処理
-      const hasImages = files.some(f => isImageFile(f));
-      const shouldCompress = hasImages && shouldCompressImages(files);
-      let processedFiles = files;
-      
-      if (shouldCompress) {
-        setIsCompressing(true);
-        setCompressionProgress(0);
-        setCompressionFileName('');
-        
-        try {
-          processedFiles = await compressWithTimeout(
-            files,
-            (progress, fileName) => {
-              setCompressionProgress(progress);
-              setCompressionFileName(fileName);
-            }
-          );
-          
-          const totalSize = processedFiles.reduce((sum, f) => sum + f.size, 0);
-          console.log(`[Page] Compression complete: ${(totalSize / 1024 / 1024).toFixed(2)}MB`);
-        } catch (err) {
-          console.error('[Page] Compression error:', err);
-          processedFiles = files;
-        } finally {
-          setIsCompressing(false);
-          setCompressionProgress(0);
-          setCompressionFileName('');
-        }
-      }
-      
-      // 新しいファイルに対して役割を自動推定（初期値として）
-      const startIndex = uploadedFiles.length;
-      const initialRoles: Record<number, FileRole> = {};
-      processedFiles.forEach((file, i) => {
-        const idx = i; // モーダル内でのインデックス
-        const name = file.name.toLowerCase();
-        if (/(answer|ans|student|解答|答案|生徒)/.test(name)) {
-          initialRoles[idx] = 'answer';
-        } else if (/(problem|question|課題|設問|問題|本文)/.test(name)) {
-          initialRoles[idx] = 'problem';
-        } else if (/(model|key|模範|解説|正解|解答例)/.test(name)) {
-          initialRoles[idx] = 'model';
-        } else {
-          // デフォルト: 1つ目は答案、2つ目以降は問題+模範解答
-          const existingAnswers = Object.values(initialRoles).filter(r => r === 'answer' || r === 'answer_problem' || r === 'all').length;
-          if (existingAnswers === 0) initialRoles[idx] = 'answer';
-          else initialRoles[idx] = 'problem_model';  // 問題と模範解答が一緒のケースが多い
-        }
-      });
-      
-      // ポップアップを表示
-      setPendingFiles(processedFiles);
-      setPendingFileRoles(initialRoles);
-      setShowFileRoleModal(true);
-      
+      await processFiles(files);
       // ファイル入力の値をクリア（同じファイルを再度選択できるように）
       e.target.value = '';
     }
-  }, [uploadedFiles.length]);
+  }, [processFiles]);
+
+  // ドラッグ＆ドロップでファイルを受け取るハンドラー
+  const handleDrop = useCallback(async (e: React.DragEvent<HTMLDivElement>) => {
+    e.preventDefault();
+    e.stopPropagation();
+    setIsDragging(false);
+
+    const files = Array.from(e.dataTransfer.files);
+    if (files.length > 0) {
+      await processFiles(files);
+    }
+  }, [processFiles]);
 
   const removeFile = (index: number) => {
     setUploadedFiles(prev => {
@@ -2978,14 +3028,22 @@ export default function Home() {
                 </div>
 
                 <div className="group relative">
-                  <div className={clsx(
-                    "relative min-h-48 sm:min-h-72 border-2 border-dashed rounded-2xl sm:rounded-3xl transition-all duration-500 ease-out cursor-pointer overflow-hidden",
-                    isCompressing
-                      ? "border-amber-400 bg-amber-50/50 ring-4 ring-amber-400/20"
-                      : uploadedFiles.length > 0
-                      ? "border-indigo-500 bg-indigo-50/30 ring-4 ring-indigo-500/10"
-                      : "border-slate-300 bg-slate-50/50 hover:border-indigo-400 hover:bg-white hover:shadow-xl hover:shadow-indigo-100/40 active:bg-indigo-50"
-                  )}>
+                  <div
+                    className={clsx(
+                      "relative min-h-48 sm:min-h-72 border-2 border-dashed rounded-2xl sm:rounded-3xl transition-all duration-500 ease-out cursor-pointer overflow-hidden",
+                      isDragging
+                        ? "border-indigo-500 bg-indigo-100/60 scale-[1.02] shadow-xl shadow-indigo-200/50 ring-4 ring-indigo-500/30"
+                        : isCompressing
+                          ? "border-amber-400 bg-amber-50/50 ring-4 ring-amber-400/20"
+                          : uploadedFiles.length > 0
+                            ? "border-indigo-500 bg-indigo-50/30 ring-4 ring-indigo-500/10"
+                            : "border-slate-300 bg-slate-50/50 hover:border-indigo-400 hover:bg-white hover:shadow-xl hover:shadow-indigo-100/40 active:bg-indigo-50"
+                    )}
+                    onDragOver={handleDragOver}
+                    onDragEnter={handleDragEnter}
+                    onDragLeave={handleDragLeave}
+                    onDrop={handleDrop}
+                  >
                     <div className="absolute inset-0 bg-gradient-to-br from-indigo-500/5 to-violet-500/5 opacity-0 group-hover:opacity-100 transition-opacity duration-500"></div>
 
                     <input
@@ -3002,7 +3060,19 @@ export default function Home() {
                       "absolute inset-0 flex flex-col items-center justify-center p-4 sm:p-8 z-10",
                       isCompressing ? "cursor-wait" : "cursor-pointer"
                     )}>
-                      {isCompressing ? (
+                      {isDragging ? (
+                        <div className="text-center animate-pulse">
+                          <div className="w-16 h-16 sm:w-20 sm:h-20 bg-indigo-500 rounded-2xl sm:rounded-3xl shadow-xl flex items-center justify-center mx-auto mb-4 sm:mb-6 text-white">
+                            <Camera className="w-8 h-8 sm:w-10 sm:h-10" />
+                          </div>
+                          <span className="text-base sm:text-lg text-indigo-700 font-bold block mb-2">
+                            ここにドロップ！
+                          </span>
+                          <span className="text-xs sm:text-sm text-indigo-500 block">
+                            画像・PDFファイルを受け付けます
+                          </span>
+                        </div>
+                      ) : isCompressing ? (
                         <div className="animate-pulse text-center w-full">
                           <div className="w-16 h-16 sm:w-20 sm:h-20 bg-amber-100 rounded-2xl sm:rounded-3xl flex items-center justify-center mx-auto mb-4 text-amber-600">
                             <Loader2 className="w-8 h-8 sm:w-10 sm:h-10 animate-spin" />
@@ -3014,7 +3084,7 @@ export default function Home() {
                             {compressionFileName}
                           </span>
                           <div className="w-48 sm:w-64 h-2 bg-amber-200 rounded-full mx-auto mt-3 overflow-hidden">
-                            <div 
+                            <div
                               className="h-full bg-amber-500 rounded-full transition-all duration-300"
                               style={{ width: `${compressionProgress}%` }}
                             />
@@ -3045,7 +3115,7 @@ export default function Home() {
                             📸 写真をアップロード
                           </span>
                           <span className="text-xs sm:text-sm text-slate-500 block bg-slate-100/50 px-3 sm:px-4 py-1 rounded-full mb-2">
-                            タップして撮影 or 選択
+                            タップ or ドラッグ＆ドロップ
                           </span>
                           <span className="text-xs text-slate-400 block">
                             複数枚OK・自動で圧縮されます

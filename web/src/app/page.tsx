@@ -1,9 +1,9 @@
 /* eslint-disable @next/next/no-img-element */
 'use client';
 
-import React, { useState, useRef, useEffect, useCallback } from 'react';
+import React, { useState, useRef, useEffect, useCallback, useMemo } from 'react';
 import { GradingReport } from '@/components/GradingReport';
-import { FileText, CheckCircle, AlertCircle, Loader2, Sparkles, ArrowRight, BookOpen, PenTool, GraduationCap, Plus, Trash2, CreditCard, LogIn, UserPlus, Edit3, Save, X, User, UserCheck, ImageIcon, Camera } from 'lucide-react';
+import { FileText, CheckCircle, AlertCircle, AlertTriangle, Loader2, Sparkles, ArrowRight, BookOpen, PenTool, GraduationCap, Plus, Trash2, CreditCard, LogIn, UserPlus, Edit3, Save, X, User, UserCheck, ImageIcon, Camera } from 'lucide-react';
 import { clsx } from 'clsx';
 import { useAuth } from '@/components/AuthProvider';
 import { UserMenu } from '@/components/UserMenu';
@@ -13,6 +13,18 @@ import { DeviceLimitModal } from '@/components/DeviceLimitModal';
 import Link from 'next/link';
 import { compressMultipleImages, formatFileSize, isImageFile } from '@/lib/utils/imageCompressor';
 import { extractPdfPages } from '@/lib/utils/pdfPageExtractor';
+import { StudentCard } from '@/components/StudentCard';
+import { BatchProgress } from '@/components/BatchProgress';
+import { BatchResults } from '@/components/BatchResults';
+import {
+  StudentEntry,
+  BatchState,
+  BatchMode,
+  createStudentEntry,
+  MAX_STUDENTS,
+  FileRole as BatchFileRole,
+} from '@/lib/types/batch';
+import { Users } from 'lucide-react';
 
 type GradingStrictness = 'lenient' | 'standard' | 'strict';
 
@@ -73,6 +85,18 @@ export default function Home() {
   } = useAuth();
   const [isAuthModalOpen, setIsAuthModalOpen] = useState(false);
   const [authMode, setAuthMode] = useState<'signin' | 'signup'>('signin');
+
+  // バッチモード用の問題オプション
+  const PROBLEM_OPTIONS = [
+    { value: '問1', label: '問1' },
+    { value: '問2', label: '問2' },
+    { value: '問3', label: '問3' },
+    { value: '(1)', label: '(1)' },
+    { value: '(2)', label: '(2)' },
+    { value: '(3)', label: '(3)' },
+    { value: '大問1(1)', label: '大問1(1)' },
+    { value: '大問1(2)', label: '大問1(2)' },
+  ];
 
   // 問題形式タイプ: 'big-small' = 大問+小問, 'small-only' = 問のみ, 'free' = 自由入力
   const [problemFormat, setProblemFormat] = useState<'big-small' | 'small-only' | 'free'>('big-small');
@@ -182,6 +206,875 @@ export default function Home() {
     improvement_advice?: boolean;
     rewrite_example?: boolean;
   }>>({});
+
+  // ========== 一括処理モード用の状態 ==========
+  const [batchMode, setBatchMode] = useState<BatchMode>('single');
+  const [batchStudents, setBatchStudents] = useState<StudentEntry[]>([createStudentEntry()]);
+  const [batchState, setBatchState] = useState<BatchState>({
+    students: [],
+    currentIndex: -1,
+    isProcessing: false,
+    completedCount: 0,
+    successCount: 0,
+    errorCount: 0,
+  });
+  const [isGeneratingZip, setIsGeneratingZip] = useState(false);
+  // 共通ファイル（問題・模範解答）
+  const [sharedFiles, setSharedFiles] = useState<File[]>([]);
+  const [sharedFileRoles, setSharedFileRoles] = useState<Record<number, FileRole>>({});
+
+  // 一括OCR確認フロー用のステート
+  type BatchOcrStep = 'idle' | 'ocr-loading' | 'confirm';
+  const [batchOcrStep, setBatchOcrStep] = useState<BatchOcrStep>('idle');
+  // studentId -> label -> { text, charCount, layout }
+  type LayoutInfo = { total_lines: number; paragraph_count: number; indented_columns: number[] };
+  const [batchOcrResults, setBatchOcrResults] = useState<Record<string, Record<string, { text: string; charCount: number; layout?: LayoutInfo }>>>({});
+  // studentId -> label -> confirmedText
+  const [batchConfirmedTexts, setBatchConfirmedTexts] = useState<Record<string, Record<string, string>>>({});
+  // studentId -> label -> layout（採点時に渡す）
+  const [batchLayouts, setBatchLayouts] = useState<Record<string, Record<string, LayoutInfo>>>({});
+  const [currentBatchOcrIndex, setCurrentBatchOcrIndex] = useState<number>(0);
+
+  // 一括処理: 重複ファイル検出
+  // ファイル名+サイズで重複を検出（同じファイルが複数の生徒に割り当てられている場合に警告）
+  const duplicateFileWarnings = useMemo(() => {
+    const fileToStudents: Map<string, string[]> = new Map();
+
+    for (const student of batchStudents) {
+      for (const file of student.files) {
+        // ファイル名とサイズの組み合わせでユニーク識別
+        const fileKey = `${file.name}|${file.size}`;
+        const studentName = student.name || `生徒${batchStudents.indexOf(student) + 1}`;
+
+        if (!fileToStudents.has(fileKey)) {
+          fileToStudents.set(fileKey, []);
+        }
+        fileToStudents.get(fileKey)!.push(studentName);
+      }
+    }
+
+    // 2人以上の生徒に割り当てられているファイルを検出
+    const duplicates: { fileName: string; students: string[] }[] = [];
+    for (const [fileKey, students] of fileToStudents) {
+      if (students.length > 1) {
+        const fileName = fileKey.split('|')[0];
+        duplicates.push({ fileName, students });
+      }
+    }
+
+    return duplicates;
+  }, [batchStudents]);
+
+  // 一括処理: 生徒を追加
+  const addBatchStudent = useCallback(() => {
+    if (batchStudents.length >= MAX_STUDENTS) return;
+    setBatchStudents((prev) => [...prev, createStudentEntry()]);
+  }, [batchStudents.length]);
+
+  // 一括処理: 生徒を削除
+  const removeBatchStudent = useCallback((id: string) => {
+    setBatchStudents((prev) => {
+      if (prev.length <= 1) return prev;
+      return prev.filter((s) => s.id !== id);
+    });
+  }, []);
+
+  // 一括処理: 生徒を更新
+  const updateBatchStudent = useCallback((id: string, updates: Partial<StudentEntry>) => {
+    setBatchStudents((prev) =>
+      prev.map((s) => (s.id === id ? { ...s, ...updates } : s))
+    );
+  }, []);
+
+  // 一括処理: バリデーション
+  const validateBatchStudents = useCallback((): boolean => {
+    // 共通ファイル（問題・模範解答）のチェック
+    const hasProblem = Object.values(sharedFileRoles).some(
+      (role) => role === 'problem' || role === 'problem_model' || role === 'all'
+    );
+    const hasModel = Object.values(sharedFileRoles).some(
+      (role) => role === 'model' || role === 'problem_model' || role === 'all'
+    );
+    if (sharedFiles.length === 0 || (!hasProblem && !hasModel)) {
+      setError('共通ファイル（問題または模範解答）をアップロードしてください');
+      return false;
+    }
+
+    for (const student of batchStudents) {
+      if (!student.name.trim()) {
+        setError('すべての生徒に名前を入力してください');
+        return false;
+      }
+      if (student.files.length === 0) {
+        setError(`${student.name}の答案をアップロードしてください`);
+        return false;
+      }
+    }
+    return true;
+  }, [batchStudents, sharedFiles, sharedFileRoles]);
+
+  // 一括処理: 1人分の採点を実行
+  const gradeOneStudent = async (
+    student: StudentEntry,
+    labels: string[],
+    strictness: GradingStrictness
+  ): Promise<{ success: boolean; results?: GradingResponseItem[]; error?: string }> => {
+    try {
+      const formData = new FormData();
+      formData.append('targetLabels', JSON.stringify(labels));
+      formData.append('strictness', strictness);
+
+      // 共通ファイル（問題・模範解答）を追加
+      sharedFiles.forEach((file) => {
+        formData.append('files', file);
+      });
+
+      // 生徒の答案ファイルを追加
+      student.files.forEach((file) => {
+        formData.append('files', file);
+      });
+
+      // ファイル役割を結合（共通ファイル + 生徒ファイル）
+      const combinedRoles: Record<number, FileRole> = {};
+      // 共通ファイルの役割
+      Object.entries(sharedFileRoles).forEach(([idx, role]) => {
+        combinedRoles[parseInt(idx)] = role;
+      });
+      // 生徒ファイルの役割（インデックスをオフセット）
+      const offset = sharedFiles.length;
+      Object.entries(student.fileRoles).forEach(([idx, role]) => {
+        combinedRoles[parseInt(idx) + offset] = role;
+      });
+      formData.append('fileRoles', JSON.stringify(combinedRoles));
+
+      // デバイスフィンガープリント
+      if (deviceInfo?.fingerprint) {
+        formData.append('deviceFingerprint', deviceInfo.fingerprint);
+      }
+
+      const response = await fetch('/api/grade', {
+        method: 'POST',
+        body: formData,
+      });
+
+      const data = await response.json();
+
+      if (!response.ok) {
+        return { success: false, error: data.error || data.message || '採点に失敗しました' };
+      }
+
+      if (data.results && Array.isArray(data.results)) {
+        return { success: true, results: data.results };
+      }
+
+      return { success: false, error: 'レスポンスの形式が不正です' };
+    } catch (err) {
+      console.error('[BatchGrade] Error grading student:', student.name, err);
+      return { success: false, error: err instanceof Error ? err.message : '通信エラー' };
+    }
+  };
+
+  // 一括OCR確認フロー: OCRを実行（採点前）
+  const startBatchOcr = async () => {
+    if (!validateBatchStudents()) return;
+    if (selectedProblems.length === 0) {
+      setError('採点する問題を選択してください');
+      return;
+    }
+
+    // 重複ファイル警告チェック
+    if (duplicateFileWarnings.length > 0) {
+      const dupWarning = duplicateFileWarnings
+        .map(d => `  ・${d.fileName} → ${d.students.join(', ')}`)
+        .join('\n');
+      const shouldContinue = window.confirm(
+        `⚠️ 同じファイルが複数の生徒に割り当てられています:\n\n` +
+        `${dupWarning}\n\n` +
+        `同じファイルは同じ結果になります。続行しますか？`
+      );
+      if (!shouldContinue) {
+        return;
+      }
+    }
+
+    // 使用量チェック
+    if (usageInfo && usageInfo.usageLimit !== null && usageInfo.usageCount !== null) {
+      const requiredUsage = batchStudents.length;
+      const remainingUsage = usageInfo.usageLimit - usageInfo.usageCount;
+      if (remainingUsage < requiredUsage) {
+        setError(`使用可能回数が不足しています（残り${remainingUsage}回、必要${requiredUsage}回）`);
+        setRequirePlan(true);
+        return;
+      }
+
+      // 使用回数消費の確認アラート
+      const remainingAfter = remainingUsage - requiredUsage;
+      const confirmMessage =
+        `一括採点を開始します。\n\n` +
+        `・採点人数: ${requiredUsage}名\n` +
+        `・消費する回数: ${requiredUsage}回\n` +
+        `・採点後の残り回数: ${remainingAfter}回\n\n` +
+        `続行しますか？`;
+
+      if (!window.confirm(confirmMessage)) {
+        return;
+      }
+    } else {
+      // 使用量情報がない場合も確認
+      const confirmMessage =
+        `一括採点を開始します。\n\n` +
+        `・採点人数: ${batchStudents.length}名\n` +
+        `・消費する回数: ${batchStudents.length}回\n\n` +
+        `続行しますか？`;
+
+      if (!window.confirm(confirmMessage)) {
+        return;
+      }
+    }
+
+    setError(null);
+    setBatchOcrStep('ocr-loading');
+    setBatchOcrResults({});
+    setBatchConfirmedTexts({});
+    setBatchLayouts({});
+    setCurrentBatchOcrIndex(0);
+
+    const newOcrResults: Record<string, Record<string, { text: string; charCount: number; layout?: LayoutInfo }>> = {};
+    const newConfirmedTexts: Record<string, Record<string, string>> = {};
+    const newLayouts: Record<string, Record<string, LayoutInfo>> = {};
+
+    // 各生徒に対してOCRを実行
+    for (let i = 0; i < batchStudents.length; i++) {
+      const student = batchStudents[i];
+      setCurrentBatchOcrIndex(i);
+      newOcrResults[student.id] = {};
+      newConfirmedTexts[student.id] = {};
+
+      // 各問題ラベルに対してOCR
+      for (const label of selectedProblems) {
+        try {
+          const formData = new FormData();
+          formData.append('targetLabel', label);
+          formData.append('fileRoles', JSON.stringify({
+            ...sharedFileRoles,
+            ...Object.fromEntries(
+              Object.entries(student.fileRoles).map(([idx, role]) => [
+                parseInt(idx) + sharedFiles.length,
+                role,
+              ])
+            ),
+          }));
+
+          // 共通ファイル（問題・模範解答）を追加
+          sharedFiles.forEach((file) => {
+            formData.append('files', file);
+          });
+
+          // 生徒の答案ファイルを追加
+          student.files.forEach((file) => {
+            formData.append('files', file);
+          });
+
+          const res = await fetch('/api/ocr', {
+            method: 'POST',
+            body: formData,
+            credentials: 'include',
+          });
+
+          const data = await res.json();
+
+          if (res.ok && data.ocrResult) {
+            newOcrResults[student.id][label] = {
+              text: data.ocrResult.text,
+              charCount: data.ocrResult.charCount,
+              layout: data.ocrResult.layout,  // layout情報を保存
+            };
+            newConfirmedTexts[student.id][label] = data.ocrResult.text;
+            // layout情報があれば保存
+            if (data.ocrResult.layout) {
+              if (!newLayouts[student.id]) newLayouts[student.id] = {};
+              newLayouts[student.id][label] = data.ocrResult.layout;
+              console.log(`[BatchOCR] Layout for ${student.name}/${label}:`, data.ocrResult.layout);
+            }
+          } else {
+            // OCRエラーの場合は空文字で初期化
+            newOcrResults[student.id][label] = { text: '', charCount: 0 };
+            newConfirmedTexts[student.id][label] = '';
+            console.error(`[BatchOCR] Error for student ${student.name}, label ${label}:`, data.message);
+          }
+        } catch (err) {
+          console.error(`[BatchOCR] Error for student ${student.name}, label ${label}:`, err);
+          newOcrResults[student.id][label] = { text: '', charCount: 0 };
+          newConfirmedTexts[student.id][label] = '';
+        }
+      }
+    }
+
+    setBatchOcrResults(newOcrResults);
+    setBatchConfirmedTexts(newConfirmedTexts);
+    setBatchLayouts(newLayouts);  // layout情報を保存
+    setBatchOcrStep('confirm');
+    setCurrentBatchOcrIndex(0);
+  };
+
+  // 一括OCR確認フロー: 確認済みテキストで採点を実行
+  const executeBatchGradingWithConfirmed = async () => {
+    if (!validateBatchStudents()) return;
+    if (selectedProblems.length === 0) {
+      setError('採点する問題を選択してください');
+      return;
+    }
+
+    setBatchOcrStep('idle');
+    setError(null);
+    setIsLoading(true);
+
+    // 状態を初期化
+    const studentsWithStatus = batchStudents.map((s) => ({ ...s, status: 'pending' as const }));
+    setBatchStudents(studentsWithStatus);
+    setBatchState({
+      students: studentsWithStatus,
+      currentIndex: 0,
+      isProcessing: true,
+      completedCount: 0,
+      successCount: 0,
+      errorCount: 0,
+    });
+
+    let successCount = 0;
+    let errorCount = 0;
+
+    // 各生徒を順番に採点（確認済みテキストを使用）
+    for (let i = 0; i < batchStudents.length; i++) {
+      const student = batchStudents[i];
+
+      setBatchStudents((prev) =>
+        prev.map((s) => (s.id === student.id ? { ...s, status: 'processing' } : s))
+      );
+      setBatchState((prev) => ({ ...prev, currentIndex: i }));
+
+      // 確認済みテキストを取得
+      const confirmedForStudent = batchConfirmedTexts[student.id] || {};
+      // layout情報を取得（字下げ・行数・段落構成の判定に使用）
+      const layoutsForStudent = batchLayouts[student.id] || {};
+
+      // gradeOneStudentWithConfirmedText を呼び出す
+      const result = await gradeOneStudentWithConfirmed(student, selectedProblems, gradingStrictness, confirmedForStudent, layoutsForStudent);
+
+      if (result.success && result.results) {
+        successCount++;
+        setBatchStudents((prev) =>
+          prev.map((s) =>
+            s.id === student.id ? { ...s, status: 'success', results: result.results } : s
+          )
+        );
+      } else {
+        errorCount++;
+        setBatchStudents((prev) =>
+          prev.map((s) =>
+            s.id === student.id ? { ...s, status: 'error', errorMessage: result.error } : s
+          )
+        );
+      }
+
+      setBatchState((prev) => ({
+        ...prev,
+        completedCount: i + 1,
+        successCount,
+        errorCount,
+      }));
+    }
+
+    setBatchState((prev) => ({ ...prev, isProcessing: false }));
+    setIsLoading(false);
+
+    // 使用状況を更新
+    void refreshUsageInfo();
+  };
+
+  // 確認済みテキストで1人の生徒を採点
+  const gradeOneStudentWithConfirmed = async (
+    student: StudentEntry,
+    labels: string[],
+    strictness: GradingStrictness,
+    confirmedTexts: Record<string, string>,
+    layouts?: Record<string, LayoutInfo>
+  ): Promise<{ success: boolean; results?: GradingResponseItem[]; error?: string }> => {
+    try {
+      const formData = new FormData();
+      formData.append('targetLabels', JSON.stringify(labels));
+      formData.append('strictness', strictness);
+      formData.append('confirmedTexts', JSON.stringify(confirmedTexts));
+      // layout情報があれば渡す（字下げ・行数・段落構成の判定に使用）
+      if (layouts && Object.keys(layouts).length > 0) {
+        formData.append('layouts', JSON.stringify(layouts));
+        console.log('[BatchGrade] Passing layouts:', layouts);
+      }
+
+      // 共通ファイル（問題・模範解答）を追加
+      sharedFiles.forEach((file) => {
+        formData.append('files', file);
+      });
+
+      // 生徒の答案ファイルを追加
+      student.files.forEach((file) => {
+        formData.append('files', file);
+      });
+
+      // ファイル役割を結合（共通ファイル + 生徒ファイル）
+      const combinedRoles: Record<number, FileRole> = {};
+      Object.entries(sharedFileRoles).forEach(([idx, role]) => {
+        combinedRoles[parseInt(idx)] = role;
+      });
+      const offset = sharedFiles.length;
+      Object.entries(student.fileRoles).forEach(([idx, role]) => {
+        combinedRoles[parseInt(idx) + offset] = role;
+      });
+      formData.append('fileRoles', JSON.stringify(combinedRoles));
+
+      // デバイスフィンガープリント
+      if (deviceInfo?.fingerprint) {
+        formData.append('deviceFingerprint', deviceInfo.fingerprint);
+      }
+
+      const response = await fetch('/api/grade', {
+        method: 'POST',
+        body: formData,
+      });
+
+      const data = await response.json();
+
+      if (!response.ok) {
+        return { success: false, error: data.error || data.message || '採点に失敗しました' };
+      }
+
+      if (data.results && Array.isArray(data.results)) {
+        return { success: true, results: data.results };
+      }
+
+      return { success: false, error: 'レスポンスの形式が不正です' };
+    } catch (err) {
+      console.error('[BatchGrade] Error grading student with confirmed:', student.name, err);
+      return { success: false, error: err instanceof Error ? err.message : '通信エラー' };
+    }
+  };
+
+  // 一括OCR確認フロー: キャンセル
+  const cancelBatchOcr = () => {
+    setBatchOcrStep('idle');
+    setBatchOcrResults({});
+    setBatchConfirmedTexts({});
+    setCurrentBatchOcrIndex(0);
+  };
+
+  // 一括処理: 全生徒の採点を実行（OCR確認なし、直接採点）
+  const executeBatchGrading = async () => {
+    if (!validateBatchStudents()) return;
+    if (selectedProblems.length === 0) {
+      setError('採点する問題を選択してください');
+      return;
+    }
+
+    // 使用量チェック
+    if (usageInfo && usageInfo.usageLimit !== null && usageInfo.usageCount !== null) {
+      const requiredUsage = batchStudents.length;
+      const remainingUsage = usageInfo.usageLimit - usageInfo.usageCount;
+      if (remainingUsage < requiredUsage) {
+        setError(`使用可能回数が不足しています（残り${remainingUsage}回、必要${requiredUsage}回）`);
+        setRequirePlan(true);
+        return;
+      }
+    }
+
+    setError(null);
+    setIsLoading(true);
+
+    // 状態を初期化
+    const studentsWithStatus = batchStudents.map((s) => ({ ...s, status: 'pending' as const }));
+    setBatchStudents(studentsWithStatus);
+    setBatchState({
+      students: studentsWithStatus,
+      currentIndex: 0,
+      isProcessing: true,
+      completedCount: 0,
+      successCount: 0,
+      errorCount: 0,
+    });
+
+    let successCount = 0;
+    let errorCount = 0;
+
+    // 順次処理
+    for (let i = 0; i < batchStudents.length; i++) {
+      const student = batchStudents[i];
+
+      // 現在の生徒を処理中に設定
+      setBatchStudents((prev) =>
+        prev.map((s, idx) => (idx === i ? { ...s, status: 'processing' } : s))
+      );
+      setBatchState((prev) => ({ ...prev, currentIndex: i }));
+
+      // 採点を実行
+      const result = await gradeOneStudent(student, selectedProblems, gradingStrictness);
+
+      if (result.success && result.results) {
+        successCount++;
+        setBatchStudents((prev) =>
+          prev.map((s, idx) =>
+            idx === i ? { ...s, status: 'success', results: result.results } : s
+          )
+        );
+      } else {
+        errorCount++;
+        setBatchStudents((prev) =>
+          prev.map((s, idx) =>
+            idx === i ? { ...s, status: 'error', errorMessage: result.error } : s
+          )
+        );
+      }
+
+      setBatchState((prev) => ({
+        ...prev,
+        completedCount: i + 1,
+        successCount,
+        errorCount,
+      }));
+    }
+
+    setBatchState((prev) => ({ ...prev, isProcessing: false }));
+    setIsLoading(false);
+
+    // 使用量を更新
+    if (successCount > 0) {
+      await refreshUsageInfo();
+    }
+  };
+
+  // 一括処理: ZIPダウンロード
+  const handleDownloadZip = async () => {
+    const successStudents = batchStudents.filter((s) => s.status === 'success' && s.results);
+    if (successStudents.length === 0) return;
+
+    setIsGeneratingZip(true);
+
+    try {
+      // 動的にライブラリをインポート
+      const [JSZip, jsPDF, html2canvas] = await Promise.all([
+        import('jszip').then(m => m.default),
+        import('jspdf').then(m => m.jsPDF),
+        import('html2canvas').then(m => m.default),
+      ]);
+      const zip = new JSZip();
+
+      // 一時的なコンテナを作成
+      const container = document.createElement('div');
+      container.style.position = 'absolute';
+      container.style.left = '-9999px';
+      container.style.top = '0';
+      container.style.width = '210mm';
+      container.style.background = 'white';
+      document.body.appendChild(container);
+
+      // 各生徒のPDFを生成してZIPに追加
+      for (const student of successStudents) {
+        if (!student.results) continue;
+
+        for (const result of student.results) {
+          if (!result.result?.grading_result) continue;
+
+          const gr = result.result.grading_result;
+          const score = gr.score <= 10 ? Math.round(gr.score * 10) : Math.round(gr.score);
+          const today = new Date().toLocaleDateString('ja-JP', {
+            year: 'numeric',
+            month: 'long',
+            day: 'numeric',
+          });
+          const deductions = gr.deduction_details || [];
+          const maxPoints = problemPoints[result.label];
+          const earnedPoints = maxPoints ? Math.round((score / 100) * maxPoints) : null;
+
+          // HTMLレポートを作成
+          container.innerHTML = `
+            <div style="padding: 32px; font-family: 'Hiragino Sans', 'Hiragino Kaku Gothic ProN', 'Yu Gothic', sans-serif; color: #1e293b; line-height: 1.6;">
+              <!-- ヘッダー -->
+              <div style="display: flex; align-items: center; gap: 12px; margin-bottom: 16px;">
+                <div style="width: 40px; height: 40px; background: linear-gradient(135deg, #6366f1, #8b5cf6); border-radius: 8px;"></div>
+                <div>
+                  <p style="font-size: 11px; color: #64748b; margin: 0;">auto-tensaku-system</p>
+                  <p style="font-size: 14px; font-weight: bold; color: #1e293b; margin: 0;">EduShift</p>
+                </div>
+              </div>
+
+              <!-- 問題番号 -->
+              <div style="margin-bottom: 24px; padding-bottom: 16px; border-bottom: 3px solid #6366f1;">
+                <span style="display: inline-block; background: #4f46e5; color: white; padding: 12px 24px; border-radius: 8px; font-size: 20px; font-weight: bold;">
+                  ${result.label}
+                </span>
+              </div>
+
+              <!-- タイトルと情報 -->
+              <div style="display: flex; justify-content: space-between; align-items: flex-end; border-bottom: 2px solid #1e293b; padding-bottom: 16px; margin-bottom: 24px;">
+                <div>
+                  <h1 style="font-size: 24px; font-weight: bold; margin: 0 0 8px 0;">採点レポート</h1>
+                  <p style="font-size: 14px; color: #475569; margin: 0;">生徒名: ${student.name}</p>
+                </div>
+                <div style="text-align: right;">
+                  <p style="font-size: 12px; color: #64748b; margin: 0;">実施日: ${today}</p>
+                  ${teacherName ? `<p style="font-size: 12px; color: #475569; margin: 0;">添削担当: ${teacherName}</p>` : ''}
+                </div>
+              </div>
+
+              <!-- スコアセクション -->
+              <div style="display: flex; gap: 24px; margin-bottom: 24px;">
+                <div style="width: 33%; background: #f8fafc; border-radius: 12px; padding: 24px; border: 1px solid #e2e8f0; text-align: center;">
+                  <h2 style="color: #64748b; font-size: 12px; font-weight: bold; text-transform: uppercase; letter-spacing: 2px; margin: 0 0 8px 0;">総合スコア</h2>
+                  <div style="display: flex; align-items: baseline; justify-content: center;">
+                    <span style="font-size: 48px; font-weight: 900; color: #1e293b;">${score}</span>
+                    <span style="font-size: 18px; font-weight: bold; color: #94a3b8; margin-left: 4px;">%</span>
+                  </div>
+                  ${earnedPoints !== null ? `<p style="margin-top: 8px; font-size: 14px; color: #475569; font-weight: 600;">得点: ${earnedPoints} / ${maxPoints} 点</p>` : ''}
+                  ${deductions.length > 0 ? `
+                    <ul style="margin-top: 12px; font-size: 12px; color: #475569; list-style: none; padding: 0; text-align: left;">
+                      ${deductions.map((d: { reason?: string; deduction_percentage?: number }) => `<li style="margin-bottom: 4px;">・${d.reason} で -${d.deduction_percentage}%</li>`).join('')}
+                    </ul>
+                  ` : ''}
+                </div>
+                <div style="width: 67%;">
+                  <div style="background: #f0fdf4; border-radius: 12px; padding: 16px; border: 1px solid #bbf7d0; margin-bottom: 16px;">
+                    <h3 style="font-weight: bold; color: #166534; margin: 0 0 8px 0; font-size: 14px;">👍 良かった点</h3>
+                    <p style="font-size: 13px; color: #475569; margin: 0;">${gr.feedback_content?.good_point || ''}</p>
+                  </div>
+                  <div style="background: #eef2ff; border-radius: 12px; padding: 16px; border: 1px solid #c7d2fe;">
+                    <h3 style="font-weight: bold; color: #3730a3; margin: 0 0 8px 0; font-size: 14px;">💡 改善のアドバイス</h3>
+                    <p style="font-size: 13px; color: #475569; margin: 0;">${gr.feedback_content?.improvement_advice || ''}</p>
+                  </div>
+                </div>
+              </div>
+
+              <!-- AI読み取り結果 -->
+              ${gr.recognized_text || gr.recognized_text_full ? `
+              <div style="margin-bottom: 24px;">
+                <h2 style="font-size: 16px; font-weight: bold; border-left: 4px solid #60a5fa; padding-left: 12px; margin: 0 0 16px 0;">AI読み取り結果（確認用）</h2>
+                <div style="background: #eff6ff; border-radius: 12px; padding: 16px; border: 1px solid #bfdbfe;">
+                  <p style="font-size: 13px; color: #475569; margin: 0; white-space: pre-wrap; font-family: monospace;">${gr.recognized_text || gr.recognized_text_full}</p>
+                </div>
+              </div>
+              ` : ''}
+
+              <!-- 減点ポイント -->
+              ${deductions.length > 0 ? `
+              <div style="margin-bottom: 24px;">
+                <h2 style="font-size: 16px; font-weight: bold; border-left: 4px solid #ef4444; padding-left: 12px; margin: 0 0 16px 0;">減点ポイント</h2>
+                <table style="width: 100%; font-size: 13px; border-collapse: collapse;">
+                  <thead style="background: #f1f5f9;">
+                    <tr>
+                      <th style="padding: 12px; border-bottom: 1px solid #e2e8f0; text-align: left; font-weight: bold; color: #475569;">理由</th>
+                      <th style="padding: 12px; border-bottom: 1px solid #e2e8f0; text-align: right; font-weight: bold; color: #475569; width: 100px;">減点幅</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    ${deductions.map((d: { reason?: string; deduction_percentage?: number }) => `
+                      <tr style="border-bottom: 1px solid #f1f5f9;">
+                        <td style="padding: 12px; color: #475569;">${d.reason}</td>
+                        <td style="padding: 12px; color: #ef4444; font-weight: bold; text-align: right;">-${d.deduction_percentage}%</td>
+                      </tr>
+                    `).join('')}
+                  </tbody>
+                </table>
+              </div>
+              ` : ''}
+
+              <!-- 書き直し例 -->
+              <div style="margin-bottom: 24px;">
+                <h2 style="font-size: 16px; font-weight: bold; border-left: 4px solid #facc15; padding-left: 12px; margin: 0 0 16px 0;">満点の書き直し例</h2>
+                <div style="background: #fefce8; border-radius: 12px; padding: 24px; border: 1px solid #fef08a;">
+                  <p style="font-size: 14px; color: #1e293b; margin: 0; line-height: 1.8;">${gr.feedback_content?.rewrite_example || ''}</p>
+                </div>
+              </div>
+            </div>
+          `;
+
+          // html2canvasでキャンバスに変換
+          const canvas = await html2canvas(container, {
+            scale: 2,
+            useCORS: true,
+            backgroundColor: '#ffffff',
+          });
+
+          // jspdfでPDFに変換
+          const imgData = canvas.toDataURL('image/jpeg', 0.95);
+          const pdf = new jsPDF({
+            orientation: 'portrait',
+            unit: 'mm',
+            format: 'a4',
+          });
+
+          const pdfWidth = pdf.internal.pageSize.getWidth();
+          const pdfHeight = pdf.internal.pageSize.getHeight();
+          const imgWidth = canvas.width;
+          const imgHeight = canvas.height;
+          const ratio = Math.min(pdfWidth / imgWidth, pdfHeight / imgHeight);
+          const imgX = (pdfWidth - imgWidth * ratio) / 2;
+          const scaledHeight = imgHeight * ratio;
+
+          // 複数ページ対応
+          let heightLeft = scaledHeight;
+          let position = 0;
+          let pageCount = 0;
+
+          while (heightLeft > 0) {
+            if (pageCount > 0) {
+              pdf.addPage();
+            }
+            pdf.addImage(imgData, 'JPEG', imgX, position, imgWidth * ratio, scaledHeight);
+            heightLeft -= pdfHeight;
+            position -= pdfHeight;
+            pageCount++;
+          }
+
+          const pdfBlob = pdf.output('blob');
+          zip.file(`${student.name}_${result.label}.pdf`, pdfBlob);
+        }
+      }
+
+      // 一時コンテナを削除
+      document.body.removeChild(container);
+
+      const blob = await zip.generateAsync({ type: 'blob' });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = `採点結果_${new Date().toISOString().slice(0, 10)}.zip`;
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      URL.revokeObjectURL(url);
+    } catch (err) {
+      console.error('[BatchGrade] Error generating ZIP:', err);
+      setError('ZIPファイルの生成に失敗しました');
+    } finally {
+      setIsGeneratingZip(false);
+    }
+  };
+
+  // 採点結果を更新するハンドラ（編集機能用）
+  const handleUpdateResult = useCallback((studentId: string, label: string, updates: {
+    score?: number;
+    good_point?: string;
+    improvement_advice?: string;
+    rewrite_example?: string;
+    recognized_text?: string;
+  }) => {
+    setBatchStudents((prev) =>
+      prev.map((student) => {
+        if (student.id !== studentId) return student;
+        if (!student.results) return student;
+
+        const updatedResults = student.results.map((result) => {
+          if (result.label !== label) return result;
+
+          // 現在のgrading_resultを取得、なければ空のオブジェクトを作成
+          const currentGradingResult = result.result?.grading_result || {
+            score: 0,
+            feedback_content: {},
+          };
+          const currentFeedback = currentGradingResult.feedback_content || {};
+
+          // 更新されたgrading_resultを作成
+          const updatedGradingResult = {
+            ...currentGradingResult,
+            // スコアは0-100形式で保存（normalizeScoreが <= 10 を10倍するので、ここでは10で割る）
+            score: updates.score !== undefined ? updates.score / 10 : currentGradingResult.score,
+            recognized_text: updates.recognized_text ?? currentGradingResult.recognized_text,
+            feedback_content: {
+              ...currentFeedback,
+              good_point: updates.good_point ?? currentFeedback.good_point,
+              improvement_advice: updates.improvement_advice ?? currentFeedback.improvement_advice,
+              rewrite_example: updates.rewrite_example ?? currentFeedback.rewrite_example,
+            },
+          };
+
+          return {
+            ...result,
+            result: {
+              ...result.result,
+              grading_result: updatedGradingResult,
+              incomplete_grading: false, // 手動編集したらincomplete_gradingをfalseに
+            },
+          };
+        });
+
+        return {
+          ...student,
+          results: updatedResults,
+        };
+      })
+    );
+  }, []);
+
+  // 一括処理: 失敗した生徒を再試行
+  const retryFailedStudents = async () => {
+    const failedStudents = batchStudents.filter((s) => s.status === 'error');
+    if (failedStudents.length === 0) return;
+
+    setError(null);
+    setIsLoading(true);
+
+    // 失敗した生徒をpendingに戻す
+    setBatchStudents((prev) =>
+      prev.map((s) => (s.status === 'error' ? { ...s, status: 'pending', errorMessage: undefined } : s))
+    );
+
+    const currentSuccess = batchStudents.filter((s) => s.status === 'success').length;
+    let successCount = currentSuccess;
+    let errorCount = 0;
+
+    setBatchState((prev) => ({
+      ...prev,
+      isProcessing: true,
+      errorCount: 0,
+    }));
+
+    for (const student of failedStudents) {
+      const idx = batchStudents.findIndex((s) => s.id === student.id);
+
+      setBatchStudents((prev) =>
+        prev.map((s) => (s.id === student.id ? { ...s, status: 'processing' } : s))
+      );
+
+      const result = await gradeOneStudent(student, selectedProblems, gradingStrictness);
+
+      if (result.success && result.results) {
+        successCount++;
+        setBatchStudents((prev) =>
+          prev.map((s) =>
+            s.id === student.id ? { ...s, status: 'success', results: result.results } : s
+          )
+        );
+      } else {
+        errorCount++;
+        setBatchStudents((prev) =>
+          prev.map((s) =>
+            s.id === student.id ? { ...s, status: 'error', errorMessage: result.error } : s
+          )
+        );
+      }
+
+      setBatchState((prev) => ({
+        ...prev,
+        completedCount: successCount + errorCount + (batchStudents.length - failedStudents.length - currentSuccess),
+        successCount,
+        errorCount,
+      }));
+    }
+
+    setBatchState((prev) => ({ ...prev, isProcessing: false }));
+    setIsLoading(false);
+
+    if (successCount > currentSuccess) {
+      await refreshUsageInfo();
+    }
+  };
 
   const strictnessLabel = (s: GradingStrictness): string => {
     switch (s) {
@@ -2259,6 +3152,62 @@ export default function Home() {
                 </div>
               </div>
             </div>
+
+            {/* Batch Grading Feature Highlight */}
+            <div className="mt-8 mb-12 relative group max-w-4xl mx-auto text-left">
+              <div className="absolute inset-0 bg-gradient-to-r from-emerald-500/20 via-teal-500/20 to-cyan-500/20 blur-xl rounded-3xl transform group-hover:scale-105 transition-transform duration-500"></div>
+              <div className="relative bg-white/60 backdrop-blur-xl border border-white/60 rounded-3xl p-8 shadow-xl flex flex-col md:flex-row items-center gap-8">
+                <div className="flex-shrink-0 relative">
+                  <div className="absolute inset-0 bg-emerald-400 blur-2xl opacity-20 rounded-full animate-pulse-slow"></div>
+                  <div className="relative bg-gradient-to-br from-emerald-500 to-teal-600 w-20 h-20 rounded-2xl flex items-center justify-center shadow-lg transform -rotate-3 group-hover:-rotate-6 transition-transform duration-300">
+                    <Users className="w-10 h-10 text-white" />
+                  </div>
+                </div>
+                <div className="text-center md:text-left flex-1">
+                  <h3 className="text-2xl font-bold text-slate-800 mb-3 flex items-center justify-center md:justify-start gap-2">
+                    <span className="text-transparent bg-clip-text bg-gradient-to-r from-emerald-600 to-teal-600">塾の集団授業</span>
+                    にも対応！
+                  </h3>
+                  <p className="text-slate-600 leading-relaxed">
+                    同じ問題なら<span className="font-bold text-emerald-600">10名まで連続採点</span>が可能です。<br className="hidden md:block" />
+                    問題・模範解答は1回のアップロードでOK。各生徒の答案だけを追加すれば、まとめて採点できます。
+                  </p>
+                  <div className="mt-4 flex flex-wrap gap-2 justify-center md:justify-start">
+                    <span className="text-sm bg-emerald-100 text-emerald-700 px-3 py-1 rounded-full border border-emerald-200 font-medium">
+                      ⚡ 一括処理で時短
+                    </span>
+                    <span className="text-sm bg-teal-100 text-teal-700 px-3 py-1 rounded-full border border-teal-200 font-medium">
+                      📊 全員分をZIPダウンロード
+                    </span>
+                    <span className="text-sm bg-cyan-100 text-cyan-700 px-3 py-1 rounded-full border border-cyan-200 font-medium">
+                      👨‍🏫 先生の業務効率化
+                    </span>
+                  </div>
+                </div>
+                <div className="hidden md:block flex-shrink-0">
+                  <div className="bg-white rounded-xl p-4 transform rotate-2 group-hover:rotate-0 transition-transform duration-300 border border-slate-100 shadow-md w-48">
+                    <div className="flex items-center gap-2 text-xs text-emerald-600 mb-3 border-b border-slate-100 pb-2 font-bold">
+                      <Users className="w-4 h-4" />
+                      一括採点モード
+                    </div>
+                    <div className="space-y-2">
+                      <div className="flex items-center gap-2 text-xs">
+                        <div className="w-4 h-4 rounded-full bg-emerald-500 flex items-center justify-center text-white text-[8px]">✓</div>
+                        <span className="text-slate-600">生徒A 採点完了</span>
+                      </div>
+                      <div className="flex items-center gap-2 text-xs">
+                        <div className="w-4 h-4 rounded-full bg-emerald-500 flex items-center justify-center text-white text-[8px]">✓</div>
+                        <span className="text-slate-600">生徒B 採点完了</span>
+                      </div>
+                      <div className="flex items-center gap-2 text-xs">
+                        <div className="w-4 h-4 rounded-full bg-indigo-500 animate-pulse flex items-center justify-center text-white text-[8px]">⋯</div>
+                        <span className="text-slate-600">生徒C 採点中...</span>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </div>
           </div>
 
           {/* Login Card */}
@@ -2502,6 +3451,40 @@ export default function Home() {
         <div className="bg-white/70 backdrop-blur-2xl shadow-[0_20px_60px_-15px_rgba(0,0,0,0.1)] rounded-[2.5rem] overflow-hidden border border-white/60 ring-1 ring-white/60 transition-all duration-500 hover:shadow-[0_30px_70px_-15px_rgba(79,70,229,0.15)] relative">
           <div className="absolute top-0 left-0 w-full h-2 bg-gradient-to-r from-indigo-500 via-violet-500 to-fuchsia-500"></div>
           <div className="p-8 md:p-14">
+            {/* ========== Mode Toggle Tabs ========== */}
+            <div className="flex justify-center mb-8">
+              <div className="inline-flex bg-slate-100 rounded-xl p-1">
+                <button
+                  type="button"
+                  onClick={() => setBatchMode('single')}
+                  className={clsx(
+                    'flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-bold transition-all',
+                    batchMode === 'single'
+                      ? 'bg-white text-indigo-600 shadow-md'
+                      : 'text-slate-600 hover:text-slate-800'
+                  )}
+                >
+                  <User className="w-4 h-4" />
+                  個別採点
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setBatchMode('batch')}
+                  className={clsx(
+                    'flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-bold transition-all',
+                    batchMode === 'batch'
+                      ? 'bg-white text-indigo-600 shadow-md'
+                      : 'text-slate-600 hover:text-slate-800'
+                  )}
+                >
+                  <Users className="w-4 h-4" />
+                  一括採点 (最大{MAX_STUDENTS}名)
+                </button>
+              </div>
+            </div>
+
+            {batchMode === 'single' && (
+            <>
             <form onSubmit={handleOcrStart} className="space-y-12">
 
               {/* 採点可能問題数の案内 */}
@@ -3485,11 +4468,579 @@ export default function Home() {
                 <p className="text-sm text-indigo-600 mt-2">30秒〜2分程度かかる場合があります。<br />このままお待ちください。</p>
               </div>
             )}
+            </>
+            )}
+            {/* End of Single Mode UI (inside Main Card) */}
+
+            {/* ========== Batch Mode UI ========== */}
+            {batchMode === 'batch' && (
+              <div className="space-y-6">
+                {/* Batch Mode Warning */}
+                <div className="bg-amber-50 border-2 border-amber-300 rounded-xl p-4">
+                  <div className="flex items-start gap-3">
+                    <AlertCircle className="w-5 h-5 text-amber-600 flex-shrink-0 mt-0.5" />
+                    <div>
+                      <p className="font-bold text-amber-800">一括採点は全員同じ問題の場合のみ使用可能です</p>
+                      <p className="text-sm text-amber-700 mt-1">
+                        共通の問題・模範解答と、各生徒の答案をアップロードしてください。1名あたり1回分の使用回数がカウントされます。
+                      </p>
+                    </div>
+                  </div>
+                </div>
+
+                {/* Problem Selection for Batch Mode - Same as Single Mode */}
+                <div className="bg-indigo-50 border-2 border-indigo-200 rounded-xl p-4">
+                  <p className="text-sm font-bold text-indigo-800 mb-3 flex items-center gap-2">
+                    <FileText className="w-4 h-4" />
+                    採点する問題を選択（最大2問）
+                  </p>
+
+                  {/* 問題形式の選択 */}
+                  <div className="flex flex-wrap gap-2 justify-center mb-4">
+                    <button
+                      type="button"
+                      onClick={() => setProblemFormat('big-small')}
+                      disabled={batchState.isProcessing}
+                      className={`px-4 py-2 rounded-lg text-sm font-bold transition-all ${problemFormat === 'big-small'
+                        ? 'bg-indigo-600 text-white shadow-md'
+                        : 'bg-white text-slate-600 hover:bg-slate-100 border border-slate-200'
+                        }`}
+                    >
+                      大問＋小問
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setProblemFormat('small-only')}
+                      disabled={batchState.isProcessing}
+                      className={`px-4 py-2 rounded-lg text-sm font-bold transition-all ${problemFormat === 'small-only'
+                        ? 'bg-indigo-600 text-white shadow-md'
+                        : 'bg-white text-slate-600 hover:bg-slate-100 border border-slate-200'
+                        }`}
+                    >
+                      問のみ
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setProblemFormat('free')}
+                      disabled={batchState.isProcessing}
+                      className={`px-4 py-2 rounded-lg text-sm font-bold transition-all ${problemFormat === 'free'
+                        ? 'bg-indigo-600 text-white shadow-md'
+                        : 'bg-white text-slate-600 hover:bg-slate-100 border border-slate-200'
+                        }`}
+                    >
+                      自由入力
+                    </button>
+                  </div>
+
+                  {/* 小問の表記形式（自由入力以外で表示） */}
+                  {problemFormat !== 'free' && (
+                    <div className="flex flex-wrap gap-2 justify-center mb-4">
+                      <span className="text-xs font-bold text-slate-400 self-center mr-1">形式:</span>
+                      {['number', 'paren-number', 'paren-alpha', 'number-sub'].map((fmt) => (
+                        <button
+                          key={fmt}
+                          type="button"
+                          onClick={() => setSmallFormat(fmt as typeof smallFormat)}
+                          disabled={batchState.isProcessing}
+                          className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all ${smallFormat === fmt
+                            ? 'bg-violet-600 text-white shadow-md'
+                            : 'bg-white border border-slate-200 text-slate-600 hover:border-violet-300'
+                            }`}
+                        >
+                          {fmt === 'number' ? '問1' : fmt === 'paren-number' ? '(1)' : fmt === 'paren-alpha' ? '(a)' : '問1-2'}
+                        </button>
+                      ))}
+                    </div>
+                  )}
+
+                  {/* 問題番号入力 */}
+                  <div className="flex gap-2 items-center justify-center mb-4 flex-wrap">
+                    {problemFormat === 'free' ? (
+                      <input
+                        type="text"
+                        value={freeInput}
+                        onChange={(e) => setFreeInput(e.target.value)}
+                        placeholder="例: 問三、第2問(1)"
+                        disabled={batchState.isProcessing}
+                        className="flex-1 min-w-[150px] max-w-[200px] px-3 py-2 border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500 bg-white text-slate-700 text-sm text-center"
+                      />
+                    ) : (
+                      <>
+                        {problemFormat === 'big-small' && (
+                          <select
+                            value={currentBig}
+                            onChange={(e) => setCurrentBig(Number(e.target.value))}
+                            disabled={batchState.isProcessing}
+                            className="bg-white border border-slate-200 text-slate-700 py-2 px-3 rounded-lg text-sm font-bold"
+                          >
+                            {[...Array(10)].map((_, i) => (
+                              <option key={i + 1} value={i + 1}>大問{i + 1}</option>
+                            ))}
+                          </select>
+                        )}
+                        <select
+                          value={currentSmall}
+                          onChange={(e) => setCurrentSmall(Number(e.target.value))}
+                          disabled={batchState.isProcessing}
+                          className="bg-white border border-slate-200 text-slate-700 py-2 px-3 rounded-lg text-sm font-bold"
+                        >
+                          {problemFormat === 'big-small' && <option value={0}>なし</option>}
+                          {smallFormat === 'paren-alpha' ? (
+                            [...Array(26)].map((_, i) => (
+                              <option key={i + 1} value={i + 1}>({String.fromCharCode(97 + i)})</option>
+                            ))
+                          ) : smallFormat === 'paren-number' ? (
+                            [...Array(20)].map((_, i) => (
+                              <option key={i + 1} value={i + 1}>({i + 1})</option>
+                            ))
+                          ) : (
+                            [...Array(20)].map((_, i) => (
+                              <option key={i + 1} value={i + 1}>問{i + 1}</option>
+                            ))
+                          )}
+                        </select>
+                        {smallFormat === 'number-sub' && (
+                          <>
+                            <span className="text-slate-400 font-bold">-</span>
+                            <select
+                              value={currentSub}
+                              onChange={(e) => setCurrentSub(Number(e.target.value))}
+                              disabled={batchState.isProcessing}
+                              className="bg-white border border-slate-200 text-slate-700 py-2 px-3 rounded-lg text-sm font-bold"
+                            >
+                              {[...Array(10)].map((_, i) => (
+                                <option key={i + 1} value={i + 1}>{i + 1}</option>
+                              ))}
+                            </select>
+                          </>
+                        )}
+                      </>
+                    )}
+                    <input
+                      type="number"
+                      min="1"
+                      value={currentPoints}
+                      onChange={(e) => setCurrentPoints(e.target.value.split('.')[0])}
+                      placeholder="配点"
+                      disabled={batchState.isProcessing}
+                      className="w-20 text-center bg-white border border-slate-200 text-slate-700 py-2 px-2 rounded-lg text-sm font-bold"
+                    />
+                    <button
+                      type="button"
+                      onClick={addProblem}
+                      disabled={batchState.isProcessing || selectedProblems.length >= 2}
+                      className="bg-indigo-500 hover:bg-indigo-600 disabled:bg-slate-300 text-white font-bold py-2 px-3 rounded-lg transition-colors flex items-center"
+                    >
+                      <Plus className="w-4 h-4" />
+                    </button>
+                  </div>
+
+                  {/* 選択された問題 */}
+                  {selectedProblems.length > 0 ? (
+                    <div className="flex flex-wrap gap-2 justify-center">
+                      {selectedProblems.map((label, index) => (
+                        <div key={index} className="bg-white text-indigo-700 px-3 py-1.5 rounded-full font-bold text-sm flex items-center border border-indigo-200">
+                          {label}
+                          {Number.isFinite(problemPoints[label]) && (
+                            <span className="ml-1 text-xs text-indigo-500">({problemPoints[label]}点)</span>
+                          )}
+                          <button
+                            type="button"
+                            onClick={() => removeProblem(index)}
+                            disabled={batchState.isProcessing}
+                            className="ml-1 text-indigo-400 hover:text-red-500"
+                          >
+                            <X className="w-3 h-3" />
+                          </button>
+                        </div>
+                      ))}
+                      <button
+                        type="button"
+                        onClick={clearAllProblems}
+                        disabled={batchState.isProcessing}
+                        className="text-xs text-slate-500 hover:text-red-500 underline"
+                      >
+                        クリア
+                      </button>
+                    </div>
+                  ) : (
+                    <p className="text-xs text-orange-500 text-center">※ 採点する問題を追加してください</p>
+                  )}
+                </div>
+
+                {/* Shared Files Section (Problem & Model Answer) */}
+                <div className="bg-violet-50 border-2 border-violet-200 rounded-xl p-4">
+                  <p className="text-sm font-bold text-violet-800 mb-3 flex items-center gap-2">
+                    <FileText className="w-4 h-4" />
+                    共通ファイル（問題・模範解答）
+                  </p>
+                  <p className="text-xs text-violet-600 mb-3">
+                    全生徒に共通する問題用紙や模範解答をここにアップロードしてください
+                  </p>
+
+                  {/* Shared File Upload Area */}
+                  <div
+                    className="border-2 border-dashed border-violet-300 rounded-lg p-4 bg-white/50"
+                    onDragOver={(e) => e.preventDefault()}
+                    onDrop={(e) => {
+                      e.preventDefault();
+                      if (batchState.isProcessing) return;
+                      const files = Array.from(e.dataTransfer.files);
+                      setSharedFiles((prev) => [...prev, ...files]);
+                      // Auto-detect file roles
+                      const newRoles: Record<number, FileRole> = { ...sharedFileRoles };
+                      files.forEach((file, i) => {
+                        const idx = sharedFiles.length + i;
+                        const lower = file.name.toLowerCase();
+                        if (/problem|問題|mondai/.test(lower)) {
+                          newRoles[idx] = 'problem';
+                        } else if (/model|sample|模範|解答例|正答/.test(lower)) {
+                          newRoles[idx] = 'model';
+                        } else {
+                          newRoles[idx] = 'problem_model';
+                        }
+                      });
+                      setSharedFileRoles(newRoles);
+                    }}
+                  >
+                    {sharedFiles.length === 0 ? (
+                      <div className="text-center py-4">
+                        <FileText className="w-8 h-8 mx-auto text-violet-400 mb-2" />
+                        <p className="text-sm text-violet-600 mb-2">ファイルをドラッグ&ドロップ</p>
+                        <label className="cursor-pointer">
+                          <span className="inline-flex items-center gap-1 px-3 py-1.5 text-sm bg-violet-100 hover:bg-violet-200 text-violet-700 rounded-lg transition-colors">
+                            <Plus className="w-4 h-4" />
+                            ファイルを選択
+                          </span>
+                          <input
+                            type="file"
+                            multiple
+                            accept=".jpg,.jpeg,.png,.gif,.webp,.heic,.heif,.pdf"
+                            onChange={(e) => {
+                              if (!e.target.files) return;
+                              const files = Array.from(e.target.files);
+                              setSharedFiles((prev) => [...prev, ...files]);
+                              const newRoles: Record<number, FileRole> = { ...sharedFileRoles };
+                              files.forEach((file, i) => {
+                                const idx = sharedFiles.length + i;
+                                const lower = file.name.toLowerCase();
+                                if (/problem|問題|mondai/.test(lower)) {
+                                  newRoles[idx] = 'problem';
+                                } else if (/model|sample|模範|解答例|正答/.test(lower)) {
+                                  newRoles[idx] = 'model';
+                                } else {
+                                  newRoles[idx] = 'problem_model';
+                                }
+                              });
+                              setSharedFileRoles(newRoles);
+                              e.target.value = '';
+                            }}
+                            disabled={batchState.isProcessing}
+                            className="hidden"
+                          />
+                        </label>
+                      </div>
+                    ) : (
+                      <div className="space-y-2">
+                        {sharedFiles.map((file, idx) => (
+                          <div key={idx} className="flex items-center gap-2 p-2 bg-white rounded border border-violet-200">
+                            <FileText className="w-4 h-4 text-violet-500 flex-shrink-0" />
+                            <span className="flex-1 text-sm truncate">{file.name}</span>
+                            <select
+                              value={sharedFileRoles[idx] || 'problem_model'}
+                              onChange={(e) => setSharedFileRoles((prev) => ({ ...prev, [idx]: e.target.value as FileRole }))}
+                              disabled={batchState.isProcessing}
+                              className="text-xs border rounded px-1 py-0.5 bg-white"
+                            >
+                              <option value="problem">問題</option>
+                              <option value="model">模範解答</option>
+                              <option value="problem_model">問題+模範解答</option>
+                            </select>
+                            <button
+                              type="button"
+                              onClick={() => {
+                                setSharedFiles((prev) => prev.filter((_, i) => i !== idx));
+                                const newRoles: Record<number, FileRole> = {};
+                                Object.entries(sharedFileRoles).forEach(([key, val]) => {
+                                  const k = parseInt(key);
+                                  if (k < idx) newRoles[k] = val;
+                                  else if (k > idx) newRoles[k - 1] = val;
+                                });
+                                setSharedFileRoles(newRoles);
+                              }}
+                              disabled={batchState.isProcessing}
+                              className="p-1 text-gray-400 hover:text-red-500"
+                            >
+                              <X className="w-4 h-4" />
+                            </button>
+                          </div>
+                        ))}
+                        <label className="cursor-pointer block mt-2">
+                          <span className="inline-flex items-center gap-1 px-2 py-1 text-xs text-violet-600 hover:text-violet-800 transition-colors">
+                            <Plus className="w-3 h-3" />
+                            ファイルを追加
+                          </span>
+                          <input
+                            type="file"
+                            multiple
+                            accept=".jpg,.jpeg,.png,.gif,.webp,.heic,.heif,.pdf"
+                            onChange={(e) => {
+                              if (!e.target.files) return;
+                              const files = Array.from(e.target.files);
+                              setSharedFiles((prev) => [...prev, ...files]);
+                              const newRoles: Record<number, FileRole> = { ...sharedFileRoles };
+                              files.forEach((file, i) => {
+                                const idx = sharedFiles.length + i;
+                                const lower = file.name.toLowerCase();
+                                if (/problem|問題|mondai/.test(lower)) {
+                                  newRoles[idx] = 'problem';
+                                } else if (/model|sample|模範|解答例|正答/.test(lower)) {
+                                  newRoles[idx] = 'model';
+                                } else {
+                                  newRoles[idx] = 'problem_model';
+                                }
+                              });
+                              setSharedFileRoles(newRoles);
+                              e.target.value = '';
+                            }}
+                            disabled={batchState.isProcessing}
+                            className="hidden"
+                          />
+                        </label>
+                      </div>
+                    )}
+                  </div>
+                </div>
+
+                {/* Student Section Header */}
+                <div className="border-t-2 border-slate-200 pt-4">
+                  <p className="text-sm font-bold text-slate-700 flex items-center gap-2">
+                    <Users className="w-4 h-4" />
+                    各生徒の答案をアップロード
+                  </p>
+                  <p className="text-xs text-slate-500 mt-1">各生徒には答案ファイルのみアップロードしてください</p>
+                </div>
+
+                {/* Progress */}
+                {(batchState.isProcessing || batchState.completedCount > 0) && (
+                  <BatchProgress batchState={batchState} students={batchStudents} />
+                )}
+
+                {/* Student Cards */}
+                <div className="space-y-4">
+                  {batchStudents.map((student, index) => (
+                    <StudentCard
+                      key={student.id}
+                      student={student}
+                      index={index}
+                      onUpdate={updateBatchStudent}
+                      onRemove={removeBatchStudent}
+                      disabled={batchState.isProcessing}
+                    />
+                  ))}
+                </div>
+
+                {/* Duplicate File Warning */}
+                {duplicateFileWarnings.length > 0 && !batchState.isProcessing && (
+                  <div className="bg-amber-50 border-2 border-amber-300 rounded-xl p-4">
+                    <div className="flex items-start gap-3">
+                      <AlertTriangle className="w-5 h-5 text-amber-600 flex-shrink-0 mt-0.5" />
+                      <div>
+                        <h4 className="font-bold text-amber-800 mb-2">
+                          ⚠️ 同じファイルが複数の生徒に割り当てられています
+                        </h4>
+                        <ul className="text-sm text-amber-700 space-y-1">
+                          {duplicateFileWarnings.map((dup, idx) => (
+                            <li key={idx}>
+                              <span className="font-medium">{dup.fileName}</span>
+                              <span className="text-amber-600"> → </span>
+                              <span>{dup.students.join(', ')}</span>
+                            </li>
+                          ))}
+                        </ul>
+                        <p className="text-xs text-amber-600 mt-2">
+                          各生徒に異なる答案ファイルを割り当ててください。同じファイルだと同じ結果になります。
+                        </p>
+                      </div>
+                    </div>
+                  </div>
+                )}
+
+                {/* Add Student Button */}
+                {batchStudents.length < MAX_STUDENTS && !batchState.isProcessing && (
+                  <button
+                    type="button"
+                    onClick={addBatchStudent}
+                    className="w-full py-3 border-2 border-dashed border-slate-300 rounded-xl text-slate-500 hover:border-indigo-400 hover:text-indigo-600 transition-all flex items-center justify-center gap-2"
+                  >
+                    <Plus className="w-5 h-5" />
+                    生徒を追加 ({batchStudents.length}/{MAX_STUDENTS})
+                  </button>
+                )}
+
+                {/* Batch OCR Confirmation UI */}
+                {batchOcrStep === 'ocr-loading' && (
+                  <div className="bg-gradient-to-r from-blue-50 to-indigo-50 rounded-2xl p-6 border-2 border-blue-200">
+                    <div className="flex items-center gap-3 mb-4">
+                      <Loader2 className="w-6 h-6 text-blue-600 animate-spin" />
+                      <h3 className="font-bold text-lg text-blue-800">文字認識中...</h3>
+                    </div>
+                    <p className="text-blue-700 mb-2">
+                      {batchStudents[currentBatchOcrIndex]?.name || `生徒${currentBatchOcrIndex + 1}`} の答案を読み取っています...
+                    </p>
+                    <div className="w-full bg-blue-200 rounded-full h-3">
+                      <div
+                        className="bg-gradient-to-r from-blue-500 to-indigo-500 h-3 rounded-full transition-all duration-300"
+                        style={{ width: `${((currentBatchOcrIndex + 1) / batchStudents.length) * 100}%` }}
+                      />
+                    </div>
+                    <p className="text-sm text-blue-600 mt-2">{currentBatchOcrIndex + 1} / {batchStudents.length} 名完了</p>
+                  </div>
+                )}
+
+                {batchOcrStep === 'confirm' && (
+                  <div className="bg-gradient-to-r from-amber-50 to-orange-50 rounded-2xl p-6 border-2 border-amber-200 space-y-6">
+                    <div className="flex items-center justify-between">
+                      <div className="flex items-center gap-3">
+                        <Camera className="w-6 h-6 text-amber-600" />
+                        <h3 className="font-bold text-lg text-amber-800">読み取り結果の確認</h3>
+                      </div>
+                      <button
+                        onClick={cancelBatchOcr}
+                        className="px-4 py-2 text-slate-600 hover:text-slate-800 hover:bg-slate-100 rounded-lg transition-all"
+                      >
+                        <X className="w-5 h-5" />
+                      </button>
+                    </div>
+                    <p className="text-amber-700 text-sm">
+                      AIが読み取った答案テキストを確認・修正してください。修正後に採点が実行されます。
+                    </p>
+
+                    {/* 各生徒のOCR結果 */}
+                    <div className="space-y-4 max-h-[500px] overflow-y-auto">
+                      {batchStudents.map((student, studentIdx) => (
+                        <div key={student.id} className="bg-white rounded-xl p-4 border border-amber-100">
+                          <div className="flex items-center gap-2 mb-3">
+                            <User className="w-5 h-5 text-amber-600" />
+                            <span className="font-bold text-slate-800">
+                              {student.name || `生徒${studentIdx + 1}`}
+                            </span>
+                          </div>
+                          {selectedProblems.map((label) => {
+                            const ocrResult = batchOcrResults[student.id]?.[label];
+                            const confirmedText = batchConfirmedTexts[student.id]?.[label] || '';
+                            return (
+                              <div key={label} className="mb-3 last:mb-0">
+                                <div className="flex items-center justify-between mb-1">
+                                  <span className="px-2 py-1 bg-indigo-100 text-indigo-700 rounded text-sm font-bold">
+                                    {label}
+                                  </span>
+                                  <span className="text-xs text-slate-500">
+                                    {confirmedText.length}文字
+                                  </span>
+                                </div>
+                                <textarea
+                                  value={confirmedText}
+                                  onChange={(e) => {
+                                    setBatchConfirmedTexts((prev) => ({
+                                      ...prev,
+                                      [student.id]: {
+                                        ...prev[student.id],
+                                        [label]: e.target.value,
+                                      },
+                                    }));
+                                  }}
+                                  rows={3}
+                                  className="w-full px-3 py-2 border-2 border-slate-200 rounded-lg focus:border-amber-400 focus:outline-none font-mono text-sm resize-none"
+                                  placeholder={ocrResult?.text ? '読み取り結果を編集...' : '答案テキストを入力...'}
+                                />
+                                {!ocrResult?.text && (
+                                  <p className="text-xs text-red-500 mt-1">⚠️ 読み取りに失敗しました。手動で入力してください。</p>
+                                )}
+                              </div>
+                            );
+                          })}
+                        </div>
+                      ))}
+                    </div>
+
+                    {/* 確認ボタン */}
+                    <div className="flex gap-3">
+                      <button
+                        onClick={cancelBatchOcr}
+                        className="flex-1 py-3 rounded-xl font-bold text-slate-600 bg-slate-100 hover:bg-slate-200 transition-all"
+                      >
+                        キャンセル
+                      </button>
+                      <button
+                        onClick={executeBatchGradingWithConfirmed}
+                        className="flex-1 py-3 rounded-xl font-bold text-white bg-gradient-to-r from-emerald-500 to-teal-500 hover:from-emerald-600 hover:to-teal-600 shadow-lg hover:shadow-xl transition-all flex items-center justify-center gap-2"
+                      >
+                        <CheckCircle className="w-5 h-5" />
+                        確認して採点開始
+                      </button>
+                    </div>
+                  </div>
+                )}
+
+                {/* Batch Grade Button - OCR確認フロー開始 */}
+                {batchOcrStep === 'idle' && (
+                  <button
+                    type="button"
+                    onClick={startBatchOcr}
+                    disabled={isLoading || batchState.isProcessing || batchStudents.length === 0 || selectedProblems.length === 0 || sharedFiles.length === 0}
+                    className={clsx(
+                      'w-full py-4 rounded-xl font-bold text-lg transition-all flex items-center justify-center gap-2',
+                      isLoading || batchState.isProcessing || selectedProblems.length === 0 || sharedFiles.length === 0
+                        ? 'bg-slate-300 text-slate-500 cursor-not-allowed'
+                        : 'bg-gradient-to-r from-indigo-600 to-violet-600 text-white hover:from-indigo-700 hover:to-violet-700 shadow-lg hover:shadow-xl'
+                    )}
+                  >
+                    {batchState.isProcessing ? (
+                      <>
+                        <Loader2 className="w-5 h-5 animate-spin" />
+                        採点中... ({batchState.completedCount}/{batchStudents.length})
+                      </>
+                    ) : (
+                      <>
+                        <Camera className="w-5 h-5" />
+                        {batchStudents.length}名分の答案を読み取る
+                      </>
+                    )}
+                  </button>
+                )}
+
+                {/* Retry Failed Button */}
+                {batchStudents.some((s) => s.status === 'error') && !batchState.isProcessing && (
+                  <button
+                    type="button"
+                    onClick={retryFailedStudents}
+                    className="w-full py-3 rounded-xl font-bold text-sm bg-orange-500 text-white hover:bg-orange-600 transition-all flex items-center justify-center gap-2"
+                  >
+                    <AlertCircle className="w-4 h-4" />
+                    失敗した{batchStudents.filter((s) => s.status === 'error').length}名を再試行
+                  </button>
+                )}
+
+                {/* Batch Results */}
+                {batchStudents.some((s) => s.status === 'success') && (
+                  <BatchResults
+                    students={batchStudents}
+                    selectedProblems={selectedProblems}
+                    problemPoints={problemPoints}
+                    teacherName={teacherName}
+                    onDownloadZip={handleDownloadZip}
+                    isGeneratingZip={isGeneratingZip}
+                    onUpdateResult={handleUpdateResult}
+                  />
+                )}
+              </div>
+            )}
           </div>
         </div>
 
-        {/* Result Display */}
-        {results && results.map((res, index) => {
+        {/* Result Display - Only for Single Mode */}
+        {batchMode === 'single' && results && results.map((res, index) => {
           // grading_resultがない場合は、resultをそのままgrading_resultとして扱う（互換性対応）
           const rawResult = res.result?.grading_result || res.result;
           const gradingResult = rawResult as GradingResultPayload | undefined;

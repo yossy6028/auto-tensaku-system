@@ -318,17 +318,21 @@ export async function POST(req: NextRequest) {
 
         // OCRのみ実行
         const grader = new EduShiftGrader();
-        
+
         const ocrResult = await grader.performOcrOnly(sanitizedLabel, fileBuffers, pdfPageInfo, fileRoles);
 
         logger.info(`[OCR API] OCR完了: ${sanitizedLabel} - ${ocrResult.charCount}文字`);
+        if (ocrResult.layout) {
+            logger.info(`[OCR API] Layout検出: ${ocrResult.layout.total_lines}行, ${ocrResult.layout.paragraph_count}段落, 字下げ列: [${ocrResult.layout.indented_columns.join(', ')}]`);
+        }
 
-        const responseData = { 
-            status: 'success', 
+        const responseData = {
+            status: 'success',
             ocrResult: {
                 text: ocrResult.text,
                 charCount: ocrResult.charCount,
-                label: sanitizedLabel
+                label: sanitizedLabel,
+                layout: ocrResult.layout  // layout情報を追加
             }
         };
 

@@ -418,6 +418,18 @@ export async function POST(req: NextRequest) {
             }
         }
 
+        // Layout情報を解析（OCRで検出した物理レイアウト情報）
+        const layoutsJson = formData.get('layouts') as string | null;
+        let layouts: Record<string, { total_lines: number; paragraph_count: number; indented_columns: number[] }> = {};
+        if (layoutsJson) {
+            try {
+                layouts = JSON.parse(layoutsJson);
+                logger.debug('[API] Layout info provided:', Object.keys(layouts));
+            } catch {
+                // パース失敗時は無視
+            }
+        }
+
         // ファイルのセキュリティ検証
         try {
             validateFiles(files);
@@ -580,7 +592,12 @@ export async function POST(req: NextRequest) {
                     if (problemCondition) {
                         logger.info(`[API] Problem condition override for ${label}: ${problemCondition}`);
                     }
-                    result = await grader.gradeWithConfirmedText(label, confirmedTexts[label], fileBuffers, pdfPageInfo, fileRoles, strictness, problemCondition);
+                    // Layout情報がある場合は渡す（字下げ・行数・段落構成の判定に使用）
+                    const layout = layouts[label] || undefined;
+                    if (layout) {
+                        logger.info(`[API] Layout info for ${label}: ${layout.total_lines} lines, ${layout.paragraph_count} paragraphs, indented: [${layout.indented_columns.join(', ')}]`);
+                    }
+                    result = await grader.gradeWithConfirmedText(label, confirmedTexts[label], fileBuffers, pdfPageInfo, fileRoles, strictness, problemCondition, layout);
                 } else {
                     // 従来通りOCR + 採点
                     result = await grader.gradeAnswerFromMultipleFiles(label, fileBuffers, pdfPageInfo, fileRoles, strictness);

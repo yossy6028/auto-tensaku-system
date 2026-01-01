@@ -7,12 +7,14 @@ import { SYSTEM_INSTRUCTION } from "../prompts/eduShift";
 // 2024-12-21: 大きなファイル（2-3MB）でタイムアウトするため設定を最適化
 // - OCRと採点の合計が300秒以内に収まるよう調整
 // - 大きなファイルではリトライ回数とタイムアウトを抑制
-const OCR_TIMEOUT_MS = 120_000;     // 120秒（大幅短縮：リトライの余地を確保）
+const OCR_TIMEOUT_MS = 180_000;     // 180秒（Gemini APIの応答遅延に対応）
 const GRADING_TIMEOUT_MS = 150_000; // 150秒（採点はOCRより長めに）
 const OCR_RETRY_ATTEMPTS = 2;       // 2回に削減（3回→2回）
 const OCR_RETRY_BACKOFF_MS = 500;   // 500msに短縮（800ms→500ms）
 const OCR_RETRY_JITTER_MS = 200;    // 200msに短縮（400ms→200ms）
-const OCR_THINKING_BUDGET = 128;
+// シンプルなプロンプトに変更したため、思考バジェットを削減
+// 過剰な思考を防ぐため1024トークンに制限
+const OCR_THINKING_BUDGET = 1024;
 // 合計タイムアウト想定: OCR(120秒×2回) + 採点(150秒) = 最大390秒
 // ただし通常は1回目で成功するため問題なし
 
@@ -168,11 +170,14 @@ export class EduShiftGrader {
     private ocrThinkingMode: "disabled" | "enabled" | "unsupported" = "disabled";
     
     // OCR用の設定（安定性優先）
+    // Geminiの思考モードがthinkingBudgetを無視して~8000トークン使用するため、
+    // maxOutputTokensを32768に設定して出力用の余裕を確保
+    // (thinking: ~8000 + output: ~2000 = ~10000で十分な余裕あり)
     private readonly ocrConfig = {
         temperature: 0,
         topP: 0.1,
         topK: 16,
-        maxOutputTokens: 4096,
+        maxOutputTokens: 32768,
         responseMimeType: "application/json" as const
     };
     
@@ -206,13 +211,22 @@ export class EduShiftGrader {
     /**
      * OCRのみ実行（ユーザー確認用）
      * 採点前にユーザーが読み取り結果を確認・修正できるよう、OCRのみを実行
+     * layout情報（行数、段落数、字下げ位置）も返す
      */
     async performOcrOnly(
-        targetLabel: string, 
+        targetLabel: string,
         files: UploadedFilePart[],
         pdfPageInfo?: { answerPage?: string; problemPage?: string; modelAnswerPage?: string } | null,
         fileRoles?: Record<string, FileRole>
-    ): Promise<{ text: string; charCount: number }> {
+    ): Promise<{
+        text: string;
+        charCount: number;
+        layout?: {
+            total_lines: number;
+            paragraph_count: number;
+            indented_columns: number[];
+        };
+    }> {
         try {
             // ファイルに役割情報を付与
             if (fileRoles) {
@@ -224,13 +238,13 @@ export class EduShiftGrader {
             }
             const categorizedFiles = this.categorizeFiles(files, pdfPageInfo);
             const imageParts = this.buildContentSequence(categorizedFiles);
-            
+
             const sanitizedLabel = targetLabel.replace(/[<>\\"'`]/g, "").trim() || "target";
             const ocrResult = await this.performOcr(sanitizedLabel, imageParts, categorizedFiles, pdfPageInfo);
             const text = (ocrResult.text || ocrResult.fullText).trim();
             const charCount = text.replace(/\s+/g, "").length;
 
-            return { text, charCount };
+            return { text, charCount, layout: ocrResult.layout };
         } catch (error: unknown) {
             const message = error instanceof Error ? error.message : "OCRエラー";
             throw new Error(message);
@@ -238,13 +252,14 @@ export class EduShiftGrader {
     }
 
     async gradeWithConfirmedText(
-        targetLabel: string, 
+        targetLabel: string,
         confirmedText: string,
         files: UploadedFilePart[],
         pdfPageInfo?: { answerPage?: string; problemPage?: string; modelAnswerPage?: string } | null,
         fileRoles?: Record<string, FileRole>,
         strictness: GradingStrictness = DEFAULT_STRICTNESS,
-        problemCondition?: string
+        problemCondition?: string,
+        layout?: { total_lines: number; paragraph_count: number; indented_columns: number[] }
     ) {
         try {
             // ファイルに役割情報を付与
@@ -257,11 +272,11 @@ export class EduShiftGrader {
             }
             const categorizedFiles = this.categorizeFiles(files, pdfPageInfo);
             const imageParts = this.buildContentSequence(categorizedFiles);
-            
+
             const sanitizedLabel = targetLabel.replace(/[<>\\"'`]/g, "").trim() || "target";
-            
-            // Stage 2のみ実行（confirmedTextを使用）
-            return await this.executeGradingWithText(sanitizedLabel, confirmedText, imageParts, pdfPageInfo, strictness, problemCondition);
+
+            // Stage 2のみ実行（confirmedTextとlayout情報を使用）
+            return await this.executeGradingWithText(sanitizedLabel, confirmedText, imageParts, pdfPageInfo, strictness, problemCondition, layout);
         } catch (error: unknown) {
             return this.handleError(error);
         }
@@ -299,7 +314,16 @@ export class EduShiftGrader {
         imageParts: ContentPart[],
         categorizedFiles?: CategorizedFiles,
         pdfPageInfo?: { answerPage?: string; problemPage?: string; modelAnswerPage?: string } | null
-    ): Promise<{ text: string; fullText: string; matchedTarget: boolean }> {
+    ): Promise<{
+        text: string;
+        fullText: string;
+        matchedTarget: boolean;
+        layout?: {
+            total_lines: number;
+            paragraph_count: number;
+            indented_columns: number[];
+        };
+    }> {
         console.log("[Grader] Stage 1: OCR開始");
 
         // #region agent log
@@ -400,12 +424,16 @@ export class EduShiftGrader {
         let fallbackLogged = false;
         let finalText = "";
         let charCount = 0;
+        let finalLayout: { total_lines: number; paragraph_count: number; indented_columns: number[] } | undefined;
+
+        // OcrResult型を定義（layout情報を含む）
+        type OcrResult = ReturnType<typeof this.parseOcrResponse>;
 
         if (usePerImageOnly) {
             const perImageTexts: string[] = [];
             for (const part of targetParts) {
-                let bestValid: { text: string; charCount: number } | null = null;
-                let bestFallback: { text: string; charCount: number } | null = null;
+                let bestValid: OcrResult | null = null;
+                let bestFallback: OcrResult | null = null;
                 let bestFallbackCount = -1;
 
                 for (const prompt of ocrPrompts) {
@@ -439,12 +467,16 @@ export class EduShiftGrader {
                 const selected = bestValid ?? bestFallback ?? { text: "", charCount: 0 };
                 perImageTexts.push(selected.text);
                 charCount += selected.charCount;
+                // 最初の有効なlayout情報を使用
+                if (!finalLayout && (bestValid?.layout || bestFallback?.layout)) {
+                    finalLayout = bestValid?.layout ?? bestFallback?.layout;
+                }
             }
 
             finalText = perImageTexts.join("\n").trim();
         } else {
-            let bestValid: { text: string; charCount: number } | null = null;
-            let bestFallback: { text: string; charCount: number } | null = null;
+            let bestValid: OcrResult | null = null;
+            let bestFallback: OcrResult | null = null;
             let bestValidCount = -1;
             let bestFallbackCount = -1;
 
@@ -479,6 +511,16 @@ export class EduShiftGrader {
 
             finalText = bestValid?.text ?? bestFallback?.text ?? "";
             charCount = bestValid?.charCount ?? bestFallback?.charCount ?? 0;
+            finalLayout = bestValid?.layout ?? bestFallback?.layout;
+        }
+
+        // layout情報をログ出力
+        if (finalLayout) {
+            console.log("[Grader] Layout検出:", {
+                total_lines: finalLayout.total_lines,
+                paragraph_count: finalLayout.paragraph_count,
+                indented_columns: finalLayout.indented_columns
+            });
         }
 
         console.log("[Grader] OCR結果:", { text: finalText.substring(0, 100), charCount });
@@ -490,16 +532,17 @@ export class EduShiftGrader {
         if (!finalText || this.isOcrFailure(finalText)) {
             console.error("[Grader] ❌ OCRが空の結果を返しました");
             const fallbackText = "（回答を読み取れませんでした）";
-            return { text: fallbackText, fullText: fallbackText, matchedTarget: true };
+            return { text: fallbackText, fullText: fallbackText, matchedTarget: true, layout: undefined };
         }
 
         console.log("[Grader] Stage 1 完了:", {
             textLength: finalText.length,
             charCount,
-            preview: finalText.substring(0, 120)
+            preview: finalText.substring(0, 120),
+            layout: finalLayout
         });
 
-        return { text: finalText, fullText: finalText, matchedTarget: true };
+        return { text: finalText, fullText: finalText, matchedTarget: true, layout: finalLayout };
     }
 
     private buildOcrPrompt(
@@ -508,86 +551,58 @@ export class EduShiftGrader {
         hasAllRole?: boolean,
         gridInfo?: { columns: number; rows: number }
     ): string {
-        const jsonInstruction = "JSONのみで返してください: {\"text\":\"<verbatim>\",\"char_count\":<空白改行除外の文字数>}";
-        
         // 複合ラベル（大問X問Y形式）をパースして詳細な指示を生成
         const compound = this.parseCompoundLabel(label);
         let targetDescription: string;
-        
+
         if (compound.mainNum !== null && compound.subNum !== null) {
-            // 複合ラベルの場合: より具体的に指定
             const mainVariants = this.numberVariants(compound.mainNum).slice(0, 3).join("/");
             const subVariants = this.numberVariants(compound.subNum).slice(0, 3).join("/");
-            targetDescription = [
-                `【重要: 対象の特定】`,
-                `この答案用紙には複数の大問があります。`,
-                `読み取るのは「大問${mainVariants}」の中の「問${subVariants}」の解答欄のみです。`,
-                `他の大問（大問${compound.mainNum - 1 > 0 ? compound.mainNum - 1 : compound.mainNum + 1}など）の問${compound.subNum}は絶対に読み取らないでください。`,
-                ``,
-                `「${label}」（大問${compound.mainNum}の問${compound.subNum}）の解答欄のみを対象に、手書き文字を一字一句そのまま書き出してください。`
-            ].join("\n");
+            targetDescription = `読み取り対象：「大問${mainVariants}」の中の「問${subVariants}」の解答欄のみ。他の大問の解答は絶対に読み取らないこと。`;
         } else {
-            // 通常のラベル
-            targetDescription = `「${label}」の解答欄のみを対象に、手書き文字を一字一句そのまま書き出してください。`;
-        }
-        
-        const baseLines = [
-            targetDescription,
-            "要約・補完・修正は禁止です。",
-            "",
-            "【読み取り方法】",
-            "・縦書きは右の列から左へ、各列は上から下へ読む",
-            "・マス目（原稿用紙形式）がある場合、1マス1文字として全マスを順番に読み取る",
-            "・句読点（。、）や記号も1文字（1マス）として数える",
-            "・空白マスがある場合もその位置を認識し、文字がない部分として扱う",
-            "・推測や補完は絶対に禁止、見えるままを転写する",
-            "",
-            "判読不能な文字は「〓」に置き換えてください。",
-            "textは空にせず、何も読めない場合は「〓」のみを出力してください。",
-            jsonInstruction
-        ];
-
-        // 複合ファイル（問題・答案・解答が1つのファイル）の場合の追加指示
-        if (hasAllRole) {
-            baseLines.unshift(
-                "【重要】この画像には「問題文」「生徒の答案（手書き）」「模範解答」がすべて含まれています。",
-                "読み取るのは「生徒の答案」（手書き部分）のみです。",
-                "問題文（印刷された設問）や模範解答（印刷されたテキスト）は絶対に読み取らないでください。",
-                "手書き文字と印刷文字を区別し、手書き部分のみを出力してください。",
-                ""
-            );
+            targetDescription = `読み取り対象：「${label}」の解答欄のみ。`;
         }
 
-        // マス目構造が判明している場合、具体的な情報を追加
-        if (gridInfo) {
-            const maxChars = gridInfo.columns * gridInfo.rows;
-            baseLines.unshift(
-                `【マス目情報】この解答欄は${gridInfo.columns}列×${gridInfo.rows}行のマス目です（最大${maxChars}文字）。`,
-                `各列を右から左へ順番に、各列は上から下へ${gridInfo.rows}文字ずつ読み取ってください。`,
-                ""
-            );
-        }
+        // シンプルなOCRプロンプト（レイアウト情報付き）
+        // 過度な思考を避けるため、簡潔な指示に変更
+        const cotPrompt = `原稿用紙OCR。${targetDescription}
+${hasAllRole ? `手書きの答案部分のみ読み取り。印刷文字は無視。` : ""}${gridInfo ? `マス目: ${gridInfo.columns}列×${gridInfo.rows}行。` : ""}
+
+【タスク】
+1. 各列の1マス目を見て、空白なら字下げ（段落開始）と判断
+2. 字下げ部分は全角スペース「　」で表現
+3. 文字を読み取り
+
+【出力JSON】
+{
+  "text": "<全文（字下げ=全角スペース）>",
+  "char_count": <文字数>,
+  "layout": {
+    "total_lines": <列数>,
+    "paragraph_count": <段落数>,
+    "indented_columns": [<字下げ列番号>]
+  }
+}`;
+
+        let finalPrompt = cotPrompt;
 
         if (mode === "retry") {
-            baseLines.unshift(
-                "前回の読み取りが不十分だったため、特に慎重にOCRを実行してください。",
-                "マス目がある場合は、各マスを1つずつ確認して漏れなく読み取ってください。"
-            );
+            finalPrompt = `【再試行】前回の読み取りが不十分でした。特に各列の1マス目の状態を慎重に観察してください。
+
+` + cotPrompt;
         }
 
         if (mode === "detail") {
-            baseLines.unshift(
-                "最終パスです。1文字ずつ確認し、数字・記号・単位・送り仮名まで原文通りに転写してください。",
-                "マス目形式の場合、全列の全マスを上から下まで漏れなく読み取ってください。"
-            );
-            baseLines.splice(baseLines.length - 1, 0, "解答欄以外の問題文・注釈・欄外メモは含めないでください。");
+            finalPrompt = `【最終パス】1文字ずつ確認し、特に段落冒頭の字下げ（1マス目の空白）を正確に検出してください。
+
+` + cotPrompt;
         }
 
         // #region agent log
-        fetch('http://127.0.0.1:7242/ingest/e78e9fd7-3fa2-45c5-b036-a4f10b20798a',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'grader.ts:buildOcrPrompt',message:'OCRプロンプト構築',data:{label,mode,hasAllRole,promptPreview:baseLines.slice(0,5).join(' | ')},timestamp:Date.now(),sessionId:'debug-session',hypothesisId:'A,C,D'})}).catch(()=>{});
+        fetch('http://127.0.0.1:7242/ingest/e78e9fd7-3fa2-45c5-b036-a4f10b20798a',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'grader.ts:buildOcrPrompt',message:'OCRプロンプト構築(CoT)',data:{label,mode,hasAllRole},timestamp:Date.now(),sessionId:'debug-session',hypothesisId:'A,C,D'})}).catch(()=>{});
         // #endregion
 
-        return baseLines.join("\n");
+        return finalPrompt;
     }
 
     private isOcrFailure(text: string): boolean {
@@ -622,7 +637,7 @@ JSONのみ出力してください。`;
                         systemInstruction: this.ocrSystemInstruction
                     }
                 }),
-                30000, // 30秒タイムアウト（構造分析は軽い処理）
+                10000, // 10秒タイムアウト（高速化のため短縮）
                 "マス目構造分析"
             );
 
@@ -655,7 +670,19 @@ JSONのみ出力してください。`;
         }
     }
 
-    private parseOcrResponse(raw: string): { text: string; charCount: number } {
+    private parseOcrResponse(raw: string): {
+        text: string;
+        charCount: number;
+        layout?: {
+            total_lines: number;
+            paragraph_count: number;
+            indented_columns: number[];
+        };
+        step1_observation?: {
+            total_columns: number;
+            columns: Array<{ col: number; first_cell: string; indent: boolean }>;
+        };
+    } {
         const parsed = this.extractJsonFromText(raw);
         const parsedText = typeof parsed?.text === "string" ? parsed.text : "";
         const baseText = parsedText || raw;
@@ -664,16 +691,46 @@ JSONのみ出力してください。`;
         const charCount = parsedCount !== null && Number.isFinite(parsedCount)
             ? parsedCount
             : normalized.replace(/\s+/g, "").length;
-        return { text: normalized, charCount };
+
+        // 新しいCoT形式のlayout情報を抽出
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        const parsedLayout = parsed?.layout as any;
+        const layout = parsedLayout && typeof parsedLayout === "object" ? {
+            total_lines: typeof parsedLayout.total_lines === "number" ? parsedLayout.total_lines : 0,
+            paragraph_count: typeof parsedLayout.paragraph_count === "number" ? parsedLayout.paragraph_count : 0,
+            indented_columns: Array.isArray(parsedLayout.indented_columns) ? parsedLayout.indented_columns : []
+        } : undefined;
+
+        // Step1の観察結果も抽出（デバッグ用）
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        const parsedStep1 = parsed?.step1_observation as any;
+        const step1_observation = parsedStep1 && typeof parsedStep1 === "object" ? {
+            total_columns: typeof parsedStep1.total_columns === "number" ? parsedStep1.total_columns : 0,
+            columns: Array.isArray(parsedStep1.columns) ? parsedStep1.columns : []
+        } : undefined;
+
+        return { text: normalized, charCount, layout, step1_observation };
     }
 
     private async runOcrAttempt(
         prompt: string,
         parts: ContentPart[],
         modelName?: string
-    ): Promise<{ text: string; charCount: number }> {
+    ): Promise<{
+        text: string;
+        charCount: number;
+        layout?: {
+            total_lines: number;
+            paragraph_count: number;
+            indented_columns: number[];
+        };
+        step1_observation?: {
+            total_columns: number;
+            columns: Array<{ col: number; first_cell: string; indent: boolean }>;
+        };
+    }> {
         const resolvedModel = modelName || CONFIG.OCR_MODEL_NAME || CONFIG.MODEL_NAME;
-        let best: { text: string; charCount: number } | null = null;
+        let best: ReturnType<typeof this.parseOcrResponse> | null = null;
         let bestCount = -1;
         let lastError: unknown = null;
 
@@ -785,7 +842,7 @@ JSONのみ出力してください。`;
             console.error("[Grader] OCR処理に失敗しました:", lastError);
         }
 
-        return { text: "", charCount: 0 };
+        return { text: "", charCount: 0, layout: undefined, step1_observation: undefined };
     }
 
     /**
@@ -1761,20 +1818,24 @@ JSONのみ出力してください。`;
         imageParts: ContentPart[],
         pdfPageInfo?: { answerPage?: string; problemPage?: string; modelAnswerPage?: string } | null,
         strictness: GradingStrictness = DEFAULT_STRICTNESS,
-        problemCondition?: string
+        problemCondition?: string,
+        layout?: { total_lines: number; paragraph_count: number; indented_columns: number[] }
     ) {
         console.log("[Grader] 確認済みテキストで採点開始");
         if (problemCondition) {
             console.log("[Grader] 問題条件オーバーライド:", problemCondition);
         }
-        
+        if (layout) {
+            console.log("[Grader] Layout情報使用:", layout);
+        }
+
         // PDFページ指定ヒントを構築
         let pdfPageHint = '';
-        const hasPdf = imageParts.some(part => 
-            typeof part === 'object' && 'inlineData' in part && 
+        const hasPdf = imageParts.some(part =>
+            typeof part === 'object' && 'inlineData' in part &&
             part.inlineData.mimeType === 'application/pdf'
         );
-        
+
         if (hasPdf && pdfPageInfo) {
             const hints: string[] = [];
             if (pdfPageInfo.answerPage) hints.push(`生徒の答案: ${pdfPageInfo.answerPage}ページ目`);
@@ -1786,7 +1847,7 @@ JSONのみ出力してください。`;
         }
 
         const charCount = confirmedText.replace(/\s+/g, "").length;
-        
+
         // 問題条件オーバーライドセクション
         const problemConditionSection = problemCondition ? `
 【重要：ユーザーが指定した問題条件】
@@ -1796,10 +1857,27 @@ ${problemCondition}
 ---
 ※ この条件に基づいて字数制限や形式要件を判定してください。
 ` : '';
-        
+
+        // Layout情報セクション（OCRで検出した物理レイアウト）
+        // これがあれば、採点AIは画像を再分析する必要がない
+        const layoutSection = layout ? `
+【⚠️ 重要：事前検証済みレイアウト情報（OCRで物理的に確認済み）】
+以下のレイアウト情報は、画像のマス目を物理的に解析して取得したものです。
+**この情報を信頼し、画像から再度レイアウトを判断しないでください。**
+
+・総行数（列数）: ${layout.total_lines}行
+・段落数: ${layout.paragraph_count}段落
+・字下げ（1マス目が空白）がある列: ${layout.indented_columns.length > 0 ? layout.indented_columns.map(c => `${c}列目`).join(', ') : 'なし'}
+
+※ 上記の情報に基づき、以下は採点対象外です：
+  - 字下げ（段落冒頭の1マス空け）→ 上記で検証済み、減点禁止
+  - 行数 → 上記で検証済み、減点禁止
+  - 段落構成 → 上記で検証済み、減点禁止
+` : '';
+
         const prompt = `Target Problem Label: ${targetLabel}
 ${pdfPageHint}
-${problemConditionSection}
+${problemConditionSection}${layoutSection}
 【ユーザーが確認・修正した生徒の答案テキスト】（${charCount}文字）
 ---
 ${confirmedText}
@@ -1818,6 +1896,7 @@ System Instructionに定義された以下のルールを厳密に適用して�
 - Global Rules: 5大原則に基づく採点
 - 採点基準: 減点基準リファレンステーブルに従う
 - recognized_text は上記の確認済みテキストをそのまま出力すること
+${layout ? '- 【重要】上記のレイアウト情報を信頼し、字下げ・行数・段落構成での減点は禁止' : ''}
 
 結果はJSON形式で出力してください。`;
 

@@ -564,9 +564,34 @@ export class EduShiftGrader {
         }
 
         // シンプルなOCRプロンプト（レイアウト情報付き）
-        // 過度な思考を避けるため、簡潔な指示に変更
-        const cotPrompt = `原稿用紙OCR。${targetDescription}
-${hasAllRole ? `手書きの答案部分のみ読み取り。印刷文字は無視。` : ""}${gridInfo ? `マス目: ${gridInfo.columns}列×${gridInfo.rows}行。` : ""}
+        // 縦書き（原稿用紙）と横書き（短文記述）の両方に対応
+        const gridDescription = gridInfo
+            ? `マス目検出済み: ${gridInfo.columns}列×${gridInfo.rows}行（最大${gridInfo.columns * gridInfo.rows}文字）`
+            : "";
+        const isShortAnswer = gridInfo && (gridInfo.columns * gridInfo.rows <= 100); // 100文字以下は短文記述
+
+        const cotPrompt = isShortAnswer
+            ? `マス目OCR（短文記述問題）。${targetDescription}
+${hasAllRole ? `手書きの答案部分のみ読み取り。印刷文字は無視。` : ""}${gridDescription}
+
+【タスク】
+1. マス目を1つずつ確認して文字を読み取る
+2. 横書きの場合：左上から右へ、上から下へ読む
+3. 縦書きの場合：右上から下へ、右から左へ読む
+4. 空マスは無視（文末の空白は除外）
+
+【出力JSON】
+{
+  "text": "<読み取ったテキスト>",
+  "char_count": <文字数（空白除く）>,
+  "layout": {
+    "total_lines": <行数>,
+    "paragraph_count": 1,
+    "indented_columns": []
+  }
+}`
+            : `原稿用紙OCR。${targetDescription}
+${hasAllRole ? `手書きの答案部分のみ読み取り。印刷文字は無視。` : ""}${gridDescription}
 
 【タスク】
 1. 各列の1マス目を見て、空白なら字下げ（段落開始）と判断
@@ -620,11 +645,19 @@ ${hasAllRole ? `手書きの答案部分のみ読み取り。印刷文字は無�
         modelName?: string
     ): Promise<{ columns: number; rows: number } | null> {
         const resolvedModel = modelName || CONFIG.OCR_MODEL_NAME || CONFIG.MODEL_NAME;
-        
-        // シンプルなプロンプト（過去の教訓: 複雑なプロンプトは失敗する）
-        const prompt = `この画像にマス目（原稿用紙形式）があるか確認してください。
-マス目がある場合: {"has_grid": true, "columns": <列数>, "rows": <1列の行数>}
+
+        // 改善されたプロンプト: 原稿用紙だけでなく、短い記述問題のマス目も検出
+        const prompt = `この画像の解答欄にマス目があるか確認してください。
+
+【検出対象】
+- 原稿用紙形式（縦書き）のマス目
+- 横書きの解答欄のマス目
+- 短い記述問題（20〜50字程度）のマス目
+
+【出力形式】
+マス目がある場合: {"has_grid": true, "columns": <列数（縦書き）or行数（横書き）>, "rows": <1列の文字数>}
 マス目がない場合: {"has_grid": false}
+
 JSONのみ出力してください。`;
 
         try {
@@ -637,7 +670,7 @@ JSONのみ出力してください。`;
                         systemInstruction: this.ocrSystemInstruction
                     }
                 }),
-                10000, // 10秒タイムアウト（高速化のため短縮）
+                20000, // 20秒タイムアウト（短い記述問題のマス目検出にも対応）
                 "マス目構造分析"
             );
 

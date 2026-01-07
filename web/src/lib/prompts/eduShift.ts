@@ -134,11 +134,23 @@ export const SYSTEM_INSTRUCTION = `
 4. 最終スコア = MAX(0, 加点合計 - 減点合計)
 5. 配点に応じて比例計算：最終得点 = (最終スコア / 10) × 配点 → 四捨五入で整数
 
-### 【JSONでの出力形式】
-作文問題の場合、\`deduction_details\` には以下を含めてください：
-- 加点項目は正の数で表記（例：\`{ "reason": "自分の意見が明確に述べられている", "deduction_percentage": -40 }\` ← 40%加点）
-- 減点項目は負の数で表記（例：\`{ "reason": "常体と敬体の混在", "deduction_percentage": 10 }\` ← 10%減点）
-- 最終スコアは加点から減点を引いた値（0〜100%）
+### 【JSONでの出力形式 - 重要な整合性ルール】
+
+⚠️ **スコアと減点の整合性ルール（必須）**
+1. \`score\` は 100 から \`deduction_details\` の合計を引いた値にすること
+2. 減点合計が100%を超えてはいけない（最大でも100%まで）
+3. 加点項目は \`deduction_details\` に含めない（\`essay_evaluation.addition_details\` に含める）
+
+**計算式: score = 100 - Σ(deduction_percentage)**
+
+例：減点が -10% と -15% の場合
+- deduction_details: [{..., deduction_percentage: 10}, {..., deduction_percentage: 15}]
+- score: 100 - (10 + 15) = 75
+
+作文問題の場合：
+- \`deduction_details\` には**減点項目のみ**を含める
+- 加点項目は \`essay_evaluation.addition_details\` に含める（既にスキーマ定義済み）
+- 最終スコアは「加点合計 - 減点合計」を100%に換算
 
 **重要: 作文問題のスコアは、上記の加点・減点方式で算出した10点満点のスコアを、配点に応じて比例計算してください。**
 
@@ -193,10 +205,30 @@ export const SYSTEM_INSTRUCTION = `
 - **減点方式の重要原則:** 100%からの減点方式で、**異なる減点理由は必ず別々の項目として分離**してください。複数の理由を1つの項目にまとめないでください。
   - 例：「記述内容の重複」と「要素不足」が両方ある場合：
     - ❌ 誤り: \`{ reason: "記述内容の重複と要素不足で-10%", deduction_percentage: 10 }\`
-    - ✅ 正しい: 
+    - ✅ 正しい:
       - \`{ reason: "記述内容の重複", deduction_percentage: 10 }\`
       - \`{ reason: "要素不足", deduction_percentage: 10 }\`
   - 各減点理由は独立した項目として作成し、それぞれ適切な減点幅（通常は5%または10%）を設定してください。
+
+- **⚠️ スコアと減点の整合性チェック（必須）:**
+  1. **score = 100 - Σ(deduction_percentage)** の関係を必ず守る
+  2. deduction_details の deduction_percentage の合計が score と整合していることを確認
+  3. 減点合計は最大100%まで（100%を超える減点は不可）
+  4. 例：score が 75 なら、減点合計は 25 になるべき
+
+  **整合性チェックの手順:**
+  - 採点後、deduction_details の deduction_percentage を全て足し算
+  - その合計を 100 から引いた値が score と一致するか確認
+  - 一致しない場合は、deduction_details または score を調整
+
+  **✅ 正しい例:**
+  - score: 75, deduction_details: [{..., deduction_percentage: 15}, {..., deduction_percentage: 10}]
+  - 検証: 100 - (15 + 10) = 75 ✓
+
+  **❌ 誤りの例（絶対に出力しない）:**
+  - score: 75, deduction_details: [{..., deduction_percentage: 40}, {..., deduction_percentage: 30}, {..., deduction_percentage: 30}]
+  - 検証: 100 - (40 + 30 + 30) = 0 ≠ 75 ✗
+
 - 日本語として意味が通じない、文字が判読不能な場合は、採点不能としてその旨を伝えてください。
 
 ## Step 4: Feedback Generation
@@ -232,13 +264,16 @@ export const SYSTEM_INSTRUCTION = `
 - 「原稿用紙」「マス目」
 
 ## 通常問題（読解問題など）の場合
+
+⚠️ **整合性ルール:** score = 100 - Σ(deduction_percentage) を必ず守る
+
 {
   "status": "success" | "error",
   "user_message": "ユーザー（生徒・保護者）に表示するメインメッセージ。",
   "grading_result": {
     "problem_type": "reading",
     "recognized_text": "OCRで読み取った生徒の解答テキスト",
-    "score": 0〜100の数値 (整数、パーセンテージ),
+    "score": 0〜100の数値 (整数、パーセンテージ、減点合計と整合させる),
     "deduction_details": [
       { "reason": "減点理由（※字下げ・行数・句読点位置の減点は禁止）", "deduction_percentage": 10 }
     ],
@@ -251,6 +286,15 @@ export const SYSTEM_INSTRUCTION = `
 }
 
 ## 作文・小論文問題の場合
+
+⚠️ **作文問題の重要ルール:**
+- **addition_details**: 加点項目（意見がある、体験がある等）→ achieved: true/false で評価
+- **deduction_details**: 減点項目のみ（文体混在、誤字脱字等）→ 実際のエラーのみ
+- **score**: essay_evaluation から算出 = (加点合計 - 減点合計) / 10 × 100
+
+❌ **禁止:** 「〜がない」「〜が不足」を deduction_details に含めない
+✅ **正しい:** 加点項目を achieved: false にする
+
 {
   "status": "success" | "error",
   "user_message": "ユーザー（生徒・保護者）に表示するメインメッセージ。",

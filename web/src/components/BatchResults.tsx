@@ -1,11 +1,21 @@
 'use client';
 
-import React, { useRef, useCallback, useState } from 'react';
+import React, { useRef, useCallback, useState, useEffect } from 'react';
 import { Download, FileDown, CheckCircle, AlertCircle, User, ChevronDown, ChevronUp, Sparkles, TrendingUp, Edit3, Save, X, Pencil } from 'lucide-react';
 import { clsx } from 'clsx';
 import { StudentEntry, GradingResponseItem } from '@/lib/types/batch';
 import { GradingReport } from '@/components/GradingReport';
 import { useReactToPrint } from 'react-to-print';
+import html2canvas from 'html2canvas';
+import { jsPDF } from 'jspdf';
+
+// モバイル検出（iOS Safari特にPDF印刷ダイアログが閉じにくい問題の対策）
+const isMobileDevice = (): boolean => {
+  if (typeof window === 'undefined') return false;
+  const ua = navigator.userAgent;
+  return /iPhone|iPad|iPod|Android/i.test(ua) ||
+         (navigator.maxTouchPoints > 0 && /Mobile|Tablet/i.test(ua));
+};
 
 interface BatchResultsProps {
   students: StudentEntry[];
@@ -82,6 +92,13 @@ const StudentResultCard: React.FC<StudentResultCardProps> = ({
   const reportRefs = useRef<Record<string, HTMLDivElement | null>>({});
   const printRef = useRef<HTMLDivElement | null>(null);
   const [printingLabel, setPrintingLabel] = useState<string | null>(null);
+  const [isGeneratingPdf, setIsGeneratingPdf] = useState(false);
+  const [isMobile, setIsMobile] = useState(false);
+
+  // クライアントサイドでモバイル検出
+  useEffect(() => {
+    setIsMobile(isMobileDevice());
+  }, []);
 
   const handlePrint = useReactToPrint({
     contentRef: printRef,
@@ -89,15 +106,72 @@ const StudentResultCard: React.FC<StudentResultCardProps> = ({
     onAfterPrint: () => setPrintingLabel(null),
   });
 
+  // モバイル用: html2canvas + jsPDF で直接PDFダウンロード
+  const downloadPdfMobile = useCallback(async (label: string) => {
+    const element = reportRefs.current[label];
+    if (!element) return;
+
+    setIsGeneratingPdf(true);
+    try {
+      // レポート要素を一時的に表示
+      const originalDisplay = element.parentElement?.style.display;
+      if (element.parentElement) {
+        element.parentElement.style.display = 'block';
+      }
+
+      const canvas = await html2canvas(element, {
+        scale: 2,
+        useCORS: true,
+        logging: false,
+        backgroundColor: '#ffffff',
+      });
+
+      // 元に戻す
+      if (element.parentElement && originalDisplay !== undefined) {
+        element.parentElement.style.display = originalDisplay;
+      }
+
+      const imgData = canvas.toDataURL('image/jpeg', 0.95);
+      const pdf = new jsPDF({
+        orientation: 'portrait',
+        unit: 'mm',
+        format: 'a4',
+      });
+
+      const pdfWidth = pdf.internal.pageSize.getWidth();
+      const pdfHeight = pdf.internal.pageSize.getHeight();
+      const imgWidth = canvas.width;
+      const imgHeight = canvas.height;
+      const ratio = Math.min(pdfWidth / imgWidth, pdfHeight / imgHeight);
+      const imgX = (pdfWidth - imgWidth * ratio) / 2;
+      const imgY = 10;
+
+      pdf.addImage(imgData, 'JPEG', imgX, imgY, imgWidth * ratio, imgHeight * ratio);
+
+      const fileName = `採点レポート_${student.name || `生徒${index + 1}`}_${label}.pdf`;
+      pdf.save(fileName);
+    } catch (error) {
+      console.error('PDF generation error:', error);
+      alert('PDFの生成に失敗しました。もう一度お試しください。');
+    } finally {
+      setIsGeneratingPdf(false);
+    }
+  }, [student.name, index]);
+
+  // PCではreact-to-print、モバイルではjsPDFを使用
   const downloadPdf = useCallback(
     (label: string) => {
-      printRef.current = reportRefs.current[label] || null;
-      setPrintingLabel(label);
-      setTimeout(() => {
-        handlePrint();
-      }, 100);
+      if (isMobile) {
+        downloadPdfMobile(label);
+      } else {
+        printRef.current = reportRefs.current[label] || null;
+        setPrintingLabel(label);
+        setTimeout(() => {
+          handlePrint();
+        }, 100);
+      }
     },
-    [handlePrint]
+    [handlePrint, isMobile, downloadPdfMobile]
   );
 
   const startEdit = (label: string, result: GradingResponseItem) => {
@@ -296,10 +370,16 @@ const StudentResultCard: React.FC<StudentResultCardProps> = ({
                         {isValid && (
                           <button
                             onClick={() => downloadPdf(label)}
-                            className="flex items-center gap-2 px-4 py-2 bg-gradient-to-r from-blue-500 to-indigo-500 hover:from-blue-600 hover:to-indigo-600 text-white rounded-xl font-bold transition-all shadow-md hover:shadow-lg"
+                            disabled={isGeneratingPdf}
+                            className={clsx(
+                              "flex items-center gap-2 px-4 py-2 rounded-xl font-bold transition-all shadow-md",
+                              isGeneratingPdf
+                                ? "bg-slate-400 text-slate-200 cursor-not-allowed"
+                                : "bg-gradient-to-r from-blue-500 to-indigo-500 hover:from-blue-600 hover:to-indigo-600 text-white hover:shadow-lg"
+                            )}
                           >
                             <Download className="w-5 h-5" />
-                            PDFダウンロード
+                            {isGeneratingPdf ? 'PDF生成中...' : 'PDFダウンロード'}
                           </button>
                         )}
                       </>

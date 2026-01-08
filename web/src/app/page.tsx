@@ -1456,6 +1456,93 @@ export default function Home() {
       .page-break {
         page-break-before: always;
       }
+      /* スマホ向け戻るボタン */
+      .back-button-container {
+        position: fixed;
+        bottom: 0;
+        left: 0;
+        right: 0;
+        padding: 16px;
+        background: linear-gradient(to top, rgba(255,255,255,0.98), rgba(255,255,255,0.9));
+        z-index: 9999;
+        display: flex;
+        justify-content: center;
+      }
+      .back-button {
+        display: flex;
+        align-items: center;
+        gap: 8px;
+        background: linear-gradient(135deg, #4f46e5 0%, #7c3aed 100%);
+        color: white;
+        border: none;
+        padding: 14px 28px;
+        border-radius: 50px;
+        font-size: 16px;
+        font-weight: bold;
+        cursor: pointer;
+        box-shadow: 0 4px 20px rgba(79, 70, 229, 0.4);
+      }
+      .back-button svg {
+        width: 20px;
+        height: 20px;
+      }
+      /* 印刷完了オーバーレイ */
+      .print-complete-overlay {
+        display: none;
+        position: fixed;
+        top: 0;
+        left: 0;
+        right: 0;
+        bottom: 0;
+        background: rgba(0, 0, 0, 0.6);
+        z-index: 10000;
+        justify-content: center;
+        align-items: center;
+      }
+      .print-complete-modal {
+        background: white;
+        padding: 30px;
+        border-radius: 20px;
+        text-align: center;
+        max-width: 320px;
+        margin: 20px;
+        box-shadow: 0 20px 60px rgba(0, 0, 0, 0.3);
+      }
+      .print-complete-modal h2 {
+        margin: 0 0 10px 0;
+        color: #1e293b;
+        font-size: 20px;
+      }
+      .print-complete-modal p {
+        margin: 0 0 20px 0;
+        color: #64748b;
+        font-size: 14px;
+      }
+      .print-complete-modal button {
+        background: linear-gradient(135deg, #4f46e5 0%, #7c3aed 100%);
+        color: white;
+        border: none;
+        padding: 14px 28px;
+        border-radius: 50px;
+        font-size: 16px;
+        font-weight: bold;
+        cursor: pointer;
+        width: 100%;
+      }
+      @media print {
+        .back-button-container,
+        .print-complete-overlay {
+          display: none !important;
+        }
+        body {
+          padding-bottom: 0;
+        }
+      }
+      @media screen {
+        body {
+          padding-bottom: 80px;
+        }
+      }
     `;
 
     const deductionTableRows = deductionDetails.map((item: DeductionDetail) =>
@@ -1476,6 +1563,25 @@ export default function Home() {
   <style>${printStyles}</style>
 </head>
 <body>
+  <!-- スマホ向け戻るボタン -->
+  <div class="back-button-container">
+    <button class="back-button" onclick="window.close(); if(!window.closed) { history.back(); }">
+      <svg fill="none" stroke="currentColor" viewBox="0 0 24 24">
+        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10 19l-7-7m0 0l7-7m-7 7h18"/>
+      </svg>
+      元の画面に戻る
+    </button>
+  </div>
+
+  <!-- 印刷完了後のオーバーレイ -->
+  <div class="print-complete-overlay" id="printCompleteOverlay">
+    <div class="print-complete-modal">
+      <h2>✅ 保存完了</h2>
+      <p>PDFの保存が完了しました。<br/>元の画面に戻りますか？</p>
+      <button onclick="window.close(); if(!window.closed) { history.back(); }">元の画面に戻る</button>
+    </div>
+  </div>
+
   <div class="report-container">
     <div class="brand-row">
       <img src="/logo.jpg" alt="EduShift" class="brand-logo" />
@@ -1549,6 +1655,14 @@ export default function Home() {
     // 画像読み込みを待ってから印刷ダイアログを開く
     // スマホではprint()が非同期のため、close()は呼ばない（ユーザーが手動で閉じる）
     setTimeout(() => {
+      // afterprint イベントで印刷完了後にオーバーレイを表示
+      printWindow.onafterprint = () => {
+        const overlay = printWindow.document.getElementById('printCompleteOverlay');
+        if (overlay) {
+          overlay.style.display = 'flex';
+        }
+      };
+
       printWindow.print();
     }, 500);
   };
@@ -3416,30 +3530,34 @@ export default function Home() {
             </div>
           </div>
 
-          {/* 免責事項とプライバシー情報 */}
+          {/* 信頼性とプライバシーの約束 */}
           <div className="mt-8 max-w-3xl mx-auto space-y-4">
-            <div className="bg-amber-50/80 backdrop-blur-sm border-2 border-amber-200 rounded-2xl p-6 shadow-lg">
+            {/* プロ講師の採点基準アピール */}
+            <div className="bg-gradient-to-r from-indigo-50 to-violet-50 backdrop-blur-sm border-2 border-indigo-200 rounded-2xl p-6 shadow-lg">
               <div className="flex items-start">
-                <AlertCircle className="w-6 h-6 text-amber-600 mr-3 flex-shrink-0 mt-0.5" />
+                <svg className="w-6 h-6 text-indigo-600 mr-3 flex-shrink-0 mt-0.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4M7.835 4.697a3.42 3.42 0 001.946-.806 3.42 3.42 0 014.438 0 3.42 3.42 0 001.946.806 3.42 3.42 0 013.138 3.138 3.42 3.42 0 00.806 1.946 3.42 3.42 0 010 4.438 3.42 3.42 0 00-.806 1.946 3.42 3.42 0 01-3.138 3.138 3.42 3.42 0 00-1.946.806 3.42 3.42 0 01-4.438 0 3.42 3.42 0 00-1.946-.806 3.42 3.42 0 01-3.138-3.138 3.42 3.42 0 00-.806-1.946 3.42 3.42 0 010-4.438 3.42 3.42 0 00.806-1.946 3.42 3.42 0 013.138-3.138z" />
+                </svg>
                 <div className="flex-1">
-                  <h3 className="text-sm font-bold text-amber-900 mb-2">重要なお知らせ</h3>
-                  <p className="text-sm text-amber-800 leading-relaxed">
-                    <strong>本システムはAIによる簡易採点ツールです。</strong>あくまで学習支援を目的とした参考情報であり、実際の入試の合否を保証するものではありません。最終的な評価は各学校の採点基準に基づいて行われます。本システムの結果は参考程度にご活用ください。
+                  <h3 className="text-sm font-bold text-indigo-900 mb-2">プロ講師の採点基準で設計</h3>
+                  <p className="text-sm text-indigo-800 leading-relaxed">
+                    <strong>20年以上の指導経験を持つプロ講師の採点ノウハウをAIに学習させています。</strong>入試本番を見据えた実践的なフィードバックで、「なぜ減点されるのか」「どう書けば満点になるのか」を具体的にアドバイスします。
                   </p>
                 </div>
               </div>
             </div>
 
-            <div className="bg-blue-50/80 backdrop-blur-sm border-2 border-blue-200 rounded-2xl p-6 shadow-lg">
+            {/* プライバシーの約束 */}
+            <div className="bg-emerald-50/80 backdrop-blur-sm border-2 border-emerald-200 rounded-2xl p-6 shadow-lg">
               <div className="flex items-start">
-                <svg className="w-6 h-6 text-blue-600 mr-3 flex-shrink-0 mt-0.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z" />
+                <svg className="w-6 h-6 text-emerald-600 mr-3 flex-shrink-0 mt-0.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m5.618-4.016A11.955 11.955 0 0112 2.944a11.955 11.955 0 01-8.618 3.04A12.02 12.02 0 003 9c0 5.591 3.824 10.29 9 11.622 5.176-1.332 9-6.03 9-11.622 0-1.042-.133-2.052-.382-3.016z" />
                 </svg>
                 <div className="flex-1">
-                  <h3 className="text-sm font-bold text-blue-900 mb-2">プライバシーについて</h3>
-                  <p className="text-sm text-blue-800 leading-relaxed">
-                    <strong>アップロードされた答案画像は、採点処理完了後に自動的に削除されます。</strong>また、これらの画像はAIの学習やモデルの改善には一切利用されません。お客様の個人情報と答案内容は厳重に保護され、第三者に開示されることはありません。<br />
-                    <span className="text-blue-700 mt-1 inline-block">※念のため、氏名がわかる部分はアップロードしないことをお勧めします。</span>
+                  <h3 className="text-sm font-bold text-emerald-900 mb-2">プライバシーの約束</h3>
+                  <p className="text-sm text-emerald-800 leading-relaxed">
+                    <strong>お子様の答案データは採点完了後すぐに削除され、AIの学習には一切使用しません。</strong>安心してご利用いただけるよう、データ保護を徹底しています。<br />
+                    <span className="text-emerald-700 mt-1 inline-block">💡 より安心のため、氏名部分を隠してアップロードすることもできます。</span>
                   </p>
                 </div>
               </div>
@@ -3492,14 +3610,14 @@ export default function Home() {
                 <div className="bg-gradient-to-r from-indigo-50 via-violet-50 to-purple-50 border-2 border-indigo-200 rounded-2xl p-5 shadow-sm">
                   <div className="flex items-center justify-center gap-3">
                     <div className="flex-shrink-0 w-10 h-10 bg-indigo-100 rounded-full flex items-center justify-center">
-                      <span className="text-xl">📝</span>
+                      <span className="text-xl">✨</span>
                     </div>
                     <div className="text-center sm:text-left">
                       <p className="text-sm font-bold text-indigo-800">
-                        一度に採点できる問題数は<span className="text-lg mx-1 text-violet-600">2問まで</span>です
+                        <span className="text-lg mx-1 text-violet-600">1〜2問</span>を丁寧にフィードバックします
                       </p>
                       <p className="text-xs text-indigo-600 mt-1">
-                        3問以上の採点が必要な場合は、採点完了後に同じファイルで続けて採点できます
+                        1回の採点で最大2問まで。3問以上ある場合は、続けて同じファイルで採点できます
                       </p>
                     </div>
                   </div>

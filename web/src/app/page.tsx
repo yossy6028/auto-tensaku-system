@@ -189,6 +189,10 @@ export default function Home() {
     modelAnswerPage: ''
   });
 
+  // 模範解答入力モード（画像 or テキスト）
+  const [modelAnswerInputMode, setModelAnswerInputMode] = useState<'image' | 'text'>('image');
+  const [modelAnswerText, setModelAnswerText] = useState('');
+
   // 生徒名・添削担当者名
   const [studentName, setStudentName] = useState('');
   const [teacherName, setTeacherName] = useState('');
@@ -1456,91 +1460,35 @@ export default function Home() {
       .page-break {
         page-break-before: always;
       }
-      /* スマホ向け戻るボタン */
-      .back-button-container {
-        position: fixed;
-        bottom: 0;
-        left: 0;
-        right: 0;
-        padding: 16px;
-        background: linear-gradient(to top, rgba(255,255,255,0.98), rgba(255,255,255,0.9));
-        z-index: 9999;
-        display: flex;
-        justify-content: center;
-      }
-      .back-button {
-        display: flex;
-        align-items: center;
-        gap: 8px;
-        background: linear-gradient(135deg, #4f46e5 0%, #7c3aed 100%);
-        color: white;
-        border: none;
-        padding: 14px 28px;
-        border-radius: 50px;
-        font-size: 16px;
-        font-weight: bold;
-        cursor: pointer;
-        box-shadow: 0 4px 20px rgba(79, 70, 229, 0.4);
-      }
-      .back-button svg {
-        width: 20px;
-        height: 20px;
-      }
-      /* 印刷完了オーバーレイ */
-      .print-complete-overlay {
-        display: none;
-        position: fixed;
-        top: 0;
-        left: 0;
-        right: 0;
-        bottom: 0;
-        background: rgba(0, 0, 0, 0.6);
-        z-index: 10000;
-        justify-content: center;
-        align-items: center;
-      }
-      .print-complete-modal {
-        background: white;
-        padding: 30px;
-        border-radius: 20px;
-        text-align: center;
-        max-width: 320px;
-        margin: 20px;
-        box-shadow: 0 20px 60px rgba(0, 0, 0, 0.3);
-      }
-      .print-complete-modal h2 {
-        margin: 0 0 10px 0;
-        color: #1e293b;
-        font-size: 20px;
-      }
-      .print-complete-modal p {
-        margin: 0 0 20px 0;
-        color: #64748b;
-        font-size: 14px;
-      }
-      .print-complete-modal button {
-        background: linear-gradient(135deg, #4f46e5 0%, #7c3aed 100%);
-        color: white;
-        border: none;
-        padding: 14px 28px;
-        border-radius: 50px;
-        font-size: 16px;
-        font-weight: bold;
-        cursor: pointer;
-        width: 100%;
-      }
+      /* スマホ向け：印刷後の案内メッセージ（印刷時は非表示） */
       @media print {
-        .back-button-container,
-        .print-complete-overlay {
+        .mobile-back-hint {
           display: none !important;
-        }
-        body {
-          padding-bottom: 0;
         }
       }
       @media screen {
-        body {
-          padding-bottom: 80px;
+        .mobile-back-hint {
+          margin-top: 40px;
+          padding: 20px;
+          background: #f0f9ff;
+          border: 2px solid #0ea5e9;
+          border-radius: 12px;
+          text-align: center;
+        }
+        .mobile-back-hint p {
+          margin: 0 0 12px 0;
+          color: #0369a1;
+          font-size: 14px;
+        }
+        .mobile-back-hint button {
+          background: linear-gradient(135deg, #4f46e5 0%, #7c3aed 100%);
+          color: white;
+          border: none;
+          padding: 12px 24px;
+          border-radius: 50px;
+          font-size: 15px;
+          font-weight: bold;
+          cursor: pointer;
         }
       }
     `;
@@ -1563,25 +1511,6 @@ export default function Home() {
   <style>${printStyles}</style>
 </head>
 <body>
-  <!-- スマホ向け戻るボタン -->
-  <div class="back-button-container">
-    <button class="back-button" onclick="window.close(); if(!window.closed) { history.back(); }">
-      <svg fill="none" stroke="currentColor" viewBox="0 0 24 24">
-        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10 19l-7-7m0 0l7-7m-7 7h18"/>
-      </svg>
-      元の画面に戻る
-    </button>
-  </div>
-
-  <!-- 印刷完了後のオーバーレイ -->
-  <div class="print-complete-overlay" id="printCompleteOverlay">
-    <div class="print-complete-modal">
-      <h2>✅ 保存完了</h2>
-      <p>PDFの保存が完了しました。<br/>元の画面に戻りますか？</p>
-      <button onclick="window.close(); if(!window.closed) { history.back(); }">元の画面に戻る</button>
-    </div>
-  </div>
-
   <div class="report-container">
     <div class="brand-row">
       <img src="/logo.jpg" alt="EduShift" class="brand-logo" />
@@ -1644,6 +1573,12 @@ export default function Home() {
         <p class="rewrite-text">${feedback.rewrite_example}</p>
       </div>
     </div>
+
+    <!-- スマホ向け：印刷/保存後の案内（印刷時は非表示） -->
+    <div class="mobile-back-hint">
+      <p>📱 PDF保存が完了したら、このタブを閉じて元の画面に戻ってください</p>
+      <button onclick="window.close()">このタブを閉じる</button>
+    </div>
   </div>
 </body>
 </html>`;
@@ -1655,14 +1590,6 @@ export default function Home() {
     // 画像読み込みを待ってから印刷ダイアログを開く
     // スマホではprint()が非同期のため、close()は呼ばない（ユーザーが手動で閉じる）
     setTimeout(() => {
-      // afterprint イベントで印刷完了後にオーバーレイを表示
-      printWindow.onafterprint = () => {
-        const overlay = printWindow.document.getElementById('printCompleteOverlay');
-        if (overlay) {
-          overlay.style.display = 'flex';
-        }
-      };
-
       printWindow.print();
     }, 500);
   };
@@ -1957,6 +1884,10 @@ export default function Home() {
     if (problemCondition.trim()) {
       formData.append('problemConditions', JSON.stringify({ [label]: problemCondition.trim() }));
     }
+    // 模範解答テキスト入力モードの場合
+    if (modelAnswerInputMode === 'text' && modelAnswerText.trim()) {
+      formData.append('modelAnswerText', modelAnswerText.trim());
+    }
 
     filesToUse.forEach((file) => {
       formData.append('files', file);
@@ -1979,7 +1910,14 @@ export default function Home() {
         setError(data.message);
         if (data.requirePlan) setRequirePlan(true);
       } else {
-        setResults(data.results);
+        // 既存の結果とマージ: 同じラベルの問題は新しい結果で上書き
+        setResults((prev) => {
+          const newItems = Array.isArray(data.results) ? data.results : [];
+          if (!prev || prev.length === 0) return newItems;
+          const byLabel = new Map(prev.map((x: GradingResponseItem) => [x.label, x]));
+          for (const item of newItems) byLabel.set(item.label, item);
+          return Array.from(byLabel.values());
+        });
         if (Array.isArray(data.results)) ingestRegradeInfo(data.results);
         refreshUsageInfo().catch((err) => {
           console.warn('Failed to refresh usage info:', err);
@@ -2538,7 +2476,7 @@ export default function Home() {
     setOcrFlowStep('grading');
     setIsLoading(true);
     setError(null);
-    setResults(null);
+    // 既存の結果は保持（nullにしない）- 再採点時に前の結果が消えないようにする
 
     const targetLabels = Object.keys(confirmedTexts);
     console.log('[Page] Starting grading with labels:', targetLabels);
@@ -2603,6 +2541,11 @@ export default function Home() {
     }
     formData.append('fileRoles', JSON.stringify(fileRoles));
 
+    // 模範解答テキスト入力モードの場合
+    if (modelAnswerInputMode === 'text' && modelAnswerText.trim()) {
+      formData.append('modelAnswerText', modelAnswerText.trim());
+    }
+
     // 圧縮後のファイルを使用
     filesToUse.forEach((file) => {
       formData.append('files', file);
@@ -2634,7 +2577,14 @@ export default function Home() {
           setRequirePlan(true);
         }
       } else {
-        setResults(data.results);
+        // 既存の結果とマージ: 同じラベルの問題は新しい結果で上書き
+        setResults((prev) => {
+          const newItems = Array.isArray(data.results) ? data.results : [];
+          if (!prev || prev.length === 0) return newItems;
+          const byLabel = new Map(prev.map((x: GradingResponseItem) => [x.label, x]));
+          for (const item of newItems) byLabel.set(item.label, item);
+          return Array.from(byLabel.values());
+        });
         if (Array.isArray(data.results)) ingestRegradeInfo(data.results);
         refreshUsageInfo().catch((err) => {
           console.warn('Failed to refresh usage info:', err);
@@ -2771,7 +2721,7 @@ export default function Home() {
     setIsLoading(true);
     setError(null);
     setRequirePlan(false);
-    setResults(null);
+    // 既存の結果は保持（nullにしない）- 再採点時に前の結果が消えないようにする
 
     console.log('[Page] Starting grading process...');
     console.log('[Page] Target labels:', targetLabels);
@@ -2795,6 +2745,12 @@ export default function Home() {
     formData.append('fileRoles', JSON.stringify(fileRoles));
     console.log('[Page] File roles:', fileRoles);
 
+    // 模範解答テキスト入力モードの場合
+    if (modelAnswerInputMode === 'text' && modelAnswerText.trim()) {
+      formData.append('modelAnswerText', modelAnswerText.trim());
+      console.log('[Page] Model answer text mode enabled');
+    }
+
     // 圧縮後のファイルを使用
     filesToUse.forEach((file, idx) => {
       formData.append(`files`, file);
@@ -2804,11 +2760,11 @@ export default function Home() {
 
     try {
       console.log('[Page] Sending request to /api/grade...');
-      
+
       // 5分のタイムアウトを設定
       const controller = new AbortController();
       const timeoutId = setTimeout(() => controller.abort(), 5 * 60 * 1000);
-      
+
       const res = await fetch('/api/grade', {
         method: 'POST',
         body: formData,
@@ -2870,7 +2826,14 @@ export default function Home() {
           fetch('http://127.0.0.1:7242/ingest/e78e9fd7-3fa2-45c5-b036-a4f10b20798a',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(scoreLogData)}).catch(()=>{});
           // #endregion
         });
-        setResults(data.results);
+        // 既存の結果とマージ: 同じラベルの問題は新しい結果で上書き
+        setResults((prev) => {
+          const newItems = Array.isArray(data.results) ? data.results : [];
+          if (!prev || prev.length === 0) return newItems;
+          const byLabel = new Map(prev.map((x: GradingResponseItem) => [x.label, x]));
+          for (const item of newItems) byLabel.set(item.label, item);
+          return Array.from(byLabel.values());
+        });
         if (Array.isArray(data.results)) ingestRegradeInfo(data.results);
 
         // 回数消費情報をログ出力・保存
@@ -4475,9 +4438,71 @@ export default function Home() {
                           value={pdfPageInfo.modelAnswerPage}
                           onChange={(e) => setPdfPageInfo(prev => ({ ...prev, modelAnswerPage: e.target.value }))}
                           className="w-full px-3 py-2 text-sm border border-orange-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-orange-500 focus:border-transparent bg-white"
+                          disabled={modelAnswerInputMode === 'text'}
                         />
                       </div>
                     </div>
+                  </div>
+                )}
+
+                {/* 模範解答入力モード選択 */}
+                {uploadedFiles.length > 0 && (
+                  <div className="mt-4 p-4 bg-gradient-to-br from-emerald-50 to-teal-50 border border-emerald-200 rounded-xl">
+                    <div className="flex items-center justify-between mb-3">
+                      <h4 className="text-sm font-bold text-emerald-800 flex items-center">
+                        <Edit3 className="w-4 h-4 mr-2" />
+                        模範解答の入力方法
+                      </h4>
+                      <div className="flex bg-white rounded-lg p-1 border border-emerald-200">
+                        <button
+                          type="button"
+                          onClick={() => setModelAnswerInputMode('image')}
+                          className={clsx(
+                            "px-3 py-1.5 text-xs font-medium rounded-md transition-all",
+                            modelAnswerInputMode === 'image'
+                              ? "bg-emerald-500 text-white shadow-sm"
+                              : "text-emerald-600 hover:bg-emerald-50"
+                          )}
+                        >
+                          📷 画像から
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => setModelAnswerInputMode('text')}
+                          className={clsx(
+                            "px-3 py-1.5 text-xs font-medium rounded-md transition-all",
+                            modelAnswerInputMode === 'text'
+                              ? "bg-emerald-500 text-white shadow-sm"
+                              : "text-emerald-600 hover:bg-emerald-50"
+                          )}
+                        >
+                          ✏️ 手入力
+                        </button>
+                      </div>
+                    </div>
+
+                    {modelAnswerInputMode === 'text' && (
+                      <div className="mt-3">
+                        <label className="text-xs font-medium text-emerald-700 block mb-2">
+                          模範解答のテキストを入力してください
+                        </label>
+                        <textarea
+                          value={modelAnswerText}
+                          onChange={(e) => setModelAnswerText(e.target.value)}
+                          placeholder="例: 主人公は友人との別れに対する悲しみと、新しい土地での生活に対する不安を感じているから。"
+                          className="w-full h-32 p-3 border border-emerald-200 rounded-lg focus:ring-2 focus:ring-emerald-500 focus:border-emerald-500 text-sm leading-relaxed resize-y bg-white"
+                        />
+                        <p className="text-xs text-emerald-600 mt-2">
+                          💡 採点対象の問題ごとに「大問○ 問○: 模範解答」の形式で入力できます。複数問題を採点する場合は改行して入力してください。
+                        </p>
+                      </div>
+                    )}
+
+                    {modelAnswerInputMode === 'image' && (
+                      <p className="text-xs text-emerald-600">
+                        アップロードした画像から模範解答を読み取ります。ファイルの役割設定で「模範解答」を指定してください。
+                      </p>
+                    )}
                   </div>
                 )}
               </div>

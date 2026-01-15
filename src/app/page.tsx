@@ -74,11 +74,25 @@ export default function Home() {
       targetProblems = [{ big: currentBig, small: currentSmall, points: parsePointsValue(currentPoints) }];
     }
 
-    setSubmittedProblems(targetProblems);
+    // 既存の結果がある場合、新しい問題を既存リストにマージ
+    const mergedProblems = [...submittedProblems];
+    for (const newProblem of targetProblems) {
+      const existingIndex = mergedProblems.findIndex(
+        p => p.big === newProblem.big && p.small === newProblem.small
+      );
+      if (existingIndex >= 0) {
+        // 既存の問題を更新（配点も更新）
+        mergedProblems[existingIndex] = newProblem;
+      } else {
+        // 新しい問題を追加
+        mergedProblems.push(newProblem);
+      }
+    }
+    setSubmittedProblems(mergedProblems);
 
     setIsLoading(true);
     setError(null);
-    setResults(null);
+    // 既存の結果は保持（nullにしない）
 
     const targetLabels = targetProblems.map(p => `大問${p.big} 問${p.small}`);
     const formData = new FormData();
@@ -97,7 +111,22 @@ export default function Home() {
       if (data.status === 'error') {
         setError(data.message);
       } else {
-        setResults(data.results);
+        // 既存の結果とマージ: 同じラベルの問題は新しい結果で上書き
+        setResults(prevResults => {
+          if (!prevResults || prevResults.length === 0) {
+            return data.results;
+          }
+          const mergedResults = [...prevResults];
+          for (const newResult of data.results) {
+            const existingIndex = mergedResults.findIndex(r => r.label === newResult.label);
+            if (existingIndex >= 0) {
+              mergedResults[existingIndex] = newResult;
+            } else {
+              mergedResults.push(newResult);
+            }
+          }
+          return mergedResults;
+        });
       }
     } catch (err: any) {
       setError(err.message || '通信エラーが発生しました。');
@@ -401,7 +430,12 @@ export default function Home() {
 
           const deductionDetails = gradingResult?.deduction_details ?? [];
           const normalizedScore = gradingResult ? normalizeScore(gradingResult.score) : 0;
-          const maxPoints = submittedProblems[index]?.points;
+          // ラベルから対応する問題を検索して配点を取得
+          const labelMatch = res.label?.match(/大問(\d+)\s*問(\d+)/);
+          const matchedProblem = labelMatch
+            ? submittedProblems.find(p => p.big === Number(labelMatch[1]) && p.small === Number(labelMatch[2]))
+            : null;
+          const maxPoints = matchedProblem?.points;
           const safeMaxPoints = typeof maxPoints === 'number' && Number.isFinite(maxPoints) && maxPoints > 0 ? maxPoints : null;
           const earnedPoints = safeMaxPoints ? (normalizedScore / 100) * safeMaxPoints : null;
           const totalDeduction = deductionDetails.reduce(
@@ -443,7 +477,7 @@ export default function Home() {
                     result={res.result}
                     targetLabel={res.label}
                     studentFile={studentFile}
-                    maxPoints={submittedProblems[index]?.points ?? null}
+                    maxPoints={matchedProblem?.points ?? null}
                   />
                 </div>
 

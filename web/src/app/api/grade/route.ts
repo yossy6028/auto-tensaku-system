@@ -387,6 +387,8 @@ export async function POST(req: NextRequest) {
         const confirmedTextsJson = formData.get('confirmedTexts') as string | null;
         const strictnessRaw = formData.get('strictness');
         const regradeTokensJson = formData.get('regradeTokens') as string | null;
+        // 模範解答テキスト（手入力モードの場合）
+        const modelAnswerText = formData.get('modelAnswerText') as string | null;
 
         if (!targetLabelsJson || !files || files.length === 0) {
             return NextResponse.json(
@@ -597,10 +599,17 @@ export async function POST(req: NextRequest) {
                     if (layout) {
                         logger.info(`[API] Layout info for ${label}: ${layout.total_lines} lines, ${layout.paragraph_count} paragraphs, indented: [${layout.indented_columns.join(', ')}]`);
                     }
-                    result = await grader.gradeWithConfirmedText(label, confirmedTexts[label], fileBuffers, pdfPageInfo, fileRoles, strictness, problemCondition, layout);
+                    // 模範解答テキストがある場合はログ出力
+                    if (modelAnswerText) {
+                        logger.info(`[API] Using manual model answer text for ${label}: ${modelAnswerText.length} chars`);
+                    }
+                    result = await grader.gradeWithConfirmedText(label, confirmedTexts[label], fileBuffers, pdfPageInfo, fileRoles, strictness, problemCondition, layout, modelAnswerText || undefined);
                 } else {
                     // 従来通りOCR + 採点
-                    result = await grader.gradeAnswerFromMultipleFiles(label, fileBuffers, pdfPageInfo, fileRoles, strictness);
+                    if (modelAnswerText) {
+                        logger.info(`[API] Using manual model answer text for ${label}: ${modelAnswerText.length} chars`);
+                    }
+                    result = await grader.gradeAnswerFromMultipleFiles(label, fileBuffers, pdfPageInfo, fileRoles, strictness, modelAnswerText || undefined);
                 }
 
                 // 不完全な採点結果のチェック（課金対象外）

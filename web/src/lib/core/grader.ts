@@ -259,7 +259,8 @@ export class EduShiftGrader {
         fileRoles?: Record<string, FileRole>,
         strictness: GradingStrictness = DEFAULT_STRICTNESS,
         problemCondition?: string,
-        layout?: { total_lines: number; paragraph_count: number; indented_columns: number[] }
+        layout?: { total_lines: number; paragraph_count: number; indented_columns: number[] },
+        modelAnswerText?: string
     ) {
         try {
             // ファイルに役割情報を付与
@@ -276,7 +277,7 @@ export class EduShiftGrader {
             const sanitizedLabel = targetLabel.replace(/[<>\\"'`]/g, "").trim() || "target";
 
             // Stage 2のみ実行（confirmedTextとlayout情報を使用）
-            return await this.executeGradingWithText(sanitizedLabel, confirmedText, imageParts, pdfPageInfo, strictness, problemCondition, layout);
+            return await this.executeGradingWithText(sanitizedLabel, confirmedText, imageParts, pdfPageInfo, strictness, problemCondition, layout, modelAnswerText);
         } catch (error: unknown) {
             return this.handleError(error);
         }
@@ -286,11 +287,12 @@ export class EduShiftGrader {
      * 複数ファイルから採点を実行
      */
     async gradeAnswerFromMultipleFiles(
-        targetLabel: string, 
+        targetLabel: string,
         files: UploadedFilePart[],
         pdfPageInfo?: { answerPage?: string; problemPage?: string; modelAnswerPage?: string } | null,
         fileRoles?: Record<string, FileRole>,
-        strictness: GradingStrictness = DEFAULT_STRICTNESS
+        strictness: GradingStrictness = DEFAULT_STRICTNESS,
+        modelAnswerText?: string
     ) {
         try {
             // ファイルに役割情報がすでに付与されていない場合は付与
@@ -303,7 +305,7 @@ export class EduShiftGrader {
             }
             const categorizedFiles = this.categorizeFiles(files, pdfPageInfo);
             const imageParts = this.buildContentSequence(categorizedFiles);
-            return await this.executeTwoStageGrading(targetLabel, imageParts, pdfPageInfo, categorizedFiles, strictness);
+            return await this.executeTwoStageGrading(targetLabel, imageParts, pdfPageInfo, categorizedFiles, strictness, modelAnswerText);
         } catch (error: unknown) {
             return this.handleError(error);
         }
@@ -1852,7 +1854,8 @@ JSONのみ出力してください。`;
         pdfPageInfo?: { answerPage?: string; problemPage?: string; modelAnswerPage?: string } | null,
         strictness: GradingStrictness = DEFAULT_STRICTNESS,
         problemCondition?: string,
-        layout?: { total_lines: number; paragraph_count: number; indented_columns: number[] }
+        layout?: { total_lines: number; paragraph_count: number; indented_columns: number[] },
+        modelAnswerText?: string
     ) {
         console.log("[Grader] 確認済みテキストで採点開始");
         if (problemCondition) {
@@ -1908,9 +1911,23 @@ ${problemCondition}
   - 段落構成 → 上記で検証済み、減点禁止
 ` : '';
 
+        // 模範解答テキストセクション（ユーザーが手入力した場合）
+        const modelAnswerSection = modelAnswerText ? `
+【⚠️ 重要：ユーザーが手入力した模範解答】
+以下の模範解答はユーザーが直接入力したものです。画像内の模範解答よりも**こちらを優先**して採点の基準としてください。
+---
+${modelAnswerText}
+---
+※ この模範解答と生徒の答案を比較して採点してください。
+` : '';
+
+        if (modelAnswerText) {
+            console.log("[Grader] ユーザー入力の模範解答使用:", modelAnswerText.substring(0, 50) + (modelAnswerText.length > 50 ? '...' : ''));
+        }
+
         const prompt = `Target Problem Label: ${targetLabel}
 ${pdfPageHint}
-${problemConditionSection}${layoutSection}
+${problemConditionSection}${layoutSection}${modelAnswerSection}
 【ユーザーが確認・修正した生徒の答案テキスト】（${charCount}文字）
 ---
 ${confirmedText}
@@ -2001,11 +2018,12 @@ ${layout ? '- 【重要】上記のレイアウト情報を信頼し、字下げ
      * Stage 2: 採点（OCR結果を使用してJSON出力）
      */
     private async executeTwoStageGrading(
-        targetLabel: string, 
+        targetLabel: string,
         imageParts: ContentPart[],
         pdfPageInfo?: { answerPage?: string; problemPage?: string; modelAnswerPage?: string } | null,
         categorizedFiles?: CategorizedFiles,
-        strictness: GradingStrictness = DEFAULT_STRICTNESS
+        strictness: GradingStrictness = DEFAULT_STRICTNESS,
+        modelAnswerText?: string
     ) {
         const sanitizedLabel = targetLabel.replace(/[<>\\\"'`]/g, '').trim();
 
@@ -2080,12 +2098,26 @@ ${ocrText}
   "column_readings": ["列1の文字", "列2の文字", ...]
 }`;
 
+        // 模範解答テキストセクション（ユーザーが手入力した場合）
+        const modelAnswerSection = modelAnswerText ? `
+【⚠️ 重要：ユーザーが手入力した模範解答】
+以下の模範解答はユーザーが直接入力したものです。画像内の模範解答よりも**こちらを優先**して採点の基準としてください。
+---
+${modelAnswerText}
+---
+※ この模範解答と生徒の答案を比較して採点してください。
+` : '';
+
+        if (modelAnswerText) {
+            console.log("[Grader] ユーザー入力の模範解答使用:", modelAnswerText.substring(0, 50) + (modelAnswerText.length > 50 ? '...' : ''));
+        }
+
         const prompt = `Target Problem Label: ${sanitizedLabel}
 ${pdfPageHint}
-
+${modelAnswerSection}
 ${ocrSection}
 
-添付された画像（問題文、模範解答、生徒の答案）を参照し、「${sanitizedLabel}」の採点を行ってください。
+添付された画像（問題文${modelAnswerText ? '' : '、模範解答'}、生徒の答案）を参照し、「${sanitizedLabel}」の採点を行ってください。
 
 System Instructionに定義された以下のルールを厳密に適用してください：
 - Global Rules: 5大原則に基づく採点

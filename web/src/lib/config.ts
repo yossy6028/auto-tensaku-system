@@ -8,4 +8,6 @@ export const CONFIG = {
     OCR_MODEL_NAME: process.env.OCR_MODEL_NAME || '',
     // OCR失敗時のフォールバックモデル（未指定なら無効）
     OCR_FALLBACK_MODEL_NAME: process.env.OCR_FALLBACK_MODEL_NAME || '',
+    // レート制限時の代替モデル（gemini-3-proが制限に達した場合に使用）
+    RATE_LIMIT_FALLBACK_MODEL: process.env.RATE_LIMIT_FALLBACK_MODEL || 'gemini-2.5-pro-preview-05-06',
 };

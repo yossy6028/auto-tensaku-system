@@ -77,6 +77,98 @@ function sleep(ms: number): Promise<void> {
     return new Promise(resolve => setTimeout(resolve, ms));
 }
 
+/**
+ * Gemini APIのレート制限状態を管理するシングルトンクラス
+ *
+ * gemini-3-pro-previewには1日あたりの利用制限があり、
+ * 制限に達した場合はgemini-2.5-proへ自動的にフォールバックする。
+ * 日付が変わると自動的にリセットされ、gemini-3-proに戻る。
+ */
+class RateLimitManager {
+    private static instance: RateLimitManager;
+    private rateLimitedDate: string | null = null; // YYYY-MM-DD形式（JST）
+
+    private constructor() {}
+
+    static getInstance(): RateLimitManager {
+        if (!RateLimitManager.instance) {
+            RateLimitManager.instance = new RateLimitManager();
+        }
+        return RateLimitManager.instance;
+    }
+
+    /**
+     * 現在の日付を取得（JST）
+     */
+    private getCurrentDateJST(): string {
+        const now = new Date();
+        // JSTはUTC+9
+        const jstOffset = 9 * 60 * 60 * 1000;
+        const jstDate = new Date(now.getTime() + jstOffset);
+        return jstDate.toISOString().split('T')[0];
+    }
+
+    /**
+     * レート制限に達したことを記録
+     */
+    markRateLimited(): void {
+        this.rateLimitedDate = this.getCurrentDateJST();
+        console.warn(`[RateLimitManager] ⚠️ Gemini 3 Pro がレート制限に達しました（${this.rateLimitedDate}）。フォールバックモデルに切り替えます。`);
+    }
+
+    /**
+     * レート制限中かどうかをチェック
+     * 日付が変わっていたら自動的にリセット
+     */
+    isRateLimited(): boolean {
+        if (!this.rateLimitedDate) {
+            return false;
+        }
+
+        const currentDate = this.getCurrentDateJST();
+        if (currentDate !== this.rateLimitedDate) {
+            // 日付が変わったのでリセット
+            console.info(`[RateLimitManager] ✅ 日付が変わりました（${this.rateLimitedDate} → ${currentDate}）。Gemini 3 Pro に復帰します。`);
+            this.rateLimitedDate = null;
+            return false;
+        }
+
+        return true;
+    }
+
+    /**
+     * 現在のステータスを取得
+     */
+    getStatus(): { isLimited: boolean; limitedDate: string | null } {
+        return {
+            isLimited: this.isRateLimited(),
+            limitedDate: this.rateLimitedDate
+        };
+    }
+
+    /**
+     * エラーメッセージがレート制限エラーかどうかを判定
+     */
+    static isRateLimitError(error: unknown): boolean {
+        const message = error instanceof Error ? error.message : String(error);
+        // Gemini APIのレート制限エラーパターン
+        const rateLimitPatterns = [
+            /429/i,                           // HTTP 429 Too Many Requests
+            /RESOURCE_EXHAUSTED/i,            // gRPCステータス
+            /quota/i,                         // quota exceeded
+            /rate.*limit/i,                   // rate limit
+            /too.*many.*requests/i,           // too many requests
+            /daily.*limit/i,                  // daily limit
+            /requests.*per.*day/i,            // requests per day limit
+        ];
+
+        return rateLimitPatterns.some(pattern => pattern.test(message));
+    }
+}
+
+// グローバルインスタンス
+const rateLimitManager = RateLimitManager.getInstance();
+
 // 型定義
 // ファイルの役割タイプ（エクスポート）
 export type FileRole = 'answer' | 'problem' | 'model' | 'problem_model' | 'answer_problem' | 'all' | 'other';
@@ -646,7 +738,11 @@ ${hasAllRole ? `手書きの答案部分のみ読み取り。印刷文字は無�
         parts: ContentPart[],
         modelName?: string
     ): Promise<{ columns: number; rows: number } | null> {
-        const resolvedModel = modelName || CONFIG.OCR_MODEL_NAME || CONFIG.MODEL_NAME;
+        // レート制限チェック: 制限中ならフォールバックモデルを使用
+        let resolvedModel = modelName || CONFIG.OCR_MODEL_NAME || CONFIG.MODEL_NAME;
+        if (rateLimitManager.isRateLimited() && CONFIG.RATE_LIMIT_FALLBACK_MODEL) {
+            resolvedModel = CONFIG.RATE_LIMIT_FALLBACK_MODEL;
+        }
 
         // 改善されたプロンプト: 原稿用紙だけでなく、短い記述問題のマス目も検出
         const prompt = `この画像の解答欄にマス目があるか確認してください。
@@ -764,7 +860,15 @@ JSONのみ出力してください。`;
             columns: Array<{ col: number; first_cell: string; indent: boolean }>;
         };
     }> {
-        const resolvedModel = modelName || CONFIG.OCR_MODEL_NAME || CONFIG.MODEL_NAME;
+        // レート制限チェック: 制限中ならフォールバックモデルを使用
+        let resolvedModel = modelName || CONFIG.OCR_MODEL_NAME || CONFIG.MODEL_NAME;
+        const originalModel = resolvedModel;
+        
+        if (rateLimitManager.isRateLimited() && CONFIG.RATE_LIMIT_FALLBACK_MODEL) {
+            resolvedModel = CONFIG.RATE_LIMIT_FALLBACK_MODEL;
+            console.info(`[Grader] レート制限中のため、フォールバックモデルを使用: ${resolvedModel}`);
+        }
+        
         let best: ReturnType<typeof this.parseOcrResponse> | null = null;
         let bestCount = -1;
         let lastError: unknown = null;
@@ -800,34 +904,57 @@ JSONのみ出力してください。`;
                     );
                 } catch (error) {
                     const message = error instanceof Error ? error.message : String(error);
-                    const thinkingUnsupported = /thinking/i.test(message) && /unsupported|not supported|does not support|not available/i.test(message);
-                    const thinkingRequired = /thinking/i.test(message) && /only works in thinking mode|budget 0 is invalid|requires thinking/i.test(message);
-                    if (this.ocrThinkingMode !== "enabled" && thinkingRequired) {
-                        console.warn("[Grader] thinkingモード必須のため有効化します:", message);
-                        this.ocrThinkingMode = "enabled";
-                        result = await withTimeout(
-                            this.ai.models.generateContent({
-                                model: resolvedModel,
-                                contents: [{ role: "user", parts: [{ text: prompt }, ...parts] }],
-                                config: buildConfig("enabled")
-                            }),
-                            OCR_TIMEOUT_MS,
-                            "OCR処理"
-                        );
-                    } else if (this.ocrThinkingMode !== "unsupported" && thinkingUnsupported) {
-                        console.warn("[Grader] thinkingConfigが未対応のため無効化します:", message);
-                        this.ocrThinkingMode = "unsupported";
-                        result = await withTimeout(
-                            this.ai.models.generateContent({
-                                model: resolvedModel,
-                                contents: [{ role: "user", parts: [{ text: prompt }, ...parts] }],
-                                config: buildConfig("unsupported")
-                            }),
-                            OCR_TIMEOUT_MS,
-                            "OCR処理"
-                        );
+                    
+                    // レート制限エラーの検出
+                    if (RateLimitManager.isRateLimitError(error) && CONFIG.RATE_LIMIT_FALLBACK_MODEL) {
+                        rateLimitManager.markRateLimited();
+                        
+                        // フォールバックモデルで再試行
+                        if (resolvedModel !== CONFIG.RATE_LIMIT_FALLBACK_MODEL) {
+                            console.warn(`[Grader] レート制限エラー検出。${CONFIG.RATE_LIMIT_FALLBACK_MODEL} で再試行します。`);
+                            resolvedModel = CONFIG.RATE_LIMIT_FALLBACK_MODEL;
+                            result = await withTimeout(
+                                this.ai.models.generateContent({
+                                    model: resolvedModel,
+                                    contents: [{ role: "user", parts: [{ text: prompt }, ...parts] }],
+                                    config: configWithThinking
+                                }),
+                                OCR_TIMEOUT_MS,
+                                "OCR処理（フォールバック）"
+                            );
+                        } else {
+                            throw error;
+                        }
                     } else {
-                        throw error;
+                        const thinkingUnsupported = /thinking/i.test(message) && /unsupported|not supported|does not support|not available/i.test(message);
+                        const thinkingRequired = /thinking/i.test(message) && /only works in thinking mode|budget 0 is invalid|requires thinking/i.test(message);
+                        if (this.ocrThinkingMode !== "enabled" && thinkingRequired) {
+                            console.warn("[Grader] thinkingモード必須のため有効化します:", message);
+                            this.ocrThinkingMode = "enabled";
+                            result = await withTimeout(
+                                this.ai.models.generateContent({
+                                    model: resolvedModel,
+                                    contents: [{ role: "user", parts: [{ text: prompt }, ...parts] }],
+                                    config: buildConfig("enabled")
+                                }),
+                                OCR_TIMEOUT_MS,
+                                "OCR処理"
+                            );
+                        } else if (this.ocrThinkingMode !== "unsupported" && thinkingUnsupported) {
+                            console.warn("[Grader] thinkingConfigが未対応のため無効化します:", message);
+                            this.ocrThinkingMode = "unsupported";
+                            result = await withTimeout(
+                                this.ai.models.generateContent({
+                                    model: resolvedModel,
+                                    contents: [{ role: "user", parts: [{ text: prompt }, ...parts] }],
+                                    config: buildConfig("unsupported")
+                                }),
+                                OCR_TIMEOUT_MS,
+                                "OCR処理"
+                            );
+                        } else {
+                            throw error;
+                        }
                     }
                 }
 
@@ -850,6 +977,10 @@ JSONのみ出力してください。`;
                 } else {
                     const parsed = this.parseOcrResponse(raw);
                     if (parsed.text && !this.isOcrFailure(parsed.text)) {
+                        // 成功時、使用モデルをログ出力
+                        if (resolvedModel !== originalModel) {
+                            console.info(`[Grader] ✅ OCR成功（フォールバックモデル: ${resolvedModel}）`);
+                        }
                         return parsed;
                     }
                     if (parsed.text && parsed.charCount > bestCount) {
@@ -860,6 +991,15 @@ JSONのみ出力してください。`;
             } catch (error) {
                 console.error("[Grader] OCR API呼び出しエラー:", error);
                 lastError = error;
+                
+                // レート制限エラーの場合、リトライ前にフォールバックモデルに切り替え
+                if (RateLimitManager.isRateLimitError(error) && CONFIG.RATE_LIMIT_FALLBACK_MODEL) {
+                    rateLimitManager.markRateLimited();
+                    if (resolvedModel !== CONFIG.RATE_LIMIT_FALLBACK_MODEL) {
+                        resolvedModel = CONFIG.RATE_LIMIT_FALLBACK_MODEL;
+                        console.warn(`[Grader] 次回リトライは ${resolvedModel} を使用します。`);
+                    }
+                }
             }
 
             if (attemptIndex < OCR_RETRY_ATTEMPTS - 1) {
@@ -1950,18 +2090,48 @@ ${layout ? '- 【重要】上記のレイアウト情報を信頼し、字下げ
 
 結果はJSON形式で出力してください。`;
 
-        const result = await withTimeout(
-            this.ai.models.generateContent({
-                model: CONFIG.MODEL_NAME,
-                contents: [{ role: "user", parts: [{ text: prompt }, ...imageParts] }],
-                config: {
-                    ...this.gradingConfig,
-                    systemInstruction: buildGradingSystemInstruction(strictness)
-                }
-            }),
-            GRADING_TIMEOUT_MS,
-            "採点処理"
-        );
+        // レート制限チェック: 制限中ならフォールバックモデルを使用
+        let gradingModel = CONFIG.MODEL_NAME;
+        if (rateLimitManager.isRateLimited() && CONFIG.RATE_LIMIT_FALLBACK_MODEL) {
+            gradingModel = CONFIG.RATE_LIMIT_FALLBACK_MODEL;
+            console.info(`[Grader] レート制限中のため、採点にフォールバックモデルを使用: ${gradingModel}`);
+        }
+
+        let result;
+        try {
+            result = await withTimeout(
+                this.ai.models.generateContent({
+                    model: gradingModel,
+                    contents: [{ role: "user", parts: [{ text: prompt }, ...imageParts] }],
+                    config: {
+                        ...this.gradingConfig,
+                        systemInstruction: buildGradingSystemInstruction(strictness)
+                    }
+                }),
+                GRADING_TIMEOUT_MS,
+                "採点処理"
+            );
+        } catch (error) {
+            // レート制限エラーの場合、フォールバックモデルで再試行
+            if (RateLimitManager.isRateLimitError(error) && CONFIG.RATE_LIMIT_FALLBACK_MODEL && gradingModel !== CONFIG.RATE_LIMIT_FALLBACK_MODEL) {
+                rateLimitManager.markRateLimited();
+                console.warn(`[Grader] 採点でレート制限エラー検出。${CONFIG.RATE_LIMIT_FALLBACK_MODEL} で再試行します。`);
+                result = await withTimeout(
+                    this.ai.models.generateContent({
+                        model: CONFIG.RATE_LIMIT_FALLBACK_MODEL,
+                        contents: [{ role: "user", parts: [{ text: prompt }, ...imageParts] }],
+                        config: {
+                            ...this.gradingConfig,
+                            systemInstruction: buildGradingSystemInstruction(strictness)
+                        }
+                    }),
+                    GRADING_TIMEOUT_MS,
+                    "採点処理（フォールバック）"
+                );
+            } else {
+                throw error;
+            }
+        }
 
         const text = result.text ?? "";
         console.log("[Grader] 採点AIレスポンス長:", text.length);
@@ -2127,18 +2297,48 @@ System Instructionに定義された以下のルールを厳密に適用して�
 
 結果はJSON形式で出力してください。`;
 
-        const result = await withTimeout(
-            this.ai.models.generateContent({
-                model: CONFIG.MODEL_NAME,
-                contents: [{ role: "user", parts: [{ text: prompt }, ...imageParts] }],
-                config: {
-                    ...this.gradingConfig,
-                    systemInstruction: buildGradingSystemInstruction(strictness)
-                }
-            }),
-            GRADING_TIMEOUT_MS,
-            "採点処理"
-        );
+        // レート制限チェック: 制限中ならフォールバックモデルを使用
+        let gradingModel = CONFIG.MODEL_NAME;
+        if (rateLimitManager.isRateLimited() && CONFIG.RATE_LIMIT_FALLBACK_MODEL) {
+            gradingModel = CONFIG.RATE_LIMIT_FALLBACK_MODEL;
+            console.info(`[Grader] レート制限中のため、Stage 2採点にフォールバックモデルを使用: ${gradingModel}`);
+        }
+
+        let result;
+        try {
+            result = await withTimeout(
+                this.ai.models.generateContent({
+                    model: gradingModel,
+                    contents: [{ role: "user", parts: [{ text: prompt }, ...imageParts] }],
+                    config: {
+                        ...this.gradingConfig,
+                        systemInstruction: buildGradingSystemInstruction(strictness)
+                    }
+                }),
+                GRADING_TIMEOUT_MS,
+                "採点処理"
+            );
+        } catch (error) {
+            // レート制限エラーの場合、フォールバックモデルで再試行
+            if (RateLimitManager.isRateLimitError(error) && CONFIG.RATE_LIMIT_FALLBACK_MODEL && gradingModel !== CONFIG.RATE_LIMIT_FALLBACK_MODEL) {
+                rateLimitManager.markRateLimited();
+                console.warn(`[Grader] Stage 2採点でレート制限エラー検出。${CONFIG.RATE_LIMIT_FALLBACK_MODEL} で再試行します。`);
+                result = await withTimeout(
+                    this.ai.models.generateContent({
+                        model: CONFIG.RATE_LIMIT_FALLBACK_MODEL,
+                        contents: [{ role: "user", parts: [{ text: prompt }, ...imageParts] }],
+                        config: {
+                            ...this.gradingConfig,
+                            systemInstruction: buildGradingSystemInstruction(strictness)
+                        }
+                    }),
+                    GRADING_TIMEOUT_MS,
+                    "採点処理（フォールバック）"
+                );
+            } else {
+                throw error;
+            }
+        }
 
         const text = result.text ?? "";
         console.log("[Grader] Stage 2 AIレスポンス長:", text.length);

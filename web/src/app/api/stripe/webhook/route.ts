@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { stripe, STRIPE_WEBHOOK_SECRET, getPlanIdFromStripePriceId } from '@/lib/stripe/config';
 import { createClient } from '@supabase/supabase-js';
 import Stripe from 'stripe';
+import { logger } from '@/lib/security/logger';
 
 type SubscriptionStatus = 'active' | 'cancelled' | 'past_due';
 
@@ -85,7 +86,7 @@ async function resolvePlan(stripePriceId?: string | null): Promise<PlanResolutio
     .maybeSingle();
 
   if (planByPriceError) {
-    console.warn('Failed to lookup pricing plan by stripe_price_id:', planByPriceError);
+    logger.warn('Failed to lookup pricing plan by stripe_price_id:', planByPriceError);
   }
 
   if (planByPrice) {
@@ -105,7 +106,7 @@ async function resolvePlan(stripePriceId?: string | null): Promise<PlanResolutio
     .maybeSingle();
 
   if (planByIdError) {
-    console.warn('Failed to lookup pricing plan by id:', planByIdError);
+    logger.warn('Failed to lookup pricing plan by id:', planByIdError);
   }
 
   if (planById) {
@@ -134,7 +135,7 @@ async function resolvePlan(stripePriceId?: string | null): Promise<PlanResolutio
     .maybeSingle();
 
   if (insertPlanError) {
-    console.error('Failed to auto-create pricing plan:', insertPlanError);
+    logger.error('Failed to auto-create pricing plan:', insertPlanError);
   }
 
   return {
@@ -196,7 +197,7 @@ async function upsertSubscriptionRecord(params: {
     .maybeSingle();
 
   if (existingByStripeError) {
-    console.warn('Failed to lookup subscription by stripe_subscription_id:', existingByStripeError);
+    logger.warn('Failed to lookup subscription by stripe_subscription_id:', existingByStripeError);
   }
 
   let targetId = existingByStripe?.id;
@@ -211,7 +212,7 @@ async function upsertSubscriptionRecord(params: {
       .maybeSingle();
 
     if (existingByUserError) {
-      console.warn('Failed to lookup subscription by user_id:', existingByUserError);
+      logger.warn('Failed to lookup subscription by user_id:', existingByUserError);
     }
 
     targetId = existingByUser?.id;
@@ -227,9 +228,9 @@ async function upsertSubscriptionRecord(params: {
       .eq('id', targetId);
 
     if (updateError) {
-      console.error('Failed to update subscription:', updateError);
+      logger.error('Failed to update subscription:', updateError);
     } else {
-      console.log('Subscription updated for user:', userId);
+      logger.info('Subscription updated for user:', userId);
     }
     return;
   }
@@ -243,9 +244,9 @@ async function upsertSubscriptionRecord(params: {
     });
 
   if (insertError) {
-    console.error('Failed to insert subscription:', insertError);
+    logger.error('Failed to insert subscription:', insertError);
   } else {
-    console.log('Subscription inserted for user:', userId);
+    logger.info('Subscription inserted for user:', userId);
   }
 }
 
@@ -254,7 +255,7 @@ export async function POST(request: NextRequest) {
   const signature = request.headers.get('stripe-signature');
 
   if (!signature) {
-    console.error('No stripe-signature header');
+    logger.error('No stripe-signature header');
     return NextResponse.json({ error: 'No signature' }, { status: 400 });
   }
 
@@ -263,14 +264,14 @@ export async function POST(request: NextRequest) {
   try {
     event = stripe.webhooks.constructEvent(body, signature, STRIPE_WEBHOOK_SECRET);
   } catch (err) {
-    console.error('Webhook signature verification failed:', err);
+    logger.error('Webhook signature verification failed:', err);
     return NextResponse.json(
       { error: 'Webhook signature verification failed' },
       { status: 400 }
     );
   }
 
-  console.log('Webhook event received:', event.type);
+  logger.info('Webhook event received:', event.type);
 
   try {
     switch (event.type) {
@@ -291,7 +292,7 @@ export async function POST(request: NextRequest) {
           });
           
           if (!userId) {
-            console.error('No user ID in subscription metadata');
+            logger.error('No user ID in subscription metadata');
             break;
           }
 
@@ -324,7 +325,7 @@ export async function POST(request: NextRequest) {
         });
         
         if (!userId) {
-          console.error('No user ID in subscription metadata');
+          logger.error('No user ID in subscription metadata');
           break;
         }
 
@@ -447,12 +448,12 @@ export async function POST(request: NextRequest) {
       }
 
       default:
-        console.log('Unhandled event type:', event.type);
+        logger.info('Unhandled event type:', event.type);
     }
 
     return NextResponse.json({ received: true });
   } catch (error) {
-    console.error('Webhook processing error:', error);
+    logger.error('Webhook processing error:', error);
     return NextResponse.json(
       { error: 'Webhook processing failed' },
       { status: 500 }

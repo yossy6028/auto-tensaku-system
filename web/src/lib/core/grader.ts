@@ -428,9 +428,6 @@ export class EduShiftGrader {
     }> {
         console.log("[Grader] Stage 1: OCR開始");
 
-        // #region agent log
-        fetch('http://127.0.0.1:7242/ingest/e78e9fd7-3fa2-45c5-b036-a4f10b20798a',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'grader.ts:performOcr:entry',message:'OCR開始',data:{targetLabel,studentFilesCount:categorizedFiles?.studentFiles.length,studentFileNames:categorizedFiles?.studentFiles.map(f=>({name:f.name,role:f.role})),problemFilesCount:categorizedFiles?.problemFiles.length,modelFilesCount:categorizedFiles?.modelAnswerFiles.length,hasAllRole:categorizedFiles?.studentFiles.some(f=>f.role==='all')},timestamp:Date.now(),sessionId:'debug-session',hypothesisId:'B,D'})}).catch(()=>{});
-        // #endregion
 
         // OCR対象を選択（答案優先、なければ全画像）
         let targetParts: ContentPart[];
@@ -448,9 +445,6 @@ export class EduShiftGrader {
             if (selectedAnswers.length < categorizedFiles.studentFiles.length) {
                 console.warn(`[Grader] 複数の答案が指定されたため、先頭から最大${MAX_ANSWER_PAGES}件を使用してOCRを実行します`);
             }
-            // #region agent log
-            fetch('http://127.0.0.1:7242/ingest/e78e9fd7-3fa2-45c5-b036-a4f10b20798a',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'grader.ts:performOcr:targetSelect',message:'OCR対象ファイル選択',data:{selectedCount:selectedAnswers.length,selectedFiles:selectedAnswers.map(f=>({name:f.name,role:f.role}))},timestamp:Date.now(),sessionId:'debug-session',hypothesisId:'B'})}).catch(()=>{});
-            // #endregion
             targetParts = selectedAnswers.map(file => this.toGenerativePart(file));
         } else {
             const answerParts = imageParts.filter((part, idx) => {
@@ -500,9 +494,6 @@ export class EduShiftGrader {
         // 複合ファイル（role='all'）かどうかをチェック
         const hasAllRole = categorizedFiles?.studentFiles.some(f => f.role === 'all') ?? false;
         
-        // #region agent log
-        fetch('http://127.0.0.1:7242/ingest/e78e9fd7-3fa2-45c5-b036-a4f10b20798a',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'grader.ts:performOcr:hasAllRoleCheck',message:'複合ファイルチェック',data:{hasAllRole,sanitizedLabel},timestamp:Date.now(),sessionId:'debug-session',hypothesisId:'A,C'})}).catch(()=>{});
-        // #endregion
 
         // 2段階OCR: まずマス目構造を分析（大きなファイルではスキップ）
         let gridInfo: { columns: number; rows: number } | null = null;
@@ -627,9 +618,6 @@ export class EduShiftGrader {
 
         console.log("[Grader] OCR結果:", { text: finalText.substring(0, 100), charCount });
 
-        // #region agent log
-        fetch('http://127.0.0.1:7242/ingest/e78e9fd7-3fa2-45c5-b036-a4f10b20798a',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'grader.ts:performOcr:result',message:'OCR結果',data:{hasAllRole,charCount,textPreview:finalText.substring(0,200),textFull:finalText.substring(0,500)},timestamp:Date.now(),sessionId:'debug-session',hypothesisId:'A,E'})}).catch(()=>{});
-        // #endregion
 
         if (!finalText || this.isOcrFailure(finalText)) {
             console.error("[Grader] ❌ OCRが空の結果を返しました");
@@ -744,9 +732,6 @@ ${hasAllRole ? `手書きの答案部分のみ読み取り。印刷文字は無�
 ` + cotPrompt;
         }
 
-        // #region agent log
-        fetch('http://127.0.0.1:7242/ingest/e78e9fd7-3fa2-45c5-b036-a4f10b20798a',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'grader.ts:buildOcrPrompt',message:'OCRプロンプト構築(CoT)',data:{label,mode,hasAllRole},timestamp:Date.now(),sessionId:'debug-session',hypothesisId:'A,C,D'})}).catch(()=>{});
-        // #endregion
 
         return finalPrompt;
     }
@@ -1771,9 +1756,6 @@ JSONのみ出力してください。`;
         
         const deductions = Array.isArray(gradingResult.deduction_details) ? gradingResult.deduction_details : [];
         
-        // #region agent log
-        fetch('http://127.0.0.1:7242/ingest/e78e9fd7-3fa2-45c5-b036-a4f10b20798a',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'grader.ts:computeFinalScore:entry',message:'computeFinalScore開始',data:{deductionsCount:deductions.length,deductions:deductions.map(d=>({reason:d.reason,percentage:d.deduction_percentage,percentageType:typeof d.deduction_percentage})),aiScore:gradingResult.score,aiScoreType:typeof gradingResult.score},timestamp:Date.now(),sessionId:'debug-session',hypothesisId:'B,C,D'})}).catch(()=>{});
-        // #endregion
         
         const totalDeduction = deductions.reduce((sum, d) => {
             const n = typeof d?.deduction_percentage === "number" 
@@ -1782,9 +1764,6 @@ JSONのみ出力してください。`;
             return Number.isFinite(n) ? sum + n : sum;
         }, 0);
 
-        // #region agent log
-        fetch('http://127.0.0.1:7242/ingest/e78e9fd7-3fa2-45c5-b036-a4f10b20798a',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'grader.ts:computeFinalScore:totalDeduction',message:'減点合計計算',data:{totalDeduction,willComputeFromDeductions:totalDeduction>0},timestamp:Date.now(),sessionId:'debug-session',hypothesisId:'B,C'})}).catch(()=>{});
-        // #endregion
 
         // 減点がある場合は減点スコアを計算（5%刻みで切り捨て）
         // 例: 5%減点 → 95%、7%減点 → 95%、10%減点 → 90%
@@ -1792,9 +1771,6 @@ JSONのみ出力してください。`;
             const rawScore = 100 - totalDeduction;
             const finalScore = Math.floor(rawScore / 5) * 5;
             const result = Math.max(0, Math.min(100, finalScore));
-            // #region agent log
-            fetch('http://127.0.0.1:7242/ingest/e78e9fd7-3fa2-45c5-b036-a4f10b20798a',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'grader.ts:computeFinalScore:fromDeductions',message:'減点からスコア計算',data:{totalDeduction,rawScore,finalScore,result},timestamp:Date.now(),sessionId:'debug-session',hypothesisId:'B,C'})}).catch(()=>{});
-            // #endregion
             return result;
         }
         
@@ -1803,9 +1779,6 @@ JSONのみ出力してください。`;
         if (normalized !== null) {
             // 5%刻みに切り捨て
             const result = Math.max(0, Math.min(100, Math.floor(normalized / 5) * 5));
-            // #region agent log
-            fetch('http://127.0.0.1:7242/ingest/e78e9fd7-3fa2-45c5-b036-a4f10b20798a',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'grader.ts:computeFinalScore:fromAIScore',message:'AIスコアから計算',data:{aiScore:gradingResult.score,normalized,result},timestamp:Date.now(),sessionId:'debug-session',hypothesisId:'B,D'})}).catch(()=>{});
-            // #endregion
             return result;
         }
         
@@ -1854,9 +1827,6 @@ JSONのみ出力してください。`;
             otherFiles: []
         };
 
-        // #region agent log
-        fetch('http://127.0.0.1:7242/ingest/e78e9fd7-3fa2-45c5-b036-a4f10b20798a',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'grader.ts:categorizeFiles:entry',message:'categorizeFiles開始',data:{fileCount:files.length,files:files.map(f=>({name:f.name,role:f.role,pageNumber:f.pageNumber})),pdfPageInfo},timestamp:Date.now(),sessionId:'debug-session',hypothesisId:'A,B'})}).catch(()=>{});
-        // #endregion
 
         for (const file of files) {
             const name = file.name || "";
@@ -1864,9 +1834,6 @@ JSONのみ出力してください。`;
 
             // 1. ユーザー指定の役割を最優先
             if (file.role) {
-                // #region agent log
-                fetch('http://127.0.0.1:7242/ingest/e78e9fd7-3fa2-45c5-b036-a4f10b20798a',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'grader.ts:categorizeFiles:roleCheck',message:'ファイルロール処理',data:{fileName:name,role:file.role},timestamp:Date.now(),sessionId:'debug-session',hypothesisId:'A'})}).catch(()=>{});
-                // #endregion
                 // 単一役割
                 if (file.role === 'answer') { buckets.studentFiles.push(file); continue; }
                 if (file.role === 'problem') { buckets.problemFiles.push(file); continue; }
@@ -1885,9 +1852,6 @@ JSONのみ出力してください。`;
                     continue;
                 }
                 if (file.role === 'all') {
-                    // #region agent log
-                    fetch('http://127.0.0.1:7242/ingest/e78e9fd7-3fa2-45c5-b036-a4f10b20798a',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'grader.ts:categorizeFiles:roleAll',message:'複合ファイル(all)を3カテゴリに追加',data:{fileName:name},timestamp:Date.now(),sessionId:'debug-session',hypothesisId:'A,B,C'})}).catch(()=>{});
-                    // #endregion
                     buckets.studentFiles.push(file);
                     buckets.problemFiles.push(file);
                     buckets.modelAnswerFiles.push(file);

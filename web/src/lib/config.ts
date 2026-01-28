@@ -1,7 +1,20 @@
 // dotenv is handled by Next.js automatically
 
+// 環境変数の存在チェック（サーバーサイドのみ）
+function getRequiredEnv(key: string, defaultValue?: string): string {
+    const value = process.env[key];
+    if (!value && defaultValue === undefined) {
+        // クライアントサイドでは環境変数が見えないため、サーバーサイドのみチェック
+        if (typeof window === 'undefined') {
+            console.error(`[CONFIG] 必須の環境変数 ${key} が設定されていません`);
+        }
+        return '';
+    }
+    return value || defaultValue || '';
+}
+
 export const CONFIG = {
-    GEMINI_API_KEY: process.env.GEMINI_API_KEY || '',
+    GEMINI_API_KEY: getRequiredEnv('GEMINI_API_KEY'),
     // デフォルトは最新の高精度モデルを使用（環境変数で上書き可能）
     MODEL_NAME: process.env.MODEL_NAME || 'gemini-3-pro-preview',
     // OCR専用モデル（未指定ならMODEL_NAMEを使用）

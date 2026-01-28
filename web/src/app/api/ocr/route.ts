@@ -309,9 +309,6 @@ export async function POST(req: NextRequest) {
             logger.info(`[OCR API] File[${idx}]: ${file.name} (${(file.size / 1024).toFixed(1)}KB) → role: ${role}`);
         });
 
-        // #region agent log
-        fetch('http://127.0.0.1:7242/ingest/e78e9fd7-3fa2-45c5-b036-a4f10b20798a',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'api/ocr/route.ts:POST',message:'OCR API受信',data:{targetLabel:sanitizedLabel,fileRoles,fileCount:files.length,hasAllRole:Object.values(fileRoles).includes('all'),fileNames:files.map(f=>f.name)},timestamp:Date.now(),sessionId:'debug-session',hypothesisId:'A,E'})}).catch(()=>{});
-        // #endregion
 
         // ファイルをバッファに変換
         const fileBuffers = await convertFilesToBuffers(files, fileRoles);

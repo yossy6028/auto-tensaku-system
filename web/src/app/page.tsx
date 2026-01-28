@@ -2161,10 +2161,6 @@ export default function Home() {
     }
     setSelectedProblems([...selectedProblems, label]);
     const parsedPoints = parsePointsValue(currentPoints);
-    // #region agent log
-    console.log('[Page] 問題追加時の配点設定:', { label, currentPoints, parsedPoints });
-    fetch('http://127.0.0.1:7242/ingest/e78e9fd7-3fa2-45c5-b036-a4f10b20798a',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'page.tsx:addProblem',message:'問題追加時の配点設定',data:{label,currentPoints,parsedPoints},timestamp:Date.now(),sessionId:'debug-session',hypothesisId:'E'})}).catch(()=>{});
-    // #endregion
     setProblemPoints((prev) => {
       if (parsedPoints === null) {
         return prev;
@@ -2806,25 +2802,6 @@ export default function Home() {
             hasGradingResult: !!(r.result as Record<string, unknown>)?.grading_result,
             error: r.error
           });
-          // #region agent log
-          const gradingRes = (r.result as Record<string, unknown>)?.grading_result as Record<string, unknown> | undefined;
-          const scoreLogData = {
-            location:'page.tsx:APIResponse',
-            message:'スコア情報（API受信直後）',
-            data:{
-              label:r.label,
-              score:gradingRes?.score,
-              scoreType:typeof gradingRes?.score,
-              deductionDetails:gradingRes?.deduction_details,
-              deductionDetailsLength:Array.isArray(gradingRes?.deduction_details)?gradingRes.deduction_details.length:0
-            },
-            timestamp:Date.now(),
-            sessionId:'debug-session',
-            hypothesisId:'A,B,C,D'
-          };
-          console.log('[DEBUG] Score info from API:', scoreLogData);
-          fetch('http://127.0.0.1:7242/ingest/e78e9fd7-3fa2-45c5-b036-a4f10b20798a',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(scoreLogData)}).catch(()=>{});
-          // #endregion
         });
         // 既存の結果とマージ: 同じラベルの問題は新しい結果で上書き
         setResults((prev) => {
@@ -2837,11 +2814,6 @@ export default function Home() {
         if (Array.isArray(data.results)) ingestRegradeInfo(data.results);
 
         // 回数消費情報をログ出力・保存
-        // #region agent log
-        const logData = {location:'page.tsx:1683',message:'API response usageInfo',data:{hasUsageInfo:!!data.usageInfo,usageInfo:data.usageInfo?{remainingCount:data.usageInfo.remainingCount,usageCount:data.usageInfo.usageCount,usageLimit:data.usageInfo.usageLimit}:null,currentUsageInfo:usageInfo?{remainingCount:usageInfo.remainingCount,usageCount:usageInfo.usageCount,usageLimit:usageInfo.usageLimit}:null},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'D'};
-        console.log('[DEBUG] API response usageInfo:', logData);
-        fetch('http://127.0.0.1:7242/ingest/e78e9fd7-3fa2-45c5-b036-a4f10b20798a',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(logData)}).catch((err) => console.warn('[DEBUG] Failed to send log:', err));
-        // #endregion
         if (data.usageInfo) {
           console.log('[Page] Usage info from API:', data.usageInfo);
           console.log('[DEBUG] usageInfo details:', {
@@ -2860,23 +2832,8 @@ export default function Home() {
         }
 
         // 利用情報を更新（エラーが発生しても続行、非同期で実行）
-        // #region agent log
-        const logBeforeRefresh = {location:'page.tsx:1696',message:'Before refreshUsageInfo call',data:{currentUsageInfo:usageInfo?{remainingCount:usageInfo.remainingCount,usageCount:usageInfo.usageCount,usageLimit:usageInfo.usageLimit}:null},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'D'};
-        console.log('[DEBUG] Before refreshUsageInfo call:', logBeforeRefresh);
-        fetch('http://127.0.0.1:7242/ingest/e78e9fd7-3fa2-45c5-b036-a4f10b20798a',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(logBeforeRefresh)}).catch((err) => console.warn('[DEBUG] Failed to send log:', err));
-        // #endregion
         refreshUsageInfo().then(() => {
-          // #region agent log
-          const logAfterRefresh = {location:'page.tsx:1696',message:'After refreshUsageInfo success',data:{},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'D'};
-          console.log('[DEBUG] After refreshUsageInfo success:', logAfterRefresh);
-          fetch('http://127.0.0.1:7242/ingest/e78e9fd7-3fa2-45c5-b036-a4f10b20798a',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(logAfterRefresh)}).catch((err) => console.warn('[DEBUG] Failed to send log:', err));
-          // #endregion
         }).catch((err) => {
-          // #region agent log
-          const logRefreshError = {location:'page.tsx:1697',message:'refreshUsageInfo error',data:{errorMessage:err instanceof Error?err.message:'Unknown'},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'D'};
-          console.warn('[DEBUG] refreshUsageInfo error:', logRefreshError);
-          fetch('http://127.0.0.1:7242/ingest/e78e9fd7-3fa2-45c5-b036-a4f10b20798a',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(logRefreshError)}).catch((logErr) => console.warn('[DEBUG] Failed to send log:', logErr));
-          // #endregion
           console.warn('[Page] Failed to refresh usage info:', err);
         });
       }
@@ -3025,23 +2982,11 @@ export default function Home() {
   };
 
   const normalizeScore = (score: number): number => {
-    // #region agent log
-    console.log('[Page] normalizeScore入力:', { score, scoreType: typeof score });
-    fetch('http://127.0.0.1:7242/ingest/e78e9fd7-3fa2-45c5-b036-a4f10b20798a',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'page.tsx:normalizeScore:entry',message:'normalizeScore入力',data:{score,scoreType:typeof score},timestamp:Date.now(),sessionId:'debug-session',hypothesisId:'A'})}).catch(()=>{});
-    // #endregion
     if (typeof score !== 'number' || Number.isNaN(score)) return 0;
     if (score <= 10) {
       const result = Math.min(100, Math.round(score * 10));
-      // #region agent log
-      console.log('[Page] normalizeScore: score<=10なので10倍', { score, result });
-      fetch('http://127.0.0.1:7242/ingest/e78e9fd7-3fa2-45c5-b036-a4f10b20798a',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'page.tsx:normalizeScore:multiply',message:'score<=10なので10倍',data:{score,result},timestamp:Date.now(),sessionId:'debug-session',hypothesisId:'A'})}).catch(()=>{});
-      // #endregion
       return result;
     }
-    // #region agent log
-    console.log('[Page] normalizeScore: score>10なのでそのまま', { score, result: Math.min(100, Math.round(score)) });
-    fetch('http://127.0.0.1:7242/ingest/e78e9fd7-3fa2-45c5-b036-a4f10b20798a',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'page.tsx:normalizeScore:passthrough',message:'score>10なのでそのまま',data:{score,result:Math.min(100,Math.round(score))},timestamp:Date.now(),sessionId:'debug-session',hypothesisId:'A'})}).catch(()=>{});
-    // #endregion
     return Math.min(100, Math.round(score));
   };
 
@@ -5203,54 +5148,9 @@ export default function Home() {
           }
 
           const deductionDetails: DeductionDetail[] = gradingResult.deduction_details ?? [];
-          // #region agent log
-          console.log('[Page] 表示前スコア情報:', {
-            label: res.label,
-            rawScore: gradingResult.score,
-            rawScoreType: typeof gradingResult.score,
-            deductionDetails: deductionDetails.map(d => ({ reason: d.reason, percentage: d.deduction_percentage })),
-            totalDeductionPct: deductionDetails.reduce((s, d) => s + (Number(d.deduction_percentage) || 0), 0)
-          });
-          fetch('http://127.0.0.1:7242/ingest/e78e9fd7-3fa2-45c5-b036-a4f10b20798a',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({
-            location:'page.tsx:ResultDisplay',
-            message:'表示前スコア情報',
-            data:{
-              label:res.label,
-              rawScore:gradingResult.score,
-              rawScoreType:typeof gradingResult.score,
-              deductionDetails:deductionDetails.map(d=>({reason:d.reason,percentage:d.deduction_percentage})),
-              totalDeductionPct:deductionDetails.reduce((s,d)=>s+(Number(d.deduction_percentage)||0),0)
-            },
-            timestamp:Date.now(),
-            sessionId:'debug-session',
-            hypothesisId:'A,B,C,D'
-          })}).catch(()=>{});
-          // #endregion
           const normalizedScore = normalizeScore(gradingResult.score);
-          // #region agent log
-          console.log('[Page] normalizeScore後:', { rawScore: gradingResult.score, normalizedScore });
-          fetch('http://127.0.0.1:7242/ingest/e78e9fd7-3fa2-45c5-b036-a4f10b20798a',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({
-            location:'page.tsx:afterNormalize',
-            message:'normalizeScore後',
-            data:{rawScore:gradingResult.score,normalizedScore},
-            timestamp:Date.now(),
-            sessionId:'debug-session',
-            hypothesisId:'A'
-          })}).catch(()=>{});
-          // #endregion
           const maxPoints = problemPoints[res.label];
           const safeMaxPoints = Number.isFinite(maxPoints) && maxPoints > 0 ? maxPoints : null;
-          // #region agent log
-          console.log('[Page] 配点情報:', { label: res.label, problemPointsKeys: Object.keys(problemPoints), maxPoints, safeMaxPoints });
-          fetch('http://127.0.0.1:7242/ingest/e78e9fd7-3fa2-45c5-b036-a4f10b20798a',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({
-            location:'page.tsx:maxPoints',
-            message:'配点情報',
-            data:{label:res.label,problemPointsKeys:Object.keys(problemPoints),maxPoints,safeMaxPoints},
-            timestamp:Date.now(),
-            sessionId:'debug-session',
-            hypothesisId:'E'
-          })}).catch(()=>{});
-          // #endregion
           const earnedPoints = safeMaxPoints ? Math.round((normalizedScore / 100) * safeMaxPoints) : null;
           const totalDeduction = deductionDetails.reduce((sum: number, item: DeductionDetail) => {
             return sum + (Number(item?.deduction_percentage) || 0);
@@ -5664,11 +5564,6 @@ export default function Home() {
                 </svg>
                 採点回数を1回消費しました
                 {(() => {
-                  // #region agent log
-                  if (typeof window !== 'undefined') {
-                    fetch('http://127.0.0.1:7242/ingest/e78e9fd7-3fa2-45c5-b036-a4f10b20798a',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'page.tsx:3596',message:'Rendering usageInfo display',data:{usageInfo:usageInfo?{remainingCount:usageInfo.remainingCount,usageCount:usageInfo.usageCount,usageLimit:usageInfo.usageLimit}:null},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'D'})}).catch(()=>{});
-                  }
-                  // #endregion
                   return null;
                 })()}
                 {usageInfo && usageInfo.usageLimit !== null && usageInfo.usageLimit > 0 && (

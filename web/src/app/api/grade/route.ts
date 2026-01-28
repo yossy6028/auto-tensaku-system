@@ -403,8 +403,8 @@ export async function POST(req: NextRequest) {
             try {
                 confirmedTexts = JSON.parse(confirmedTextsJson);
                 logger.debug('[API] Confirmed texts provided:', Object.keys(confirmedTexts));
-            } catch {
-                // パース失敗時は無視
+            } catch (e) {
+                logger.warn('[API] confirmedTexts JSON parse failed:', e);
             }
         }
 
@@ -415,8 +415,8 @@ export async function POST(req: NextRequest) {
             try {
                 problemConditions = JSON.parse(problemConditionsJson);
                 logger.debug('[API] Problem conditions override provided:', problemConditions);
-            } catch {
-                // パース失敗時は無視
+            } catch (e) {
+                logger.warn('[API] problemConditions JSON parse failed:', e);
             }
         }
 
@@ -427,8 +427,8 @@ export async function POST(req: NextRequest) {
             try {
                 layouts = JSON.parse(layoutsJson);
                 logger.debug('[API] Layout info provided:', Object.keys(layouts));
-            } catch {
-                // パース失敗時は無視
+            } catch (e) {
+                logger.warn('[API] layouts JSON parse failed:', e);
             }
         }
 
@@ -450,22 +450,22 @@ export async function POST(req: NextRequest) {
         if (pdfPageInfoJson) {
             try {
                 pdfPageInfo = JSON.parse(pdfPageInfoJson);
-            } catch {
-                // パース失敗時は無視
+            } catch (e) {
+                logger.warn('[API] pdfPageInfo JSON parse failed:', e);
             }
         }
-        
+
         // ファイル役割情報を解析
         let fileRoles: Record<string, FileRole> = {};
         if (fileRolesJson) {
             try {
                 fileRoles = JSON.parse(fileRolesJson);
                 logger.debug('[API] File roles:', fileRoles);
-            } catch {
-                // パース失敗時は無視
+            } catch (e) {
+                logger.warn('[API] fileRoles JSON parse failed:', e);
             }
         }
-        
+
         if (!Array.isArray(targetLabels) || targetLabels.length === 0) {
             return NextResponse.json(
                 { status: 'error', message: 'Invalid target labels' },
@@ -494,8 +494,8 @@ export async function POST(req: NextRequest) {
                     }
                     regradeTokens = next;
                 }
-            } catch {
-                // パース失敗時は無視
+            } catch (e) {
+                logger.warn('[API] regradeTokens JSON parse failed:', e);
             }
         }
 
@@ -653,25 +653,12 @@ export async function POST(req: NextRequest) {
         // 採点成功時に利用回数をインクリメント（不完全な採点は除外）
         const successfulGradings = results.filter(r => r.result && !r.error && !r.incompleteGrading);
         
-        // #region agent log
-        const logBeforeIncrement = {location:'route.ts:572',message:'Before increment_usage',data:{successfulGradingsCount:successfulGradings.length,freeRegradeLabels:Array.from(freeRegradeByLabel.keys()),userId:user.id},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'A'};
-        logger.info('[DEBUG] Before increment_usage:', logBeforeIncrement);
-        fetch('http://127.0.0.1:7242/ingest/e78e9fd7-3fa2-45c5-b036-a4f10b20798a',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(logBeforeIncrement)}).catch((err) => logger.warn('[DEBUG] Failed to send log:', err));
-        // #endregion
         
         for (const grading of successfulGradings) {
             // 無料再採点の場合は消費しない
             if (freeRegradeByLabel.has(grading.label)) {
-                // #region agent log
-                fetch('http://127.0.0.1:7242/ingest/e78e9fd7-3fa2-45c5-b036-a4f10b20798a',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'route.ts:577',message:'Skipping increment (free regrade)',data:{label:grading.label},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'C'})}).catch(()=>{});
-                // #endregion
                 continue;
             }
-            // #region agent log
-            const logCallingIncrement = {location:'route.ts:580',message:'Calling increment_usage',data:{label:grading.label,userId:user.id},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'A'};
-            logger.info('[DEBUG] Calling increment_usage:', logCallingIncrement);
-            fetch('http://127.0.0.1:7242/ingest/e78e9fd7-3fa2-45c5-b036-a4f10b20798a',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(logCallingIncrement)}).catch((err) => logger.warn('[DEBUG] Failed to send log:', err));
-            // #endregion
             const { error: incrementError } = await supabaseRpc
                 .rpc('increment_usage', { 
                     p_user_id: user.id,
@@ -682,11 +669,6 @@ export async function POST(req: NextRequest) {
                     }
                 });
             
-            // #region agent log
-            const logIncrementResult = {location:'route.ts:590',message:'increment_usage result',data:{label:grading.label,hasError:!!incrementError,errorMessage:incrementError?.message||null},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'A'};
-            logger.info('[DEBUG] increment_usage result:', logIncrementResult);
-            fetch('http://127.0.0.1:7242/ingest/e78e9fd7-3fa2-45c5-b036-a4f10b20798a',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(logIncrementResult)}).catch((err) => logger.warn('[DEBUG] Failed to send log:', err));
-            // #endregion
             
             if (incrementError) {
                 logger.error('Failed to increment usage:', incrementError);
@@ -694,25 +676,12 @@ export async function POST(req: NextRequest) {
         }
 
         // 更新後の利用情報を取得
-        // #region agent log
-        const logBeforeCanUse = {location:'route.ts:598',message:'Before can_use_service call',data:{userId:user.id},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'B'};
-        logger.info('[DEBUG] Before can_use_service call:', logBeforeCanUse);
-        fetch('http://127.0.0.1:7242/ingest/e78e9fd7-3fa2-45c5-b036-a4f10b20798a',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(logBeforeCanUse)}).catch((err) => logger.warn('[DEBUG] Failed to send log:', err));
-        // #endregion
         let updatedUsageRows: CanUseServiceResult[] | null = null;
         try {
             const { data: updatedUsageData } = await supabaseRpc
                 .rpc('can_use_service', { p_user_id: user.id });
             updatedUsageRows = updatedUsageData as CanUseServiceResult[] | null;
-            // #region agent log
-            const logCanUseResult = {location:'route.ts:600',message:'can_use_service result',data:{hasData:!!updatedUsageRows,usageCount:updatedUsageRows?.[0]?.usage_count??null,remainingCount:updatedUsageRows?.[0]?.remaining_count??null,usageLimit:updatedUsageRows?.[0]?.usage_limit??null},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'B'};
-            logger.info('[DEBUG] can_use_service result:', logCanUseResult);
-            fetch('http://127.0.0.1:7242/ingest/e78e9fd7-3fa2-45c5-b036-a4f10b20798a',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(logCanUseResult)}).catch((err) => logger.warn('[DEBUG] Failed to send log:', err));
-            // #endregion
         } catch (error) {
-            // #region agent log
-            fetch('http://127.0.0.1:7242/ingest/e78e9fd7-3fa2-45c5-b036-a4f10b20798a',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'route.ts:602',message:'can_use_service error',data:{errorMessage:error instanceof Error?error.message:'Unknown'},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'B'})}).catch(()=>{});
-            // #endregion
             // 無視（無料再採点のみでプランが無い等の場合に備える）
         }
         
@@ -723,11 +692,6 @@ export async function POST(req: NextRequest) {
             planName: updatedUsageRows[0].plan_name,
         } : null;
         
-        // #region agent log
-        const logFinalUsageInfo = {location:'route.ts:610',message:'Final usageInfo to return',data:{usageInfo:usageInfo?{remainingCount:usageInfo.remainingCount,usageCount:usageInfo.usageCount,usageLimit:usageInfo.usageLimit}:null},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'B'};
-        logger.info('[DEBUG] Final usageInfo to return:', logFinalUsageInfo);
-        fetch('http://127.0.0.1:7242/ingest/e78e9fd7-3fa2-45c5-b036-a4f10b20798a',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(logFinalUsageInfo)}).catch((err) => logger.warn('[DEBUG] Failed to send log:', err));
-        // #endregion
 
         // 再採点トークンを発行／更新（成功したラベルのみ）
         if (regradeSecret) {

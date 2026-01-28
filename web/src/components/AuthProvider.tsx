@@ -506,17 +506,9 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         rpc: (fn: string, args: Record<string, unknown>) => Promise<{ data: unknown; error: unknown }>;
       };
 
-      // #region agent log
-      const logCallingCanUse = {location:'AuthProvider.tsx:509',message:'refreshUsageInfo calling can_use_service',data:{userId:targetUser.id},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'D'};
-      console.log('[DEBUG] refreshUsageInfo calling can_use_service:', logCallingCanUse);
-      fetch('http://127.0.0.1:7242/ingest/e78e9fd7-3fa2-45c5-b036-a4f10b20798a',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(logCallingCanUse)}).catch((err) => console.warn('[DEBUG] Failed to send log:', err));
-      // #endregion
       const { data, error } = await rpcClient.rpc('can_use_service', { p_user_id: targetUser.id });
 
       if (error) {
-        // #region agent log
-        fetch('http://127.0.0.1:7242/ingest/e78e9fd7-3fa2-45c5-b036-a4f10b20798a',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'AuthProvider.tsx:511',message:'refreshUsageInfo can_use_service error',data:{errorMessage:error instanceof Error?error.message:'Unknown'},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'D'})}).catch(()=>{});
-        // #endregion
         console.warn('[AuthProvider] Failed to fetch usage info:', error);
         setUsageInfo({
           canUse: true, // エラー時は利用可能として扱う
@@ -532,11 +524,6 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
       if (data && Array.isArray(data) && data.length > 0) {
         const info = data[0];
-        // #region agent log
-        const logSettingUsageInfo = {location:'AuthProvider.tsx:525',message:'refreshUsageInfo setting usageInfo',data:{usageCount:info.usage_count,remainingCount:info.remaining_count,usageLimit:info.usage_limit},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'D'};
-        console.log('[DEBUG] refreshUsageInfo setting usageInfo:', logSettingUsageInfo);
-        fetch('http://127.0.0.1:7242/ingest/e78e9fd7-3fa2-45c5-b036-a4f10b20798a',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(logSettingUsageInfo)}).catch((err) => console.warn('[DEBUG] Failed to send log:', err));
-        // #endregion
         setUsageInfo({
           canUse: info.can_use,
           message: info.message,

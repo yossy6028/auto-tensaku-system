@@ -1,16 +1,29 @@
 import Stripe from 'stripe';
 
-// サーバーサイド用Stripeインスタンス
-export const stripe = new Stripe(process.env.STRIPE_SECRET_KEY!, {
-  typescript: true,
-});
+// 環境変数の存在チェック（サーバーサイドのみ）
+function getRequiredStripeEnv(key: string): string {
+  const value = process.env[key];
+  if (!value && typeof window === 'undefined') {
+    console.error(`[Stripe] 必須の環境変数 ${key} が設定されていません`);
+    // 空文字を返すとStripeインスタンス生成時にエラーになる
+    return '';
+  }
+  return value || '';
+}
+
+const stripeSecretKey = getRequiredStripeEnv('STRIPE_SECRET_KEY');
+
+// サーバーサイド用Stripeインスタンス（キーが空の場合は初期化を遅延）
+export const stripe = stripeSecretKey
+  ? new Stripe(stripeSecretKey, { typescript: true })
+  : (null as unknown as Stripe); // 開発環境でStripeを使わない場合用
 
 // 料金プランIDのマッピング
 // Stripeダッシュボードで作成したPrice IDをここに設定
 export const STRIPE_PRICE_IDS = {
-  light: process.env.STRIPE_PRICE_LIGHT_ID!,      // ライトプラン (¥980/月)
-  standard: process.env.STRIPE_PRICE_STANDARD_ID!, // スタンダードプラン (¥2,980/月)
-  unlimited: process.env.STRIPE_PRICE_UNLIMITED_ID!, // 無制限プラン (¥5,980/月)
+  light: getRequiredStripeEnv('STRIPE_PRICE_LIGHT_ID'),      // ライトプラン (¥980/月)
+  standard: getRequiredStripeEnv('STRIPE_PRICE_STANDARD_ID'), // スタンダードプラン (¥2,980/月)
+  unlimited: getRequiredStripeEnv('STRIPE_PRICE_UNLIMITED_ID'), // 無制限プラン (¥5,980/月)
 } as const;
 
 // プラン名からStripe Price IDを取得
@@ -46,5 +59,5 @@ export function getPlanIdFromStripePriceId(stripePriceId: string): string | null
 }
 
 // Webhook署名検証用シークレット
-export const STRIPE_WEBHOOK_SECRET = process.env.STRIPE_WEBHOOK_SECRET!;
+export const STRIPE_WEBHOOK_SECRET = getRequiredStripeEnv('STRIPE_WEBHOOK_SECRET');
 

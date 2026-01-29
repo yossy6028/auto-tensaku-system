@@ -4144,15 +4144,19 @@ export default function Home() {
                 </div>
 
                 {/* PDF圧縮ツール紹介セクション */}
-                <div className="bg-gradient-to-br from-indigo-50 to-violet-50 border-2 border-indigo-200 rounded-xl p-4 sm:p-6 mb-4 max-w-2xl mx-auto">
-                  <h4 className="text-sm font-bold text-indigo-800 mb-3 flex items-center justify-center">
-                    <FileText className="w-4 h-4 mr-2" />
+                <details className="bg-gradient-to-br from-indigo-50 to-violet-50 border-2 border-indigo-200 rounded-xl mb-4 max-w-2xl mx-auto group">
+                  <summary className="p-4 cursor-pointer list-none flex items-center justify-center gap-2 text-sm font-bold text-indigo-800 hover:text-indigo-900">
+                    <FileText className="w-4 h-4" />
                     PDFが重すぎる場合の圧縮ツール
-                  </h4>
-                  <p className="text-xs text-indigo-700 mb-4 text-center">
-                    PDFファイルが4MBを超える場合は、以下の無料ツールで圧縮してからアップロードしてください
-                  </p>
-                  <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 sm:gap-4">
+                    <svg className="w-4 h-4 transition-transform group-open:rotate-180" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+                    </svg>
+                  </summary>
+                  <div className="px-4 sm:px-6 pb-4 sm:pb-6">
+                    <p className="text-xs text-indigo-700 mb-4 text-center">
+                      PDFファイルが4MBを超える場合は、以下の無料ツールで圧縮してからアップロードしてください
+                    </p>
+                    <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 sm:gap-4">
                     {/* iLovePDF */}
                     <a
                       href="https://www.ilovepdf.com/ja/compress-pdf"
@@ -4213,11 +4217,12 @@ export default function Home() {
                         <span className="text-[10px] text-indigo-600 mt-1">無料</span>
                       </div>
                     </a>
+                    </div>
+                    <p className="text-xs text-indigo-600 mt-3 text-center">
+                      💡 各ツールのリンクをクリックすると、新しいタブで圧縮ページが開きます
+                    </p>
                   </div>
-                  <p className="text-xs text-indigo-600 mt-3 text-center">
-                    💡 各ツールのリンクをクリックすると、新しいタブで圧縮ページが開きます
-                  </p>
-                </div>
+                </details>
 
                 <div className="group relative">
                   <div

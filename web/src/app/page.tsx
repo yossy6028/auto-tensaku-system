@@ -1989,6 +1989,13 @@ export default function Home() {
   const processFiles = useCallback(async (files: File[]) => {
     console.log(`[Page] File selected: ${files.length} files`);
 
+    // 新しいファイルがアップロードされたら、前の採点結果をリセット
+    setResults(null);
+    setError(null);
+    setOcrFlowStep('idle');
+    setOcrResults({});
+    setConfirmedTexts({});
+
     // ファイル数の上限チェック
     if (files.length > MAX_FILES) {
       setError(`一度にアップロードできるファイルは${MAX_FILES}個までです。`);
@@ -3099,7 +3106,7 @@ export default function Home() {
   const handleNextProblem = () => {
     // リクエストロックをリセット
     requestLockRef.current = false;
-    
+
     // フォーム状態をリセット
     setUploadedFiles([]);
     setAnswerFileIndex(null);
@@ -3119,7 +3126,11 @@ export default function Home() {
     setUsageConsumed(null);
     setIsLoading(false);
     setRegradingLabel(null);
-    
+
+    // 保存済み問題の読み込み状態もリセット
+    setLoadedProblemId(null);
+    setLoadedProblemTitle(null);
+
     // 問題選択もリセット
     setSelectedProblems([]);
     setProblemPoints({});

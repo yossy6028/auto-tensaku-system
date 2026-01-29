@@ -24,6 +24,16 @@ import {
   MAX_STUDENTS,
   FileRole as BatchFileRole,
 } from '@/lib/types/batch';
+import { SaveProblemModal, SavedProblemsList } from '@/components/SavedProblems';
+import type { SavedProblemSummary, SavedFileRole } from '@/lib/storage/types';
+import {
+  getAllProblems,
+  getProblem,
+  saveProblem,
+  deleteProblem,
+  restoreFilesFromProblem,
+  generateDefaultTitle,
+} from '@/lib/storage/savedProblems';
 import { Users } from 'lucide-react';
 
 type GradingStrictness = 'lenient' | 'standard' | 'strict';
@@ -170,6 +180,11 @@ export default function Home() {
     };
   }, []);
 
+  // 保存済み問題を初期読み込み
+  useEffect(() => {
+    getAllProblems().then(setSavedProblems).catch(console.error);
+  }, []);
+
   // OCR手動修正モーダル（問題条件オーバーライド対応）
   const [ocrEditModal, setOcrEditModal] = useState<{ 
     label: string; 
@@ -226,6 +241,13 @@ export default function Home() {
   // 共通ファイル（問題・模範解答）
   const [sharedFiles, setSharedFiles] = useState<File[]>([]);
   const [sharedFileRoles, setSharedFileRoles] = useState<Record<number, FileRole>>({});
+
+  // 保存済み問題関連
+  const [savedProblems, setSavedProblems] = useState<SavedProblemSummary[]>([]);
+  const [showSaveProblemModal, setShowSaveProblemModal] = useState(false);
+  const [showSavedProblemsList, setShowSavedProblemsList] = useState(false);
+  const [loadedProblemId, setLoadedProblemId] = useState<string | null>(null);
+  const [loadedProblemTitle, setLoadedProblemTitle] = useState<string | null>(null);
 
   // 一括OCR確認フロー用のステート
   type BatchOcrStep = 'idle' | 'ocr-loading' | 'confirm';
@@ -2154,6 +2176,89 @@ export default function Home() {
     return String(Math.floor(value));
   };
 
+  // 保存済み問題を読み込み
+  const loadSavedProblem = useCallback(async (problemId: string) => {
+    try {
+      const problem = await getProblem(problemId);
+      if (!problem) {
+        setError('問題が見つかりませんでした');
+        return;
+      }
+
+      const { files, fileRoles: roles } = restoreFilesFromProblem(problem);
+
+      // 共通ファイルとして設定
+      setSharedFiles(files);
+      setSharedFileRoles(roles as Record<number, FileRole>);
+
+      // 問題設定を復元
+      setSelectedProblems(problem.selectedProblems);
+      setProblemPoints(problem.problemPoints);
+      setProblemFormat(problem.problemFormat);
+      setSmallFormat(problem.smallFormat);
+
+      // 模範解答テキストがあれば復元
+      if (problem.modelAnswerText) {
+        setModelAnswerText(problem.modelAnswerText);
+        setModelAnswerInputMode('text');
+      }
+
+      setLoadedProblemId(problem.id);
+      setLoadedProblemTitle(problem.title);
+      setShowSavedProblemsList(false);
+    } catch (e) {
+      console.error('問題の読み込みに失敗:', e);
+      setError('問題の読み込みに失敗しました');
+    }
+  }, []);
+
+  // 現在の問題を保存
+  const saveCurrentProblem = useCallback(async (title: string) => {
+    // sharedFilesとsharedFileRolesから問題・模範解答のみ抽出
+    const problemRoles: Record<number, SavedFileRole> = {};
+    Object.entries(sharedFileRoles).forEach(([idx, role]) => {
+      if (role === 'problem' || role === 'model' || role === 'problem_model') {
+        problemRoles[parseInt(idx)] = role as SavedFileRole;
+      }
+    });
+
+    const problemId = await saveProblem({
+      title,
+      selectedProblems,
+      problemPoints,
+      problemFormat,
+      smallFormat,
+      files: sharedFiles,
+      fileRoles: problemRoles,
+      modelAnswerText: modelAnswerInputMode === 'text' ? modelAnswerText : undefined,
+    });
+
+    // 一覧を更新
+    const problems = await getAllProblems();
+    setSavedProblems(problems);
+    setLoadedProblemId(problemId);
+    setLoadedProblemTitle(title);
+  }, [sharedFiles, sharedFileRoles, selectedProblems, problemPoints, problemFormat, smallFormat, modelAnswerInputMode, modelAnswerText]);
+
+  // 保存済み問題を削除
+  const handleDeleteProblem = useCallback(async (problemId: string) => {
+    await deleteProblem(problemId);
+    const problems = await getAllProblems();
+    setSavedProblems(problems);
+
+    // 削除した問題が読み込み中だった場合はクリア
+    if (loadedProblemId === problemId) {
+      setLoadedProblemId(null);
+      setLoadedProblemTitle(null);
+    }
+  }, [loadedProblemId]);
+
+  // 読み込み済み問題をクリア
+  const clearLoadedProblem = useCallback(() => {
+    setLoadedProblemId(null);
+    setLoadedProblemTitle(null);
+  }, []);
+
   const addProblem = () => {
     const label = generateProblemLabel();
     if (!label || selectedProblems.includes(label)) {
@@ -3522,7 +3627,7 @@ export default function Home() {
                     </div>
                     <div className="text-center sm:text-left">
                       <p className="text-sm font-bold text-indigo-800">
-                        <span className="text-lg mx-1 text-violet-600">1〜2問</span>を丁寧にフィードバックします
+                        1度に<span className="text-lg mx-1 text-violet-600">2問まで</span>添削可能です
                       </p>
                       <p className="text-xs text-indigo-600 mt-1">
                         1回の採点で最大2問まで。3問以上ある場合は、続けて同じファイルで採点できます
@@ -4758,10 +4863,35 @@ export default function Home() {
 
                 {/* Shared Files Section (Problem & Model Answer) */}
                 <div className="bg-violet-50 border-2 border-violet-200 rounded-xl p-4">
-                  <p className="text-sm font-bold text-violet-800 mb-3 flex items-center gap-2">
-                    <FileText className="w-4 h-4" />
-                    共通ファイル（問題・模範解答）
-                  </p>
+                  <div className="flex items-center justify-between mb-3">
+                    <p className="text-sm font-bold text-violet-800 flex items-center gap-2">
+                      <FileText className="w-4 h-4" />
+                      共通ファイル（問題・模範解答）
+                    </p>
+                    <button
+                      onClick={() => setShowSavedProblemsList(true)}
+                      disabled={batchState.isProcessing}
+                      className="text-xs px-2 py-1 bg-violet-100 hover:bg-violet-200 text-violet-700 rounded-lg transition-colors disabled:opacity-50"
+                    >
+                      保存済み問題を読み込み
+                    </button>
+                  </div>
+
+                  {/* 読み込み済み問題の表示 */}
+                  {loadedProblemTitle && (
+                    <div className="flex items-center gap-2 mb-3 px-3 py-2 bg-violet-100 border border-violet-300 rounded-lg">
+                      <span className="text-xs text-violet-700">読み込み中:</span>
+                      <span className="text-sm font-medium text-violet-800">{loadedProblemTitle}</span>
+                      <button
+                        onClick={clearLoadedProblem}
+                        className="ml-auto text-violet-500 hover:text-violet-700"
+                        title="クリア"
+                      >
+                        <X className="w-4 h-4" />
+                      </button>
+                    </div>
+                  )}
+
                   <p className="text-xs text-violet-600 mb-3">
                     全生徒に共通する問題用紙や模範解答をここにアップロードしてください
                   </p>
@@ -4898,6 +5028,20 @@ export default function Home() {
                       </div>
                     )}
                   </div>
+
+                  {/* 問題保存ボタン */}
+                  {sharedFiles.length > 0 && (
+                    <div className="mt-3 pt-3 border-t border-violet-200">
+                      <button
+                        onClick={() => setShowSaveProblemModal(true)}
+                        disabled={batchState.isProcessing}
+                        className="w-full text-sm px-3 py-2 bg-violet-100 hover:bg-violet-200 text-violet-700 rounded-lg transition-colors disabled:opacity-50 flex items-center justify-center gap-2"
+                      >
+                        <Save className="w-4 h-4" />
+                        この問題を保存（次回から再利用可能）
+                      </button>
+                    </div>
+                  )}
                 </div>
 
                 {/* Student Section Header */}
@@ -5708,6 +5852,26 @@ export default function Home() {
           </div>
         </div>
       )}
+
+      {/* 問題保存モーダル */}
+      <SaveProblemModal
+        isOpen={showSaveProblemModal}
+        onClose={() => setShowSaveProblemModal(false)}
+        onSave={saveCurrentProblem}
+        defaultTitle={generateDefaultTitle(selectedProblems)}
+        selectedProblems={selectedProblems}
+        fileCount={sharedFiles.length}
+      />
+
+      {/* 保存済み問題一覧モーダル */}
+      <SavedProblemsList
+        isOpen={showSavedProblemsList}
+        onClose={() => setShowSavedProblemsList(false)}
+        problems={savedProblems}
+        onSelect={loadSavedProblem}
+        onDelete={handleDeleteProblem}
+        disabled={batchState.isProcessing}
+      />
 
       {/* File Role Selection Modal */}
       {showFileRoleModal && (

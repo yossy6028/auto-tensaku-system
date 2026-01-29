@@ -3575,6 +3575,42 @@ export default function Home() {
                 </div>
               </div>
             </div>
+
+            {/* ホーム画面に追加する案内 */}
+            <div className="bg-sky-50/80 backdrop-blur-sm border-2 border-sky-200 rounded-2xl p-6 shadow-lg">
+              <div className="flex items-start">
+                <div className="w-10 h-10 bg-sky-100 rounded-xl flex items-center justify-center mr-3 flex-shrink-0">
+                  <img src="/icons/icon-192.png" alt="アプリアイコン" className="w-8 h-8 rounded-lg" />
+                </div>
+                <div className="flex-1">
+                  <h3 className="text-sm font-bold text-sky-900 mb-2">ホーム画面に追加</h3>
+                  <p className="text-sm text-sky-800 leading-relaxed mb-3">
+                    スマホ・タブレットのホーム画面にショートカットを追加すると、アプリのようにすぐ起動できます。
+                  </p>
+                  <details className="text-xs text-sky-700">
+                    <summary className="cursor-pointer font-medium hover:text-sky-900">追加方法を見る</summary>
+                    <div className="mt-3 space-y-3 pl-2 border-l-2 border-sky-200">
+                      <div>
+                        <p className="font-bold text-sky-800">iPhone / iPad（Safari）:</p>
+                        <ol className="list-decimal list-inside mt-1 space-y-0.5 text-sky-700">
+                          <li>画面下の<span className="inline-flex items-center mx-1 px-1 bg-sky-100 rounded">共有ボタン <svg className="w-3 h-3 inline" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8.684 13.342C8.886 12.938 9 12.482 9 12c0-.482-.114-.938-.316-1.342m0 2.684a3 3 0 110-2.684m0 2.684l6.632 3.316m-6.632-6l6.632-3.316m0 0a3 3 0 105.367-2.684 3 3 0 00-5.367 2.684zm0 9.316a3 3 0 105.368 2.684 3 3 0 00-5.368-2.684z" /></svg></span>をタップ</li>
+                          <li>「ホーム画面に追加」を選択</li>
+                          <li>名前を確認して「追加」をタップ</li>
+                        </ol>
+                      </div>
+                      <div>
+                        <p className="font-bold text-sky-800">Android（Chrome）:</p>
+                        <ol className="list-decimal list-inside mt-1 space-y-0.5 text-sky-700">
+                          <li>画面右上の<span className="inline-flex items-center mx-1 px-1 bg-sky-100 rounded">︙メニュー</span>をタップ</li>
+                          <li>「ホーム画面に追加」または「アプリをインストール」を選択</li>
+                          <li>「追加」をタップ</li>
+                        </ol>
+                      </div>
+                    </div>
+                  </details>
+                </div>
+              </div>
+            </div>
           </div>
         </div>
 

@@ -790,7 +790,13 @@ ${hasAllRole ? `手書きの答案部分のみ読み取り。印刷文字は無�
         }
 
         // Agentic Vision ヒントがある場合、プロンプトを拡張
-        if (agenticVisionHints && agenticVisionHints.lowConfidenceRegions.length > 0) {
+        // 2026-01-30 fix: lowConfidenceRegionsだけでなく、notes や expectedCharTypes があれば適用
+        const hasHints = agenticVisionHints && (
+            agenticVisionHints.lowConfidenceRegions.length > 0 ||
+            agenticVisionHints.notes.length > 0 ||
+            agenticVisionHints.expectedCharTypes.length > 0
+        );
+        if (hasHints) {
             finalPrompt = this.applyAgenticVisionHints(finalPrompt, agenticVisionHints);
         }
 

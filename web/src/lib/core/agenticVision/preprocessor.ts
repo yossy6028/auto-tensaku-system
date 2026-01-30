@@ -141,7 +141,14 @@ export class AgenticVisionPreprocessor {
     imageBase64: string,
     mimeType: string
   ): Promise<string> {
-    const response = await this.genai.models.generateContent({
+    // タイムアウト付きでAPI呼び出し
+    const timeoutPromise = new Promise<never>((_, reject) => {
+      setTimeout(() => {
+        reject(new Error(`Agentic Vision API タイムアウト (${this.config.timeoutMs}ms)`));
+      }, this.config.timeoutMs);
+    });
+
+    const apiPromise = this.genai.models.generateContent({
       model: this.config.model,
       contents: [
         {
@@ -159,6 +166,7 @@ export class AgenticVisionPreprocessor {
       }
     });
 
+    const response = await Promise.race([apiPromise, timeoutPromise]);
     return response.text || '';
   }
 

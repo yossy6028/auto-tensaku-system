@@ -1,6 +1,13 @@
 import { GoogleGenAI } from "@google/genai";
 import { CONFIG } from "../config";
 import { SYSTEM_INSTRUCTION } from "../prompts/eduShift";
+import {
+    AgenticVisionPreprocessor,
+    PreprocessResult,
+    OcrHints,
+    AnswerSheetAnalysis,
+    buildEnhancedOcrPrompt,
+} from "./agenticVision";
 
 // API呼び出しのタイムアウト設定（ミリ秒）
 // Vercel Pro + Fluid Compute対応: maxDuration=300秒
@@ -17,6 +24,11 @@ const OCR_RETRY_JITTER_MS = 200;    // 200msに短縮（400ms→200ms）
 const OCR_THINKING_BUDGET = 1024;
 // 合計タイムアウト想定: OCR(120秒×2回) + 採点(150秒) = 最大390秒
 // ただし通常は1回目で成功するため問題なし
+
+// Agentic Vision 設定
+// 2026-01-30: Gemini 3 Flash の Agentic Vision 機能を使用した OCR 前処理
+const AGENTIC_VISION_ENABLED = process.env.AGENTIC_VISION_ENABLED !== 'false';  // デフォルト有効
+const AGENTIC_VISION_TIMEOUT_MS = 60_000;  // 60秒
 
 // 採点の厳しさ（3段階）
 export type GradingStrictness = "lenient" | "standard" | "strict";
@@ -503,13 +515,45 @@ export class EduShiftGrader {
             // 分析結果はログに出力済み（成功/失敗問わず既存フローを続行）
         }
 
+        // Agentic Vision 解答用紙構造分析（Feature Flagで制御）
+        let agenticVisionHints: OcrHints | undefined;
+        if (AGENTIC_VISION_ENABLED && !isLargeFile && targetParts.length === 1) {
+            try {
+                console.log("[Grader] Agentic Vision 解答用紙分析を開始...");
+                const firstPart = targetParts[0];
+                if ("inlineData" in firstPart && firstPart.inlineData) {
+                    const preprocessor = new AgenticVisionPreprocessor({
+                        timeoutMs: AGENTIC_VISION_TIMEOUT_MS,
+                    });
+                    const analysisResult = await preprocessor.analyze(
+                        firstPart.inlineData.data,
+                        firstPart.inlineData.mimeType
+                    );
+                    if (analysisResult?.success && analysisResult.layout.answerSheet) {
+                        agenticVisionHints = {
+                            ...analysisResult.hints,
+                            // 解答用紙分析情報をnotesに追加
+                            notes: [
+                                ...analysisResult.hints.notes,
+                                this.buildAnswerSheetNote(analysisResult.layout.answerSheet),
+                            ].filter(Boolean),
+                        };
+                        console.log(`[Grader] Agentic Vision 分析完了: ${analysisResult.layout.answerSheet.sheetType}`);
+                    }
+                }
+            } catch (error) {
+                // Agentic Vision失敗時は既存フローにフォールバック
+                console.warn("[Grader] Agentic Vision 分析失敗、スキップ:", error instanceof Error ? error.message : error);
+            }
+        }
+
         // 大きなファイルではプロンプト数を1つに削減（タイムアウト防止）
         const ocrPrompts = isLargeFile
             ? [this.buildOcrPrompt(sanitizedLabel, "primary", hasAllRole)]  // 大きなファイル: 1プロンプトのみ
             : [
-                this.buildOcrPrompt(sanitizedLabel, "primary", hasAllRole, gridInfo ?? undefined),
-                this.buildOcrPrompt(sanitizedLabel, "retry", hasAllRole, gridInfo ?? undefined),
-                this.buildOcrPrompt(sanitizedLabel, "detail", hasAllRole, gridInfo ?? undefined)
+                this.buildOcrPrompt(sanitizedLabel, "primary", hasAllRole, gridInfo ?? undefined, agenticVisionHints),
+                this.buildOcrPrompt(sanitizedLabel, "retry", hasAllRole, gridInfo ?? undefined, agenticVisionHints),
+                this.buildOcrPrompt(sanitizedLabel, "detail", hasAllRole, gridInfo ?? undefined, agenticVisionHints)
             ];
         const fallbackPrompt = ocrPrompts[ocrPrompts.length - 1];
         // 大きなファイルではフォールバックモデルも無効化（タイムアウト防止）
@@ -520,7 +564,19 @@ export class EduShiftGrader {
         let finalLayout: { total_lines: number; paragraph_count: number; indented_columns: number[] } | undefined;
 
         // OcrResult型を定義（layout情報を含む）
-        type OcrResult = ReturnType<typeof this.parseOcrResponse>;
+        type OcrResult = {
+            text: string;
+            charCount: number;
+            layout?: {
+                total_lines: number;
+                paragraph_count: number;
+                indented_columns: number[];
+            };
+            step1_observation?: {
+                total_columns: number;
+                columns: Array<{ col: number; first_cell: string; indent: boolean }>;
+            };
+        };
 
         if (usePerImageOnly) {
             const perImageTexts: string[] = [];
@@ -639,7 +695,8 @@ export class EduShiftGrader {
         label: string,
         mode: "primary" | "retry" | "detail",
         hasAllRole?: boolean,
-        gridInfo?: { columns: number; rows: number }
+        gridInfo?: { columns: number; rows: number },
+        agenticVisionHints?: OcrHints
     ): string {
         // 複合ラベル（大問X問Y形式）をパースして詳細な指示を生成
         const compound = this.parseCompoundLabel(label);
@@ -732,8 +789,121 @@ ${hasAllRole ? `手書きの答案部分のみ読み取り。印刷文字は無�
 ` + cotPrompt;
         }
 
+        // Agentic Vision ヒントがある場合、プロンプトを拡張
+        if (agenticVisionHints && agenticVisionHints.lowConfidenceRegions.length > 0) {
+            finalPrompt = this.applyAgenticVisionHints(finalPrompt, agenticVisionHints);
+        }
 
         return finalPrompt;
+    }
+
+    /**
+     * Agentic Vision のヒントをプロンプトに適用
+     */
+    private applyAgenticVisionHints(basePrompt: string, hints: OcrHints): string {
+        const sections: string[] = [];
+
+        // 特記事項（解答用紙の構造情報を含む）
+        if (hints.notes.length > 0) {
+            sections.push(`【事前分析情報】`);
+            for (const note of hints.notes) {
+                sections.push(note);
+            }
+            sections.push('');
+        }
+
+        // 難読箇所（最大5件）
+        if (hints.lowConfidenceRegions.length > 0) {
+            sections.push(`【注意が必要な箇所】`);
+            for (const [i, region] of hints.lowConfidenceRegions.slice(0, 5).entries()) {
+                sections.push(`${i + 1}. ${region.description}`);
+                if (region.suggestion) {
+                    sections.push(`   → ${region.suggestion}`);
+                }
+            }
+            sections.push('');
+            sections.push('※上記の箇所は特に慎重に読み取ってください');
+            sections.push('');
+        }
+
+        // 推定される文字種
+        if (hints.expectedCharTypes.length > 0) {
+            const charTypeNames: Record<string, string> = {
+                kanji: '漢字',
+                hiragana: 'ひらがな',
+                katakana: 'カタカナ',
+                number: '数字',
+                alphabet: 'アルファベット',
+            };
+            const types = hints.expectedCharTypes.map(t => charTypeNames[t] || t).join('、');
+            sections.push(`予想される文字種: ${types}`);
+            sections.push('');
+        }
+
+        // ヒント情報をプロンプトの先頭に追加
+        if (sections.length > 0) {
+            return sections.join('\n') + '\n' + basePrompt;
+        }
+
+        return basePrompt;
+    }
+
+    /**
+     * 解答用紙分析結果からOCRプロンプト用のノートを生成
+     */
+    private buildAnswerSheetNote(answerSheet: AnswerSheetAnalysis): string {
+        const lines: string[] = [];
+
+        switch (answerSheet.sheetType) {
+            case 'grid': {
+                const g = answerSheet.grid;
+                if (g) {
+                    const dir = g.direction === 'vertical' ? '縦書き' : '横書き';
+                    lines.push(`解答用紙: マス目（${dir}）${g.columns}列×${g.rows}行=${g.totalCells}マス、約${g.filledCells}文字`);
+
+                    // 各行の先頭・末尾文字
+                    if (g.lineHints.length > 0) {
+                        const hintStrs = g.lineHints
+                            .filter(h => !h.isEmpty && (h.firstChar || h.lastChar))
+                            .slice(0, 5)
+                            .map(h => `${h.lineNumber}行目:「${h.firstChar || '?'}」...「${h.lastChar || '?'}」`);
+                        if (hintStrs.length > 0) {
+                            lines.push(`照合ポイント: ${hintStrs.join(', ')}`);
+                        }
+                    }
+                }
+                break;
+            }
+            case 'lined': {
+                const l = answerSheet.lined;
+                if (l) {
+                    lines.push(`解答用紙: 罫線 ${l.totalLines}行、${l.filledLines}行に文字あり`);
+
+                    if (l.lineHints.length > 0) {
+                        const hintStrs = l.lineHints
+                            .filter(h => !h.isEmpty && (h.firstChar || h.lastChar))
+                            .slice(0, 5)
+                            .map(h => `${h.lineNumber}行目:「${h.firstChar || '?'}」...「${h.lastChar || '?'}」`);
+                        if (hintStrs.length > 0) {
+                            lines.push(`照合ポイント: ${hintStrs.join(', ')}`);
+                        }
+                    }
+                }
+                break;
+            }
+            case 'blank': {
+                const b = answerSheet.blank;
+                if (b) {
+                    lines.push(`解答用紙: 空欄（自由記述）約${b.estimatedCharCount}文字、${b.estimatedLines}行`);
+                    if (b.firstFewChars || b.lastFewChars) {
+                        lines.push(`先頭「${b.firstFewChars || '?'}...」末尾「...${b.lastFewChars || '?'}」`);
+                    }
+                }
+                break;
+            }
+        }
+
+        return lines.join('\n');
     }
 
     private isOcrFailure(text: string): boolean {

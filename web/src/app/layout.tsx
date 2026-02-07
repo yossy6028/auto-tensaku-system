@@ -81,7 +81,13 @@ export default function RootLayout({
                     href="/privacy"
                     className="hover:text-white transition-colors"
                   >
-                    本アプリケーションについて（プライバシーポリシー他）
+                    利用規約・プライバシーポリシー
+                  </Link>
+                  <Link
+                    href="/privacy#tokushoho"
+                    className="hover:text-white transition-colors"
+                  >
+                    特定商取引法に基づく表記
                   </Link>
                 </nav>
 

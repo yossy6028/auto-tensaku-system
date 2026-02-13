@@ -69,7 +69,7 @@ export function FeaturesSection() {
         </motion.h2>
 
         <motion.div
-          className="mt-16 grid gap-8 sm:grid-cols-2 lg:grid-cols-3"
+          className="mt-16 grid gap-8 md:grid-cols-3"
           variants={reducedMotion ? undefined : containerVariants}
           initial="hidden"
           whileInView="visible"

@@ -12,6 +12,7 @@ type Plan = {
   accent: string;
   accentBorder: string;
   badge?: string;
+  recommended?: boolean;
 };
 
 const plans: Plan[] = [
@@ -31,6 +32,7 @@ const plans: Plan[] = [
     accent: 'text-es-blue',
     accentBorder: 'border-es-blue/30',
     badge: '人気No.1',
+    recommended: true,
   },
   {
     name: '無制限',
@@ -84,7 +86,7 @@ export function PricingPreview() {
         </motion.h2>
 
         <motion.div
-          className="mt-16 grid gap-8 sm:grid-cols-2 lg:grid-cols-3"
+          className="mt-16 grid items-center gap-8 sm:grid-cols-2 lg:grid-cols-3"
           variants={reducedMotion ? undefined : containerVariants}
           initial="hidden"
           whileInView="visible"
@@ -93,7 +95,7 @@ export function PricingPreview() {
           {plans.map((plan) => (
             <motion.div
               key={plan.name}
-              className="relative"
+              className={`relative ${plan.recommended ? 'z-10 scale-105' : ''}`}
               variants={reducedMotion ? undefined : cardVariants}
             >
               {plan.badge && (
@@ -104,7 +106,11 @@ export function PricingPreview() {
                 </div>
               )}
               <div
-                className={`flex h-full flex-col rounded-2xl border border-white/10 bg-white/5 p-8 backdrop-blur-sm ${plan.accentBorder}`}
+                className={`flex h-full flex-col rounded-2xl border p-8 backdrop-blur-sm ${
+                  plan.recommended
+                    ? 'border-es-blue/50 bg-white/10 shadow-lg shadow-es-blue/20 ring-1 ring-es-blue/30'
+                    : `border-white/10 bg-white/5 ${plan.accentBorder}`
+                }`}
               >
                 <h3 className={`text-lg font-semibold ${plan.accent}`}>
                   {plan.name}
@@ -128,6 +134,15 @@ export function PricingPreview() {
                     </li>
                   ))}
                 </ul>
+
+                {plan.recommended && (
+                  <Link
+                    href="/pricing"
+                    className="mt-8 block rounded-lg bg-gradient-to-r from-es-blue to-es-teal px-6 py-3 text-center text-sm font-semibold text-white shadow-md transition-all hover:shadow-lg hover:brightness-110"
+                  >
+                    このプランで始める
+                  </Link>
+                )}
               </div>
             </motion.div>
           ))}

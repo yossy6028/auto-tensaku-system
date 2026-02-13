@@ -109,7 +109,7 @@ export function HowItWorksSection() {
           {!isMobile && !reducedMotion && <ConnectingPath />}
 
           <motion.div
-            className="relative grid gap-12 sm:grid-cols-2 lg:grid-cols-3 lg:gap-8"
+            className="relative grid gap-12 md:grid-cols-3 md:gap-8"
             variants={reducedMotion ? undefined : containerVariants}
             initial="hidden"
             whileInView="visible"

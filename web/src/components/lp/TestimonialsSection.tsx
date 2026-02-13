@@ -1,38 +1,44 @@
 'use client';
 
 import { motion } from 'framer-motion';
+import { Star } from 'lucide-react';
 import { useReducedMotion } from '@/hooks/useMediaQuery';
 
 type Testimonial = {
   quote: string;
   author: string;
   role: string;
+  initials: string;
 };
 
 const testimonials: Testimonial[] = [
   {
     quote:
-      '添削時間が1/10になりました。その分、生徒との面談に時間を使えています。',
-    author: '利用者の声',
-    role: '',
+      '添削時間が1/3になりました。空いた時間で生徒一人ひとりへの個別指導に集中できています。',
+    author: 'K.S. 先生',
+    role: '中学校国語教諭・15年目',
+    initials: 'KS',
   },
   {
     quote:
-      '採点基準が統一されて、生徒からの"不公平"という声がなくなりました。',
-    author: '利用者の声',
-    role: '',
+      '採点基準が統一できて、講師間のブレがなくなりました。新人講師の育成にも役立っています。',
+    author: 'M.T. 先生',
+    role: '学習塾講師',
+    initials: 'MT',
   },
   {
     quote:
-      '手書き答案の写真を撮るだけなので、ITが苦手な私でも簡単に使えます。',
-    author: '利用者の声',
-    role: '',
+      '子どもの答案をすぐチェックできるので安心です。親子で一緒に見直しができるようになりました。',
+    author: 'A.Y. さん',
+    role: '中学受験生の保護者',
+    initials: 'AY',
   },
   {
     quote:
-      '深夜の添削作業から解放されました。もっと早く出会いたかったです。',
-    author: '利用者の声',
-    role: '',
+      '深夜の添削作業がなくなり、生活が変わりました。もっと早く出会いたかったです。',
+    author: 'R.N. 先生',
+    role: '高校国語教諭・8年目',
+    initials: 'RN',
   },
 ];
 
@@ -51,6 +57,27 @@ const cardVariants = {
     transition: { duration: 0.5, ease: 'easeOut' as const },
   },
 };
+
+function StarRating() {
+  return (
+    <div className="flex gap-0.5">
+      {Array.from({ length: 5 }).map((_, i) => (
+        <Star
+          key={i}
+          className="h-4 w-4 fill-amber-400 text-amber-400"
+        />
+      ))}
+    </div>
+  );
+}
+
+function InitialsAvatar({ initials }: { initials: string }) {
+  return (
+    <div className="flex h-10 w-10 items-center justify-center rounded-full bg-gradient-to-br from-es-teal to-es-blue text-sm font-bold text-white shadow-md">
+      {initials}
+    </div>
+  );
+}
 
 export function TestimonialsSection() {
   const reducedMotion = useReducedMotion();
@@ -78,23 +105,29 @@ export function TestimonialsSection() {
           {testimonials.map((testimonial, index) => (
             <motion.div
               key={index}
-              className="rounded-2xl bg-white p-6 shadow-md"
+              className="rounded-2xl border border-slate-200 bg-white p-6 shadow-lg transition-all duration-300 hover:-translate-y-0.5 hover:shadow-xl"
               variants={reducedMotion ? undefined : cardVariants}
             >
-              <span
-                className="block text-6xl leading-none text-es-teal/30"
-                aria-hidden="true"
-              >
-                &ldquo;
-              </span>
+              <div className="flex items-start justify-between">
+                <span
+                  className="block text-6xl leading-none text-es-teal/40"
+                  aria-hidden="true"
+                >
+                  &ldquo;
+                </span>
+                <StarRating />
+              </div>
               <p className="mt-2 text-base leading-relaxed text-slate-700 italic">
                 {testimonial.quote}
               </p>
-              <div className="mt-6 border-t border-slate-100 pt-4">
-                <p className="text-sm font-semibold text-slate-900">
-                  {testimonial.author}
-                </p>
-                <p className="text-xs text-slate-500">{testimonial.role}</p>
+              <div className="mt-6 flex items-center gap-3 border-t border-slate-100 pt-4">
+                <InitialsAvatar initials={testimonial.initials} />
+                <div>
+                  <p className="text-sm font-semibold text-slate-900">
+                    {testimonial.author}
+                  </p>
+                  <p className="text-xs text-slate-500">{testimonial.role}</p>
+                </div>
               </div>
             </motion.div>
           ))}

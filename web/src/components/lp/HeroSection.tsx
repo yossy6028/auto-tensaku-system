@@ -39,11 +39,11 @@ export function HeroSection() {
       {/* Realistic Background with Overlay */}
       <div className="absolute inset-0 -z-20">
         <img
-          src="/bg-realistic.png"
-          alt="Classroom Background"
+          src="/bg-office.png"
+          alt="Office Desk Background"
           className="h-full w-full object-cover"
         />
-        <div className="absolute inset-0 bg-white/75 backdrop-blur-[2px]" />
+        <div className="absolute inset-0 bg-white/80 backdrop-blur-[2px]" />
       </div>
 
       {/* Main content */}

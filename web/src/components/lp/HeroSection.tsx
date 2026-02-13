@@ -41,7 +41,7 @@ export function HeroSection() {
           style={{ x: parallaxX, y: parallaxY, scale: 1.05 }} // Slight parallax and scale to prevent edges showing
         >
           <img
-            src="/bg-manuscript-desk.png"
+            src="/bg-desk-correction.png"
             alt="Desk with manuscript background"
             className="h-full w-full object-cover"
           />
@@ -84,7 +84,7 @@ export function HeroSection() {
             transition={{ duration: 0.5, delay: 0.2 }}
             className="mb-10 max-w-2xl text-lg text-slate-700 sm:text-xl font-medium"
           >
-            学習塾・学校の先生方向け。<br className="hidden sm:inline" />
+            学習塾・学校・家庭教師・保護者様向け。<br className="hidden sm:inline" />
             AIによる高品質な添削サポートで、<br className="hidden sm:inline" />
             生徒一人ひとりへの指導時間を最大化します。
           </motion.p>

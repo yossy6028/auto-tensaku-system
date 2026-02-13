@@ -4,14 +4,15 @@ import { motion } from 'framer-motion';
 import { Minus, Check } from 'lucide-react';
 
 const beforeItems = [
-  '1問あたり5〜10分かかる',
+  '1問あたり20分以上',
   '担当者によって採点基準がブレる',
   '疲労で質が低下',
   'フィードバックが画一的',
 ];
 
 const afterItems = [
-  'わずか5分で添削完了',
+  '1問あたり3分程度',
+  '同じ問題であれば、10名まで一括5分程度で処理完了',
   'AI基準で一貫した評価',
   'いつでも安定した品質',
   '3軸の詳細フィードバック',
@@ -32,7 +33,7 @@ export function SolutionSection() {
           className="mb-14 text-center"
         >
           <h2 className="text-3xl font-bold text-slate-900 md:text-4xl">
-            EduShift AIが、添削の
+            Taskal AIが、添削の
             <span className="text-es-blue">常識を変えます</span>
           </h2>
         </motion.div>
@@ -76,7 +77,7 @@ export function SolutionSection() {
               <div className="flex h-10 w-10 items-center justify-center rounded-full bg-es-teal/10">
                 <Check className="h-5 w-5 text-es-teal" />
               </div>
-              <h3 className="text-xl font-bold text-es-teal-dark">EduShift AI</h3>
+              <h3 className="text-xl font-bold text-es-teal-dark">Taskal AI</h3>
             </div>
             <ul className="space-y-4">
               {afterItems.map((item) => (

@@ -33,7 +33,7 @@ const painPoints: PainPoint[] = [
     icon: TrendingDown,
     title: 'フィードバックの質',
     description:
-      '疲労で添削が雑になる…もっと丁寧に指導したいのに時間がない',
+      '塾の記述宿題をどう採点していいかわからない…テストの解き直しで記述をどう指導すればいいか迷っていませんか？',
     accentBg: 'bg-es-dark-blue-light',
     accentText: 'text-es-dark-blue',
   },

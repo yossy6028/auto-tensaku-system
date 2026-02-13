@@ -1,6 +1,6 @@
 import React from 'react';
 import Image from 'next/image';
-import logo from '@/../public/logo.jpg';
+import logo from '@/../public/taskal-main-logo.png';
 
 interface DeductionDetail {
     reason?: string;
@@ -128,7 +128,7 @@ export const GradingReport = React.forwardRef<HTMLDivElement, GradingReportProps
                 <div className="flex items-center gap-3 mb-4 print:mb-3">
                     <Image
                         src={logo}
-                        alt="EduShift"
+                        alt="Taskal AI"
                         className="rounded-lg border border-slate-200 shadow-sm object-cover print:w-8 print:h-8"
                         width={40}
                         height={40}
@@ -136,7 +136,7 @@ export const GradingReport = React.forwardRef<HTMLDivElement, GradingReportProps
                     />
                     <div className="leading-tight">
                         <p className="text-xs text-slate-500 print:text-[11px]">auto-tensaku-system</p>
-                        <p className="text-sm font-bold text-slate-800 print:text-xs">EduShift</p>
+                        <p className="text-sm font-bold text-slate-800 print:text-xs">Taskal AI</p>
                     </div>
                 </div>
 

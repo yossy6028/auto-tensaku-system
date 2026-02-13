@@ -1,0 +1,55 @@
+{
+  "image": "../images/real_student_answer.png",
+  "timestamp": "2026-01-30T08:35:27.645Z",
+  "agenticVision": {
+    "success": true,
+    "processingTimeMs": 52450,
+    "answerSheet": {
+      "sheetType": "grid",
+      "confidence": 0.95,
+      "grid": {
+        "columns": 3,
+        "rows": 35,
+        "totalCells": 105,
+        "filledCells": 89,
+        "direction": "vertical",
+        "lineHints": [
+          {
+            "lineNumber": 1,
+            "firstChar": "日",
+            "lastChar": "。",
+            "isEmpty": false
+          },
+          {
+            "lineNumber": 2,
+            "firstChar": "た",
+            "lastChar": "蛮",
+            "isEmpty": false
+          },
+          {
+            "lineNumber": 3,
+            "firstChar": "と",
+            "lastChar": "。",
+            "isEmpty": false
+          }
+        ]
+      }
+    }
+  },
+  "standardOcr": {
+    "text": "日本は、島国であるため、他国の文化に影響されにくかった\nため、急に文化や習慣が変化したが、それも、原始的で野蛮\nと考えるのではなく、人類的にき重だから、大切にしたいという考え。",
+    "charCount": 86,
+    "processingTimeMs": 35770
+  },
+  "enhancedOcr": {
+    "text": "日本は、島国であるため、他国の文化に影響されにくかった\nため、急激に文化や習慣が変化したが、それも、原始的で野蛮\nと考えるのではなく、人類的にそ貴重だから、大切にしたいという考え。",
+    "charCount": 88,
+    "processingTimeMs": 62448,
+    "hintsUsed": "## 事前分析結果（Agentic Vision）\n\n【解答用紙】マス目（原稿用紙）- 縦書き\n- 構造: 3列 × 35行 = 105マス\n- 埋まっているマス: 約89文字\n\n【各行の先頭・末尾文字】（OCR照合用）\n  1行目: 「日」...「。」\n  2行目: 「た」...「蛮」\n  3行目: 「と」...「。」\n\n※上記の先頭・末尾文字と一致するようOCRしてください"
+  },
+  "comparison": {
+    "charDifference": 2,
+    "totalTimeDifference": 79128,
+    "textDifferent": true
+  }
+}

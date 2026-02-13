@@ -21,12 +21,13 @@ export default function AppLayout({
         <div className="max-w-5xl mx-auto px-4 sm:px-6 lg:px-8">
           <div className="flex flex-col md:flex-row justify-between items-center gap-4">
             <div className="flex items-center">
-              <img
-                src="/logo.jpg"
-                alt="EduShift Logo"
-                className="w-8 h-8 rounded-lg mr-3"
-              />
-              <span className="font-bold text-white">EduShift</span>
+              <div className="rounded-lg bg-white px-4 py-2 mr-3">
+                <img
+                  src="/taskal-main-logo.png"
+                  alt="Taskal AI"
+                  className="h-20 w-auto mix-blend-multiply"
+                />
+              </div>
             </div>
 
             <nav className="flex flex-wrap justify-center gap-6 text-sm">
@@ -57,7 +58,7 @@ export default function AppLayout({
             </nav>
 
             <p className="text-xs text-slate-400">
-              © 2025 EduShift. All rights reserved.
+              © 2025 Taskal. All rights reserved.
             </p>
           </div>
         </div>

@@ -19,10 +19,10 @@ function TermsContent() {
       <section>
         <h3 className="text-xl font-bold text-slate-800 mb-4 border-b border-slate-200 pb-2">第1条（定義）</h3>
         <div className="text-slate-700 leading-relaxed whitespace-pre-wrap text-sm">
-{`本規約において、以下の用語は以下の意味を有するものとします。
+          {`本規約において、以下の用語は以下の意味を有するものとします。
 
 1. 「本サービス」とは、当社が「auto-tensaku-system」の名称で提供する国語記述答案の自動添削サービス（関連するWebサイト、アプリケーション、APIその他一切のサービスを含みます）をいいます。
-2. 「当社」とは、EduShiftをいいます。
+2. 「当社」とは、Taskalをいいます。
 3. 「ユーザー」とは、本規約に同意のうえ本サービスを利用するすべての個人または法人をいいます。
 4. 「法人ユーザー」とは、学習塾その他の教育機関として本サービスを利用する法人または団体をいいます。
 5. 「個人ユーザー」とは、法人ユーザー以外のユーザーをいいます。
@@ -38,7 +38,7 @@ function TermsContent() {
       <section>
         <h3 className="text-xl font-bold text-slate-800 mb-4 border-b border-slate-200 pb-2">第2条（アカウント登録・管理）</h3>
         <div className="text-slate-700 leading-relaxed whitespace-pre-wrap text-sm">
-{`1. ユーザーは、本サービスの利用にあたり、当社所定の方法によりアカウント登録を行い、登録時に正確かつ最新の情報を提供するものとします。
+          {`1. ユーザーは、本サービスの利用にあたり、当社所定の方法によりアカウント登録を行い、登録時に正確かつ最新の情報を提供するものとします。
 2. ユーザーは、1人につき1つのアカウントのみ登録できるものとします。
 3. アカウント情報（ID・パスワード等）の管理責任はユーザーに帰属し、第三者に利用させてはなりません。
 4. ユーザーは、アカウントの不正利用を発見した場合、直ちに当社に報告するものとします。
@@ -53,7 +53,7 @@ function TermsContent() {
           <p className="text-amber-800 text-sm font-bold">重要条項</p>
         </div>
         <div className="text-slate-700 leading-relaxed whitespace-pre-wrap text-sm">
-{`1. 18歳未満の方が本サービスを利用する場合、事前に保護者の同意を得なければなりません。当社所定の方法により保護者の同意が確認できない場合、当該未成年者は本サービスを利用することができません。
+          {`1. 18歳未満の方が本サービスを利用する場合、事前に保護者の同意を得なければなりません。当社所定の方法により保護者の同意が確認できない場合、当該未成年者は本サービスを利用することができません。
 
 2. 保護者が本規約への同意手続きを完了した場合、当該保護者は、利用生徒による本サービスの利用に関し、本規約に基づくすべての義務について連帯して責任を負うものとします。
 
@@ -69,7 +69,7 @@ function TermsContent() {
       <section>
         <h3 className="text-xl font-bold text-slate-800 mb-4 border-b border-slate-200 pb-2">第4条（サービス内容）</h3>
         <div className="text-slate-700 leading-relaxed whitespace-pre-wrap text-sm">
-{`1. 本サービスは、AI技術を用いて国語記述答案の自動添削・評価・フィードバックを提供するものです。
+          {`1. 本サービスは、AI技術を用いて国語記述答案の自動添削・評価・フィードバックを提供するものです。
 2. 本サービスの処理はすべてAI（人工知能）により自動的に行われます。
 3. 利用可能なプランおよび料金の詳細は、本サービスのWebサイト（料金プランページ）に掲載するものとします。
 4. 当社は、本サービスの内容を当社の裁量により変更することができるものとします。ただし、ユーザーに重大な不利益を及ぼす変更を行う場合は、事前に通知するものとします。`}
@@ -83,7 +83,7 @@ function TermsContent() {
           <p className="text-red-800 text-sm font-bold">最重要条項</p>
         </div>
         <div className="text-slate-700 leading-relaxed whitespace-pre-wrap text-sm">
-{`1. 本サービスのAI添削結果は、人工知能（AI）技術を用いて自動的に生成されるものであり、参考情報としての性質を有します。添削結果は、教師その他の教育専門家による添削・指導を代替するものではなく、学習上の最終的な判断はユーザー自身（未成年者の場合はその保護者を含みます）の責任において行ってください。
+          {`1. 本サービスのAI添削結果は、人工知能（AI）技術を用いて自動的に生成されるものであり、参考情報としての性質を有します。添削結果は、教師その他の教育専門家による添削・指導を代替するものではなく、学習上の最終的な判断はユーザー自身（未成年者の場合はその保護者を含みます）の責任において行ってください。
 
 2. AIによる添削には、技術的な限界に起因する以下の可能性があり、当社はこれらについて完全性、正確性、有用性その他いかなる保証もいたしません。
   (1) 文法・語法・論理構成等の評価に誤りが含まれる場合
@@ -101,7 +101,7 @@ function TermsContent() {
       <section>
         <h3 className="text-xl font-bold text-slate-800 mb-4 border-b border-slate-200 pb-2">第6条（料金・支払い）</h3>
         <div className="text-slate-700 leading-relaxed whitespace-pre-wrap text-sm">
-{`1. 本サービスの有料プランの利用料金は、月額サブスクリプション方式とし、料金の詳細は本サービスのWebサイトに掲載するものとします。
+          {`1. 本サービスの有料プランの利用料金は、月額サブスクリプション方式とし、料金の詳細は本サービスのWebサイトに掲載するものとします。
 2. 初回登録のユーザーには、無料トライアルとして3回分の無料採点を提供します。
 3. 支払方法は、クレジットカード（Visa、Mastercard、JCB、American Express）によるものとします。
 4. 利用料金はすべて税込価格で表示されます。`}
@@ -115,7 +115,7 @@ function TermsContent() {
           <p className="text-amber-800 text-sm font-bold">重要条項</p>
         </div>
         <div className="text-slate-700 leading-relaxed whitespace-pre-wrap text-sm">
-{`1. 本サービスの有料プランは、ユーザーが解約手続きを完了しない限り、各契約期間の満了日に同一条件で自動的に更新されます。
+          {`1. 本サービスの有料プランは、ユーザーが解約手続きを完了しない限り、各契約期間の満了日に同一条件で自動的に更新されます。
 
 2. 無料トライアル期間は、アカウント登録日から起算して14日間とします。無料トライアル期間の終了日までに解約手続きが完了しない場合、翌日よりユーザーが選択した有料プランの利用料金が自動的に課金されます。当社は、トライアル期間終了の3日前までに、登録されたメールアドレス宛てに課金開始の事前通知を行います。
 
@@ -134,7 +134,7 @@ function TermsContent() {
           <p className="text-amber-800 text-sm font-bold">重要条項</p>
         </div>
         <div className="text-slate-700 leading-relaxed whitespace-pre-wrap text-sm">
-{`1. 本サービスに関するソフトウェア、アルゴリズム、デザイン、ロゴ、商標その他の知的財産権は、すべて当社または当社にライセンスを許諾した第三者に帰属します。
+          {`1. 本サービスに関するソフトウェア、アルゴリズム、デザイン、ロゴ、商標その他の知的財産権は、すべて当社または当社にライセンスを許諾した第三者に帰属します。
 
 2. 答案データに関する著作権その他の権利は、利用生徒（またはその法定代理人）に帰属します。当社は、答案データについて、本サービスの提供（AI添削処理を含みます）に必要な範囲でのみ利用する権利を有します。
 
@@ -150,7 +150,7 @@ function TermsContent() {
       <section>
         <h3 className="text-xl font-bold text-slate-800 mb-4 border-b border-slate-200 pb-2">第9条（禁止事項）</h3>
         <div className="text-slate-700 leading-relaxed whitespace-pre-wrap text-sm">
-{`ユーザーは、本サービスの利用にあたり、以下の行為を行ってはなりません。
+          {`ユーザーは、本サービスの利用にあたり、以下の行為を行ってはなりません。
 
 (1) 当社またはその委託先のサーバーその他のコンピュータに不正にアクセスし、またはこれを試みる行為
 (2) 本サービスのソフトウェアを逆コンパイル、逆アセンブル、リバースエンジニアリングする行為
@@ -169,7 +169,7 @@ function TermsContent() {
       <section>
         <h3 className="text-xl font-bold text-slate-800 mb-4 border-b border-slate-200 pb-2">第10条（サービスの変更・中断・終了）</h3>
         <div className="text-slate-700 leading-relaxed whitespace-pre-wrap text-sm">
-{`1. 当社は、ユーザーに事前に通知することなく、本サービスの内容を変更し、または機能を追加・削除することができるものとします。ただし、ユーザーに重大な不利益を及ぼす変更を行う場合は、変更の効力発生日の30日前までに通知するものとします。
+          {`1. 当社は、ユーザーに事前に通知することなく、本サービスの内容を変更し、または機能を追加・削除することができるものとします。ただし、ユーザーに重大な不利益を及ぼす変更を行う場合は、変更の効力発生日の30日前までに通知するものとします。
 
 2. 当社は、以下のいずれかに該当する場合、本サービスの全部または一部を一時的に中断することができるものとします。
   (1) システムの保守・点検・更新を行う場合
@@ -189,7 +189,7 @@ function TermsContent() {
           <p className="text-amber-800 text-sm font-bold">重要条項</p>
         </div>
         <div className="text-slate-700 leading-relaxed whitespace-pre-wrap text-sm">
-{`1. 当社は、本サービスの利用に関連してユーザーに生じた損害について、当社に故意または重過失がある場合を除き、以下の範囲を上限として賠償の責任を負うものとします。
+          {`1. 当社は、本サービスの利用に関連してユーザーに生じた損害について、当社に故意または重過失がある場合を除き、以下の範囲を上限として賠償の責任を負うものとします。
   (1) 個人ユーザーの場合：損害発生月の前月から遡って12か月間にユーザーが当社に支払った利用料金の総額
   (2) 法人ユーザーの場合：同上
 
@@ -264,7 +264,7 @@ function PrivacyContent() {
       <section>
         <h3 className="text-xl font-bold text-slate-800 mb-4 border-b border-slate-200 pb-2">1. 基本方針</h3>
         <p className="text-slate-700 leading-relaxed text-sm">
-          EduShift（以下「当社」といいます）は、お客様の個人情報保護を最重要事項と考え、
+          Taskal（以下「当社」といいます）は、お客様の個人情報保護を最重要事項と考え、
           関連する法令を遵守し、適切な管理を行います。本プライバシーポリシーは、
           当社が提供する自動添削システム（以下「本サービス」といいます）における
           個人情報の取り扱いについて定めるものです。
@@ -554,7 +554,7 @@ function PrivacyContent() {
         </p>
         <div className="bg-slate-50 rounded-xl p-5 border border-slate-200">
           <p className="text-slate-700 text-sm">
-            <strong>EduShift 運営事務局</strong><br />
+            <strong>Taskal 運営事務局</strong><br />
             メール：katsu.yoshii@gmail.com
           </p>
         </div>
@@ -574,7 +574,7 @@ function TokushohoContent() {
       <div className="overflow-x-auto">
         <dl className="divide-y divide-slate-200">
           {[
-            { term: '販売業者', desc: 'EduShift' },
+            { term: '販売業者', desc: 'Taskal' },
             { term: '代表者', desc: '吉井勝彦' },
             { term: '所在地', desc: '〒150-0021\n東京都渋谷区恵比寿西2丁目4番8号ウィンド恵比寿ビル8F' },
             { term: '電話番号', desc: '090-6028-3779（受付: 平日10:00〜17:00）' },
@@ -707,11 +707,10 @@ export default function LegalPage() {
                 <button
                   key={tab.id}
                   onClick={() => handleTabChange(tab.id)}
-                  className={`flex-1 flex items-center justify-center gap-2 py-3 px-4 rounded-lg text-sm font-bold transition-all ${
-                    isActive
+                  className={`flex-1 flex items-center justify-center gap-2 py-3 px-4 rounded-lg text-sm font-bold transition-all ${isActive
                       ? 'bg-white text-indigo-700 shadow-md'
                       : 'text-slate-500 hover:text-slate-700 hover:bg-white/50'
-                  }`}
+                    }`}
                 >
                   <Icon className="w-4 h-4" />
                   <span>{tab.label}</span>
@@ -733,7 +732,7 @@ export default function LegalPage() {
         {/* Footer */}
         <div className="text-center mt-12">
           <p className="text-sm text-slate-500">
-            &copy; 2025 EduShift. All rights reserved.
+            &copy; 2025 Taskal. All rights reserved.
           </p>
         </div>
       </div>

@@ -106,11 +106,10 @@ export function PricingPreview() {
                 </div>
               )}
               <div
-                className={`flex h-full flex-col rounded-2xl border p-8 backdrop-blur-sm ${
-                  plan.recommended
+                className={`flex h-full flex-col rounded-2xl border p-8 backdrop-blur-sm ${plan.recommended
                     ? 'border-es-blue/50 bg-white/10 shadow-lg shadow-es-blue/20 ring-1 ring-es-blue/30'
                     : `border-white/10 bg-white/5 ${plan.accentBorder}`
-                }`}
+                  }`}
               >
                 <h3 className={`text-lg font-semibold ${plan.accent}`}>
                   {plan.name}
@@ -137,13 +136,12 @@ export function PricingPreview() {
 
                 <Link
                   href={plan.recommended ? '/pricing' : '/grading'}
-                  className={`mt-8 block rounded-lg px-6 py-3 text-center text-sm font-semibold transition-all ${
-                    plan.recommended
+                  className={`mt-8 block rounded-lg px-6 py-3 text-center text-sm font-semibold transition-all ${plan.recommended
                       ? 'bg-gradient-to-r from-es-blue to-es-teal text-white shadow-md hover:shadow-lg hover:brightness-110'
                       : 'border border-white/20 text-white hover:bg-white/10'
-                  }`}
+                    }`}
                 >
-                  {plan.recommended ? 'このプランで始める' : '無料で試す'}
+                  {plan.recommended ? '無料で試す' : '無料で試す'}
                 </Link>
               </div>
             </motion.div>

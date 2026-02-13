@@ -1,6 +1,6 @@
 import { GoogleGenAI } from "@google/genai";
 import { CONFIG } from "../config";
-import { SYSTEM_INSTRUCTION } from "../prompts/eduShift";
+import { SYSTEM_INSTRUCTION } from "../prompts/taskal";
 import {
     AgenticVisionPreprocessor,
     PreprocessResult,
@@ -74,7 +74,7 @@ async function withTimeout<T>(promise: Promise<T>, timeoutMs: number, operation:
             reject(new Error(`${operation}がタイムアウトしました（${timeoutMs / 1000}秒）。再度お試しください。`));
         }, timeoutMs);
     });
-    
+
     try {
         const result = await Promise.race([promise, timeoutPromise]);
         clearTimeout(timeoutId!);
@@ -100,7 +100,7 @@ class RateLimitManager {
     private static instance: RateLimitManager;
     private rateLimitedDate: string | null = null; // YYYY-MM-DD形式（JST）
 
-    private constructor() {}
+    private constructor() { }
 
     static getInstance(): RateLimitManager {
         if (!RateLimitManager.instance) {
@@ -269,10 +269,10 @@ const FILE_PATTERNS = {
     model: /(model|key|模範|解説|正解|解答例)/i
 };
 
-export class EduShiftGrader {
+export class TaskalGrader {
     private ai: GoogleGenAI;
     private ocrThinkingMode: "disabled" | "enabled" | "unsupported" = "disabled";
-    
+
     // OCR用の設定（安定性優先）
     // Geminiの思考モードがthinkingBudgetを無視して~8000トークン使用するため、
     // maxOutputTokensを32768に設定して出力用の余裕を確保
@@ -284,7 +284,7 @@ export class EduShiftGrader {
         maxOutputTokens: 32768,
         responseMimeType: "application/json" as const
     };
-    
+
     // 採点用の設定（JSON出力を強制）
     private readonly gradingConfig = {
         temperature: 0,
@@ -292,7 +292,7 @@ export class EduShiftGrader {
         topK: 16,
         responseMimeType: "application/json" as const
     };
-    
+
     // OCR用のsystemInstruction（安定性重視）
     // 2025-01-28: 省略防止のため強化（文字抜け問題対応）
     private readonly ocrSystemInstruction = [
@@ -505,7 +505,7 @@ export class EduShiftGrader {
 
         // 複合ファイル（role='all'）かどうかをチェック
         const hasAllRole = categorizedFiles?.studentFiles.some(f => f.role === 'all') ?? false;
-        
+
 
         // 2段階OCR: まずマス目構造を分析（大きなファイルではスキップ）
         let gridInfo: { columns: number; rows: number } | null = null;
@@ -1051,12 +1051,12 @@ JSONのみ出力してください。`;
         // レート制限チェック: 制限中ならフォールバックモデルを使用
         let resolvedModel = modelName || CONFIG.OCR_MODEL_NAME || CONFIG.MODEL_NAME;
         const originalModel = resolvedModel;
-        
+
         if (rateLimitManager.isRateLimited() && CONFIG.RATE_LIMIT_FALLBACK_MODEL) {
             resolvedModel = CONFIG.RATE_LIMIT_FALLBACK_MODEL;
             console.info(`[Grader] レート制限中のため、フォールバックモデルを使用: ${resolvedModel}`);
         }
-        
+
         let best: ReturnType<typeof this.parseOcrResponse> | null = null;
         let bestCount = -1;
         let lastError: unknown = null;
@@ -1092,11 +1092,11 @@ JSONのみ出力してください。`;
                     );
                 } catch (error) {
                     const message = error instanceof Error ? error.message : String(error);
-                    
+
                     // レート制限エラーの検出
                     if (RateLimitManager.isRateLimitError(error) && CONFIG.RATE_LIMIT_FALLBACK_MODEL) {
                         rateLimitManager.markRateLimited();
-                        
+
                         // フォールバックモデルで再試行
                         if (resolvedModel !== CONFIG.RATE_LIMIT_FALLBACK_MODEL) {
                             console.warn(`[Grader] レート制限エラー検出。${CONFIG.RATE_LIMIT_FALLBACK_MODEL} で再試行します。`);
@@ -1179,7 +1179,7 @@ JSONのみ出力してください。`;
             } catch (error) {
                 console.error("[Grader] OCR API呼び出しエラー:", error);
                 lastError = error;
-                
+
                 // レート制限エラーの場合、リトライ前にフォールバックモデルに切り替え
                 if (RateLimitManager.isRateLimitError(error) && CONFIG.RATE_LIMIT_FALLBACK_MODEL) {
                     rateLimitManager.markRateLimited();
@@ -1227,7 +1227,7 @@ JSONのみ出力してください。`;
     private parseNumberString(numStr: string): number | null {
         // 全角数字を半角に変換
         const halfWidth = numStr.replace(/[０-９]/g, d => String.fromCharCode(d.charCodeAt(0) - 0xFEE0));
-        
+
         // 半角数字の場合
         if (/^[0-9]+$/.test(halfWidth)) {
             const parsed = parseInt(halfWidth, 10);
@@ -1320,7 +1320,7 @@ JSONのみ出力してください。`;
         };
 
         const roman = (n: number): string | null => {
-            const romans = ["I","II","III","IV","V","VI","VII","VIII","IX","X","XI","XII","XIII","XIV","XV","XVI","XVII","XVIII","XIX","XX"];
+            const romans = ["I", "II", "III", "IV", "V", "VI", "VII", "VIII", "IX", "X", "XI", "XII", "XIII", "XIV", "XV", "XVI", "XVII", "XVIII", "XIX", "XX"];
             if (n < 1 || n > romans.length) return null;
             return romans[n - 1];
         };
@@ -1367,7 +1367,7 @@ JSONのみ出力してください。`;
 
         // 複合ラベル（大問X問Y形式）をチェック
         const compound = this.parseCompoundLabel(targetLabel);
-        
+
         if (compound.mainNum !== null && compound.subNum !== null) {
             // 複合ラベルの場合: 大問番号と小問番号の両方を使ってマッチング
             const mainVariants = this.numberVariants(compound.mainNum)
@@ -1382,7 +1382,7 @@ JSONのみ出力してください。`;
                 `^\\s*(?:第\\s*)?大問\\s*[\\(（【\\[\\{]?\\s*(?:${mainVariants})\\s*[\\)）】\\]\\}]?[\\s:：．\\.、の\\-ー]*問\\s*[\\(（【\\[\\{]?\\s*(?:${subVariants})\\s*[\\)）】\\]\\}]?`,
                 "i"
             ));
-            
+
             // パターン: 「大問X-問Y」「大問X問Y」などの連続形式
             patterns.push(new RegExp(
                 `大問\\s*(?:${mainVariants})[\\s\\-ー]*問\\s*(?:${subVariants})`,
@@ -1484,7 +1484,7 @@ JSONのみ出力してください。`;
             /ですが/g,
             /ますが/g,
         ];
-        
+
         // 常体（だ・である調）のパターン
         const jotaiPatterns = [
             /だ[。、]/g,
@@ -1527,7 +1527,7 @@ JSONのみ出力してください。`;
 
         const isMixed = keigoCount > 0 && jotaiCount > 0;
         let detectedStyle: "常体" | "敬体" | "混在" = "常体";
-        
+
         if (isMixed) {
             detectedStyle = "混在";
         } else if (keigoCount > jotaiCount) {
@@ -1618,18 +1618,18 @@ JSONのみ出力してください。`;
         const currentText = String(gradingResult.recognized_text || "").trim();
         const currentLength = currentText.replace(/\s+/g, "").length;
         const needsRecovery = !currentText || placeholderPattern.test(currentText);
-        
+
         // ocr_debug から最適なテキストを探す
         if (parsed.ocr_debug) {
-            const ocrDebug = parsed.ocr_debug as { 
+            const ocrDebug = parsed.ocr_debug as {
                 column_readings?: string[];
                 corrected_text?: string;
                 original_text?: string;
                 total_chars?: number;
             } | undefined;
-            
+
             const candidates: { source: string; text: string; length: number }[] = [];
-            
+
             // 1. corrected_text（AIが修正したテキスト）
             if (ocrDebug?.corrected_text && typeof ocrDebug.corrected_text === 'string') {
                 const text = ocrDebug.corrected_text.trim();
@@ -1637,7 +1637,7 @@ JSONのみ出力してください。`;
                     candidates.push({ source: "corrected_text", text, length: text.replace(/\s+/g, "").length });
                 }
             }
-            
+
             // 2. column_readings の連結
             if (ocrDebug?.column_readings && Array.isArray(ocrDebug.column_readings)) {
                 const rebuilt = ocrDebug.column_readings.join("");
@@ -1645,12 +1645,12 @@ JSONのみ出力してください。`;
                     candidates.push({ source: "column_readings", text: rebuilt.trim(), length: rebuilt.replace(/\s+/g, "").length });
                 }
             }
-            
+
             // 3. 現在のテキスト（プレースホルダーでない場合）
             if (currentText && !placeholderPattern.test(currentText)) {
                 candidates.push({ source: "current", text: currentText, length: currentLength });
             }
-            
+
             // 最も長いテキストを選択
             if (candidates.length > 0) {
                 const best = candidates.reduce((a, b) => a.length > b.length ? a : b);
@@ -1662,11 +1662,11 @@ JSONのみ出力してください。`;
         }
 
         const recognizedText = gradingResult.recognized_text as string || "";
-        
+
         // 既存のdeduction_detailsを取得
-        let deductionDetails: DeductionDetail[] = 
-            Array.isArray(gradingResult.deduction_details) 
-                ? [...gradingResult.deduction_details] 
+        let deductionDetails: DeductionDetail[] =
+            Array.isArray(gradingResult.deduction_details)
+                ? [...gradingResult.deduction_details]
                 : [];
 
         // プログラムによる検証結果を格納
@@ -1684,7 +1684,7 @@ JSONのみ出力してください。`;
         // AIの文体チェック結果（参考情報として保持、プログラムチェックを優先）
         const _aiStyleCheck = (gradingResult.mandatory_checks as MandatoryChecks | undefined)?.style_check;
         void _aiStyleCheck; // 明示的に未使用であることを示す
-        const styleDeductionExists = deductionDetails.some(d => 
+        const styleDeductionExists = deductionDetails.some(d =>
             d.reason?.includes("文体") || d.reason?.includes("敬体") || d.reason?.includes("常体") || d.reason?.includes("混在")
         );
 
@@ -1701,13 +1701,13 @@ JSONのみ出力してください。`;
         // AIの判断にブレがあるため、プログラムで検出した場合は必ず減点を適用
         if (programmaticChecks.vocabulary_check.deduction > 0) {
             // まず、AIが追加した語彙関連の減点を削除（重複防止）
-            deductionDetails = deductionDetails.filter(d => 
-                !d.reason?.includes("繰り返し") && 
-                !d.reason?.includes("重複") && 
+            deductionDetails = deductionDetails.filter(d =>
+                !d.reason?.includes("繰り返し") &&
+                !d.reason?.includes("重複") &&
                 !d.reason?.includes("語彙") &&
                 !d.reason?.includes("反復")
             );
-            
+
             // プログラム検出結果で上書き（AIの判断に関係なく適用）
             const repeatedList = programmaticChecks.vocabulary_check.repeated_words
                 .map(w => `「${w.word}」${w.count}回`)
@@ -1719,9 +1719,9 @@ JSONのみ出力してください。`;
             });
         } else {
             // プログラムで検出しなかった場合、AIが誤って減点していたら削除
-            const aiVocabDeduction = deductionDetails.find(d => 
-                d.reason?.includes("繰り返し") || 
-                d.reason?.includes("重複") || 
+            const aiVocabDeduction = deductionDetails.find(d =>
+                d.reason?.includes("繰り返し") ||
+                d.reason?.includes("重複") ||
                 d.reason?.includes("語彙") ||
                 d.reason?.includes("反復")
             );
@@ -1852,7 +1852,7 @@ JSONのみ出力してください。`;
         }
 
         const { chars_per_column, columns_used, column_readings, verification } = ocrDebug;
-        
+
         console.log("[Grader] OCR検証:", {
             基準マス数: chars_per_column,
             使用列数: columns_used,
@@ -1929,13 +1929,13 @@ JSONのみ出力してください。`;
      */
     private computeFinalScore(gradingResult: GradingResult | null): number | null {
         if (!gradingResult) return null;
-        
+
         const deductions = Array.isArray(gradingResult.deduction_details) ? gradingResult.deduction_details : [];
-        
-        
+
+
         const totalDeduction = deductions.reduce((sum, d) => {
-            const n = typeof d?.deduction_percentage === "number" 
-                ? d.deduction_percentage 
+            const n = typeof d?.deduction_percentage === "number"
+                ? d.deduction_percentage
                 : Number(d?.deduction_percentage);
             return Number.isFinite(n) ? sum + n : sum;
         }, 0);
@@ -1949,7 +1949,7 @@ JSONのみ出力してください。`;
             const result = Math.max(0, Math.min(100, finalScore));
             return result;
         }
-        
+
         // モデルが返したスコアを正規化
         const normalized = this.normalizeScore(gradingResult.score);
         if (normalized !== null) {
@@ -1957,7 +1957,7 @@ JSONのみ出力してください。`;
             const result = Math.max(0, Math.min(100, Math.floor(normalized / 5) * 5));
             return result;
         }
-        
+
         return null;
     }
 
@@ -1989,7 +1989,7 @@ JSONのみ出力してください。`;
      * ファイルをカテゴリ別に分類
      */
     private categorizeFiles(
-        files: UploadedFilePart[], 
+        files: UploadedFilePart[],
         pdfPageInfo?: { answerPage?: string; problemPage?: string; modelAnswerPage?: string } | null
     ): CategorizedFiles {
         const answerPages = this.parsePageRange(pdfPageInfo?.answerPage);
@@ -2015,7 +2015,7 @@ JSONのみ出力してください。`;
                 if (file.role === 'problem') { buckets.problemFiles.push(file); continue; }
                 if (file.role === 'model') { buckets.modelAnswerFiles.push(file); continue; }
                 if (file.role === 'other') { buckets.otherFiles.push(file); continue; }
-                
+
                 // 複合役割（1つのファイルを複数カテゴリに追加）
                 if (file.role === 'problem_model') {
                     buckets.problemFiles.push(file);
@@ -2115,9 +2115,9 @@ JSONのみ出力してください。`;
      */
     private extractJsonFromText(text: string): Record<string, unknown> | null {
         const cleaned = text.replace(/```json\n?|\n?```/g, "").trim();
-        
+
         console.log("[Grader] extractJsonFromText: cleaned length =", cleaned.length);
-        
+
         try {
             const result = JSON.parse(cleaned);
             console.log("[Grader] ✅ JSON parse success (first try)");
@@ -2125,21 +2125,21 @@ JSONのみ出力してください。`;
         } catch {
             console.log("[Grader] ⚠️ JSON parse failed (first try), trying to extract {...}");
         }
-        
+
         const firstBrace = cleaned.indexOf('{');
         const lastBrace = cleaned.lastIndexOf('}');
-        
+
         console.log("[Grader] Brace positions:", { firstBrace, lastBrace });
-        
+
         if (firstBrace === -1 || lastBrace === -1 || firstBrace >= lastBrace) {
             console.error("[Grader] ❌ No valid JSON braces found");
             return null;
         }
-        
+
         const extracted = cleaned.substring(firstBrace, lastBrace + 1);
         console.log("[Grader] Extracted JSON length:", extracted.length);
         console.log("[Grader] Extracted JSON preview:", extracted.substring(0, 200));
-        
+
         try {
             const result = JSON.parse(extracted);
             console.log("[Grader] ✅ JSON parse success (second try)");
@@ -2302,12 +2302,12 @@ ${layout ? '- 【重要】上記のレイアウト情報を信頼し、字下げ
 
         const text = result.text ?? "";
         console.log("[Grader] 採点AIレスポンス長:", text.length);
-        
+
         const parsed = this.extractJsonFromText(text);
-        
+
         if (parsed) {
             delete parsed.debug_info;
-            
+
             const gradingResultObj = (parsed.grading_result && typeof parsed.grading_result === 'object')
                 ? parsed.grading_result as Record<string, unknown>
                 : (parsed.grading_result = {} as Record<string, unknown>);
@@ -2316,7 +2316,7 @@ ${layout ? '- 【重要】上記のレイアウト情報を信頼し、字下げ
             gradingResultObj.recognized_text = confirmedText;
             gradingResultObj.recognized_text_full = confirmedText;
             gradingResultObj.user_confirmed = true;
-            
+
             // プログラムによる検証・補完を実行
             const validated = this.validateAndEnhanceGrading(parsed);
 
@@ -2370,7 +2370,7 @@ ${layout ? '- 【重要】上記のレイアウト情報を信頼し、字下げ
         // ========================================
         const ocrResult = await this.performOcr(sanitizedLabel, imageParts, categorizedFiles, pdfPageInfo);
         const ocrText = (ocrResult.text || ocrResult.fullText).trim();
-        
+
         // ========================================
         // Stage 2: 採点（OCR結果を使用）
         // ========================================
@@ -2378,11 +2378,11 @@ ${layout ? '- 【重要】上記のレイアウト情報を信頼し、字下げ
 
         // PDFページ指定ヒントを構築
         let pdfPageHint = '';
-        const hasPdf = imageParts.some(part => 
-            typeof part === 'object' && 'inlineData' in part && 
+        const hasPdf = imageParts.some(part =>
+            typeof part === 'object' && 'inlineData' in part &&
             part.inlineData.mimeType === 'application/pdf'
         );
-        
+
         if (hasPdf && pdfPageInfo) {
             const hints: string[] = [];
             if (pdfPageInfo.answerPage) hints.push(`生徒の答案: ${pdfPageInfo.answerPage}ページ目`);
@@ -2396,7 +2396,7 @@ ${layout ? '- 【重要】上記のレイアウト情報を信頼し、字下げ
         // OCR結果がプレースホルダーかどうかを判定
         const ocrIsPlaceholder = /読み取れませんでした|画像が不鮮明|見つかりません/.test(ocrText);
         const ocrCharCount = ocrText.replace(/\s+/g, "").length;
-        
+
         // Stage 2用プロンプト
         const ocrSection = ocrIsPlaceholder
             ? `【重要】事前のOCRで回答テキストを読み取れませんでした。
@@ -2510,9 +2510,9 @@ System Instructionに定義された以下のルールを厳密に適用して�
         const text = result.text ?? "";
         console.log("[Grader] Stage 2 AIレスポンス長:", text.length);
         console.log("[Grader] Stage 2 AIレスポンスプレビュー:", text.substring(0, 500));
-        
+
         const parsed = this.extractJsonFromText(text);
-        
+
         if (!parsed) {
             console.error("[Grader] ❌ JSONパース失敗");
             console.error("[Grader] レスポンス全文:", text);
@@ -2520,7 +2520,7 @@ System Instructionに定義された以下のルールを厳密に適用して�
 
         if (parsed) {
             delete parsed.debug_info;
-            
+
             // grading_resultを確実に持たせる
             const gradingResultObj = (parsed.grading_result && typeof parsed.grading_result === 'object')
                 ? parsed.grading_result as Record<string, unknown>
@@ -2528,16 +2528,16 @@ System Instructionに定義された以下のルールを厳密に適用して�
 
             // プレースホルダーパターン（これにマッチするテキストは「読み取り失敗」とみなす）
             const placeholderPattern = /読み取れませんでした|画像が不鮮明|見つかりません|〓{3,}/;
-            
+
             // 候補テキストを収集（優先順）
             const candidates: { source: string; text: string }[] = [];
-            
+
             // 1. AIが返したrecognized_text（検証・修正済みの可能性）
             const aiRecognized = String(gradingResultObj.recognized_text || "").trim();
             if (aiRecognized && !placeholderPattern.test(aiRecognized)) {
                 candidates.push({ source: "ai_response", text: aiRecognized });
             }
-            
+
             // 2. ocr_debug.column_readings から復元
             const ocrDebug = parsed.ocr_debug as { column_readings?: string[] } | undefined;
             if (ocrDebug?.column_readings && Array.isArray(ocrDebug.column_readings)) {
@@ -2546,19 +2546,19 @@ System Instructionに定義された以下のルールを厳密に適用して�
                     candidates.push({ source: "column_readings", text: rebuilt.trim() });
                 }
             }
-            
+
             // 3. Stage 1のOCR結果（fullText優先）
             const normalizedFull = (ocrResult.fullText || "").trim();
             if (normalizedFull && !placeholderPattern.test(normalizedFull)) {
                 candidates.push({ source: "ocr_fullText", text: normalizedFull });
             }
-            
+
             // 4. Stage 1のOCR結果（ターゲット抽出済み）
             const normalizedText = (ocrText || "").trim();
             if (normalizedText && !placeholderPattern.test(normalizedText)) {
                 candidates.push({ source: "ocr_text", text: normalizedText });
             }
-            
+
             // 優先順位ベースで選択し、極端に短い場合のみより長い候補に差し替える
             // （少し長いだけの誤読で文字数超過にならないようにする）
             let finalRecognized = "";
@@ -2577,7 +2577,7 @@ System Instructionに定義された以下のルールを厳密に適用して�
                     selectedSource = candidate.source;
                 }
             }
-            
+
             // どれも有効でない場合はプレースホルダー
             if (!finalRecognized) {
                 console.error("[Grader] ❌ 有効なOCR結果が見つかりません。candidates:", candidates);
@@ -2593,7 +2593,7 @@ System Instructionに定義された以下のルールを厳密に適用して�
                 matched_target: ocrResult.matchedTarget,
                 full_length: ocrResult.fullText?.length ?? 0
             };
-            
+
             // プログラムによる検証・補完を実行
             const validated = this.validateAndEnhanceGrading(parsed);
 

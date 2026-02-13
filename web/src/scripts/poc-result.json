@@ -1,0 +1,51 @@
+{
+  "agenticVision": {
+    "success": true,
+    "quality": {
+      "blur": 0.2,
+      "brightness": 0.9,
+      "contrast": 0.4,
+      "tiltDegrees": 0.5,
+      "overallScore": 82
+    },
+    "layout": {
+      "type": "mixed",
+      "estimatedLines": 15,
+      "hasMultipleColumns": true
+    },
+    "lowConfidenceRegions": [
+      {
+        "description": "問九の解答欄中央、赤い三角形の採点印が重なっている部分",
+        "suggestion": "「文化や習慣が」という文言が重なっていると推測されるが、赤色成分の除去が必要。"
+      },
+      {
+        "description": "問九の3行目、「人類的にみて貴重だから」付近の崩し字",
+        "suggestion": "「貴重」などの漢字がかなり簡略化されているため、前後の文脈（文化の保存に関する内容）から補完が必要。"
+      },
+      {
+        "description": "問十、問十一などの短い解答欄",
+        "suggestion": "「しかし、」などの接続詞や短い語句が書かれているが、余白が狭いため文字の境界判定に注意。"
+      }
+    ],
+    "retakeRecommended": false,
+    "retakeReason": null,
+    "processingTimeMs": 19753,
+    "rawResponse": "{\n  \"quality\": {\n    \"blur\": 0.2,\n    \"brightness\": 0.9,\n    \"contrast\": 0.4,\n    \"tiltDegrees\": 0.5,\n    \"overallScore\": 82\n  },\n  \"layout\": {\n    \"type\": \"mixed\",\n    \"estimatedLines\": 15,\n    \"hasMultipleColumns\": true\n  },\n  \"lowConfidenceRegions\": [\n    {\n      \"description\": \"問九の解答欄中央、赤い三角形の採点印が重なっている部分\",\n      \"suggestion\": \"「文化や習慣が」という文言が重なっていると推測されるが、赤色成分の除去が必要。\"\n    },\n    {\n      \"description\": \"問九の3行目、「人類的にみて貴重だから」付近の崩し字\",\n      \"suggestion\": \"「貴重」などの漢字がかなり簡略化されているため、前後の文脈（文化の保存に関する内容）から補完が必要。\"\n    },\n    {\n      \"description\": \"問十、問十一などの短い解答欄\",\n      \"suggestion\": \"「しかし、」などの接続詞や短い語句が書かれているが、余白が狭いため文字の境界判定に注意。\"\n    }\n  ],\n  \"retakeRecommended\": false,\n  \"retakeReason\": null\n}"
+  },
+  "standardOcr": {
+    "text": "自己表出\nウ\n①\n日本は、島国であるため、他国の文化に影響されにくかった\nため、急激に文化や習慣が変化したが、それも、原始的で野蛮\nと考えるのではなく、人類的に貴重だから、大切にしたいという考え。\nしかし、",
+    "processingTimeMs": 86047,
+    "model": "gemini-3-pro-preview"
+  },
+  "enhancedOcr": {
+    "text": "問六　自己表出\n問七　ウ\n問八　①\n\n問九\n日本は、島国であるため、他国の文化に影響されにくかった\nため、急に文化や習慣が変化したが、それらを、原始的で野蛮\nと考えるのではなく、人類的にみて貴重だから、大切にしたいという考え。\n\n問十一　しかし、\n私",
+    "processingTimeMs": 84125,
+    "model": "gemini-3-pro-preview"
+  },
+  "improvement": {
+    "characterDifference": 14,
+    "qualityInsights": [
+      "3箇所の難読領域を検出"
+    ]
+  }
+}

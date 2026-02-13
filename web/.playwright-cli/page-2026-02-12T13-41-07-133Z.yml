@@ -1,0 +1,234 @@
+- generic [active] [ref=e1]:
+  - main [ref=e2]:
+    - navigation [ref=e4]:
+      - link "EduShift" [ref=e5] [cursor=pointer]:
+        - /url: /
+        - img "EduShift" [ref=e6]
+      - generic [ref=e7]:
+        - link "特長" [ref=e8] [cursor=pointer]:
+          - /url: "#features"
+        - link "料金" [ref=e9] [cursor=pointer]:
+          - /url: "#pricing"
+        - link "使い方" [ref=e10] [cursor=pointer]:
+          - /url: "#how-it-works"
+        - link "無料で試す" [ref=e11] [cursor=pointer]:
+          - /url: /grading
+    - generic [ref=e12]:
+      - generic [ref=e13]:
+        - generic:
+          - generic:
+            - img
+          - generic:
+            - img
+          - generic:
+            - img
+          - generic:
+            - img
+          - generic:
+            - img
+          - generic:
+            - img
+          - generic:
+            - img
+      - generic [ref=e14]:
+        - heading "添削に1時間、 もういらない。" [level=1] [ref=e15]
+        - paragraph [ref=e16]:
+          - text: AIが国語の記述問題を瞬時に採点。
+          - text: 先生も保護者も、添削の負担から解放。
+        - generic [ref=e17]:
+          - link "無料で試してみる" [ref=e18] [cursor=pointer]:
+            - /url: /grading
+          - paragraph [ref=e19]: 初回3回無料・クレジットカード不要
+      - img [ref=e21]
+    - generic [ref=e24]:
+      - heading "こんなお悩みありませんか？" [level=2] [ref=e26]
+      - generic [ref=e27]:
+        - generic [ref=e28]:
+          - img [ref=e30]
+          - heading "膨大な添削時間" [level=3] [ref=e33]
+          - paragraph [ref=e34]: 1クラス分の記述問題、添削に1時間以上…他の業務が圧迫されていませんか？
+        - generic [ref=e35]:
+          - img [ref=e37]
+          - heading "採点基準のブレ" [level=3] [ref=e41]
+          - paragraph [ref=e42]: 疲労や時間帯で採点が変わる…生徒への公平性に不安はありませんか？
+        - generic [ref=e43]:
+          - img [ref=e45]
+          - heading "フィードバックの質" [level=3] [ref=e48]
+          - paragraph [ref=e49]: 疲労で添削が雑になる…もっと丁寧に指導したいのに時間がない
+    - generic [ref=e51]:
+      - heading "EduShift AIが、添削の常識を変えます" [level=2] [ref=e53]
+      - generic [ref=e54]:
+        - generic [ref=e55]:
+          - generic [ref=e56]:
+            - img [ref=e58]
+            - heading "従来の添削" [level=3] [ref=e61]
+          - list [ref=e62]:
+            - listitem [ref=e63]:
+              - img [ref=e65]
+              - generic [ref=e68]: 1問あたり5〜10分かかる
+            - listitem [ref=e69]:
+              - img [ref=e71]
+              - generic [ref=e74]: 担当者によって採点基準がブレる
+            - listitem [ref=e75]:
+              - img [ref=e77]
+              - generic [ref=e80]: 疲労で質が低下
+            - listitem [ref=e81]:
+              - img [ref=e83]
+              - generic [ref=e86]: フィードバックが画一的
+        - generic [ref=e87]:
+          - generic [ref=e88]:
+            - img [ref=e90]
+            - heading "EduShift AI" [level=3] [ref=e92]
+          - list [ref=e93]:
+            - listitem [ref=e94]:
+              - img [ref=e96]
+              - generic [ref=e98]: わずか5分で添削完了
+            - listitem [ref=e99]:
+              - img [ref=e101]
+              - generic [ref=e103]: AI基準で一貫した評価
+            - listitem [ref=e104]:
+              - img [ref=e106]
+              - generic [ref=e108]: いつでも安定した品質
+            - listitem [ref=e109]:
+              - img [ref=e111]
+              - generic [ref=e113]: 3軸の詳細フィードバック
+    - generic [ref=e115]:
+      - heading "3つの特長" [level=2] [ref=e116]
+      - generic [ref=e117]:
+        - generic [ref=e120]:
+          - img [ref=e121]
+          - heading "瞬時の添削" [level=3] [ref=e123]
+          - paragraph [ref=e124]: わずか5分で採点完了。1クラス分の添削も、休み時間のうちに。
+        - generic [ref=e127]:
+          - img [ref=e128]
+          - heading "詳細な3軸フィードバック" [level=3] [ref=e130]
+          - paragraph [ref=e131]: 内容・表現・構成の3軸で評価。生徒の弱点が一目でわかります。
+        - generic [ref=e134]:
+          - img [ref=e135]
+          - heading "写真を撮るだけ" [level=3] [ref=e138]
+          - paragraph [ref=e139]: 手書き答案をスマホで撮影するだけ。特別な機材は不要です。
+    - generic [ref=e141]:
+      - heading "かんたん3ステップ" [level=2] [ref=e142]
+      - generic [ref=e144]:
+        - generic [ref=e145]:
+          - generic [ref=e146]:
+            - img [ref=e148]
+            - generic [ref=e151]: "1"
+          - heading "撮影する" [level=3] [ref=e152]
+          - paragraph [ref=e153]: 生徒の答案をスマホで撮影。PDFやスキャンデータにも対応。
+        - generic [ref=e154]:
+          - generic [ref=e155]:
+            - img [ref=e157]
+            - generic [ref=e160]: "2"
+          - heading "AIが分析" [level=3] [ref=e161]
+          - paragraph [ref=e162]: ベテラン講師のノウハウを学んだAIが内容・表現・構成を瞬時に評価。
+        - generic [ref=e163]:
+          - generic [ref=e164]:
+            - img [ref=e166]
+            - generic [ref=e170]: "3"
+          - heading "結果を確認" [level=3] [ref=e171]
+          - paragraph [ref=e172]: 点数・フィードバック・書き直し例をまとめてレポート出力。
+    - generic [ref=e177]:
+      - img [ref=e179]
+      - paragraph [ref=e181]: デモ動画（近日公開）
+    - generic [ref=e183]:
+      - heading "シンプルな料金プラン" [level=2] [ref=e184]
+      - generic [ref=e185]:
+        - generic [ref=e187]:
+          - heading "ライト" [level=3] [ref=e188]
+          - generic [ref=e189]:
+            - generic [ref=e190]: ¥980
+            - generic [ref=e191]: /月
+          - paragraph [ref=e192]: 月10回
+          - list [ref=e193]:
+            - listitem [ref=e194]:
+              - generic [ref=e195]: ✓
+              - text: AI自動添削
+            - listitem [ref=e196]:
+              - generic [ref=e197]: ✓
+              - text: 3軸評価
+            - listitem [ref=e198]:
+              - generic [ref=e199]: ✓
+              - text: 写真アップロード
+        - generic [ref=e200]:
+          - generic [ref=e201]: 人気No.1
+          - generic [ref=e202]:
+            - heading "スタンダード" [level=3] [ref=e203]
+            - generic [ref=e204]:
+              - generic [ref=e205]: ¥2,980
+              - generic [ref=e206]: /月
+            - paragraph [ref=e207]: 月30回
+            - list [ref=e208]:
+              - listitem [ref=e209]:
+                - generic [ref=e210]: ✓
+                - text: AI自動添削
+              - listitem [ref=e211]:
+                - generic [ref=e212]: ✓
+                - text: 3軸評価
+              - listitem [ref=e213]:
+                - generic [ref=e214]: ✓
+                - text: 写真アップロード
+              - listitem [ref=e215]:
+                - generic [ref=e216]: ✓
+                - text: 一括添削
+        - generic [ref=e218]:
+          - heading "無制限" [level=3] [ref=e219]
+          - generic [ref=e220]:
+            - generic [ref=e221]: ¥5,980
+            - generic [ref=e222]: /月
+          - paragraph [ref=e223]: 回数無制限
+          - list [ref=e224]:
+            - listitem [ref=e225]:
+              - generic [ref=e226]: ✓
+              - text: AI自動添削
+            - listitem [ref=e227]:
+              - generic [ref=e228]: ✓
+              - text: 3軸評価
+            - listitem [ref=e229]:
+              - generic [ref=e230]: ✓
+              - text: 写真アップロード
+            - listitem [ref=e231]:
+              - generic [ref=e232]: ✓
+              - text: 一括添削
+            - listitem [ref=e233]:
+              - generic [ref=e234]: ✓
+              - text: 優先サポート
+      - link "詳しく見る →" [ref=e236] [cursor=pointer]:
+        - /url: /pricing
+    - generic [ref=e238]:
+      - heading "利用者の声" [level=2] [ref=e239]
+      - generic [ref=e240]:
+        - generic [ref=e241]:
+          - generic [ref=e242]: “
+          - paragraph [ref=e243]: 添削時間が1/10になりました。その分、生徒との面談に時間を使えています。
+          - generic [ref=e244]:
+            - paragraph [ref=e245]: 利用者の声
+            - paragraph
+        - generic [ref=e246]:
+          - generic [ref=e247]: “
+          - paragraph [ref=e248]: 採点基準が統一されて、生徒からの"不公平"という声がなくなりました。
+          - generic [ref=e249]:
+            - paragraph [ref=e250]: 利用者の声
+            - paragraph
+        - generic [ref=e251]:
+          - generic [ref=e252]: “
+          - paragraph [ref=e253]: 手書き答案の写真を撮るだけなので、ITが苦手な私でも簡単に使えます。
+          - generic [ref=e254]:
+            - paragraph [ref=e255]: 利用者の声
+            - paragraph
+        - generic [ref=e256]:
+          - generic [ref=e257]: “
+          - paragraph [ref=e258]: 深夜の添削作業から解放されました。もっと早く出会いたかったです。
+          - generic [ref=e259]:
+            - paragraph [ref=e260]: 利用者の声
+            - paragraph
+    - generic [ref=e262]:
+      - heading "今すぐ無料で添削を体験" [level=2] [ref=e263]
+      - paragraph [ref=e264]: 初回3回無料 / クレジットカード不要
+      - generic [ref=e265]:
+        - link "無料で始める" [ref=e266] [cursor=pointer]:
+          - /url: /grading
+        - link "料金プランを見る" [ref=e267] [cursor=pointer]:
+          - /url: /pricing
+  - button "Open Next.js Dev Tools" [ref=e273] [cursor=pointer]:
+    - img [ref=e274]

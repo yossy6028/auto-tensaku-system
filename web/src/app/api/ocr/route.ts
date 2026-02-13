@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { createServerClient } from '@supabase/ssr';
 import { cookies } from 'next/headers';
-import { EduShiftGrader, type FileRole } from '@/lib/core/grader';
+import { TaskalGrader, type FileRole } from '@/lib/core/grader';
 import type { Database } from '@/lib/supabase/types';
 import { checkRateLimit, GRADING_RATE_LIMIT } from '@/lib/security/rateLimit';
 import { logger } from '@/lib/security/logger';
@@ -29,7 +29,7 @@ type UploadedFilePart = {
  */
 async function getSupabaseClient() {
     const cookieStore = await cookies();
-    
+
     return createServerClient<Database>(
         process.env.NEXT_PUBLIC_SUPABASE_URL!,
         process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
@@ -88,22 +88,22 @@ function validateFile(file: File): void {
     if (!ALLOWED_MIME_TYPES.includes(file.type)) {
         throw new Error(`許可されていないファイル形式です: ${file.type}`);
     }
-    
+
     if (file.size > MAX_SINGLE_FILE_SIZE) {
         const isPdf = file.type === 'application/pdf';
-        const advice = isPdf 
+        const advice = isPdf
             ? 'PDFは容量オーバーしやすいため、スマホ等で写真を撮ってアップロードすることをおすすめします。または、オンライン圧縮ツール（iLovePDF等）で圧縮してから再度お試しください。'
             : '4MB以下のファイルをアップロードしてください。';
         throw new Error(`ファイル「${file.name}」が大きすぎます（${(file.size / 1024 / 1024).toFixed(1)}MB）。${advice}`);
     }
-    
+
     const dangerousNamePatterns = [/\.\./, /[\/\\]/, /[\x00-\x1f]/, /^\.+$/];
     for (const pattern of dangerousNamePatterns) {
         if (pattern.test(file.name)) {
             throw new Error('不正なファイル名です。');
         }
     }
-    
+
     if (file.name.length > 255) {
         throw new Error('ファイル名が長すぎます。');
     }
@@ -113,16 +113,16 @@ function validateFiles(files: File[]): void {
     if (files.length > MAX_FILES_COUNT) {
         throw new Error(`アップロードできるファイルは最大${MAX_FILES_COUNT}個までです。`);
     }
-    
+
     const totalSize = files.reduce((sum, file) => sum + file.size, 0);
     if (totalSize > MAX_TOTAL_SIZE) {
         const hasPdf = files.some(f => f.type === 'application/pdf');
-        const advice = hasPdf 
+        const advice = hasPdf
             ? 'PDFは容量オーバーしやすいため、スマホ等で写真を撮ってアップロードすることをおすすめします。または、オンライン圧縮ツール（iLovePDF等）で圧縮してから再度お試しください。'
             : '合計4MB以下になるように、ファイルを分割するか、写真の枚数を減らしてください。';
         throw new Error(`ファイルの合計サイズが大きすぎます（${(totalSize / 1024 / 1024).toFixed(1)}MB）。${advice}`);
     }
-    
+
     for (const file of files) {
         validateFile(file);
     }
@@ -134,21 +134,21 @@ function sanitizeLabel(label: string): string {
         /system\s*:\s*/gi,
         /you\s+are\s+now/gi,
     ];
-    
+
     let sanitized = label;
     dangerousPatterns.forEach(pattern => {
         sanitized = sanitized.replace(pattern, '');
     });
     sanitized = sanitized.trim();
-    
+
     if (sanitized.length > 50) {
         throw new Error(`問題番号が長すぎます`);
     }
-    
+
     if (sanitized.length === 0) {
         throw new Error('問題番号を入力してください');
     }
-    
+
     return sanitized;
 }
 
@@ -205,10 +205,10 @@ async function convertFilesToBuffers(
 export async function POST(req: NextRequest) {
     try {
         const supabase = await getSupabaseClient();
-        
+
         // ユーザー認証チェック
         const { data: { user }, error: authError } = await supabase.auth.getUser();
-        
+
         if (authError || !user) {
             return NextResponse.json(
                 { status: 'error', message: 'ログインが必要です。' },
@@ -231,7 +231,7 @@ export async function POST(req: NextRequest) {
         let files: File[];
         let pdfPageInfoJson: string | null;
         let fileRolesJson: string | null;
-        
+
         try {
             formData = await req.formData();
             targetLabel = formData.get('targetLabel') as string;
@@ -244,7 +244,7 @@ export async function POST(req: NextRequest) {
                 { status: 413 }
             );
         }
-        
+
         if (!targetLabel || !files || files.length === 0) {
             return NextResponse.json(
                 { status: 'error', message: 'ファイルと問題番号を指定してください。' },
@@ -256,12 +256,12 @@ export async function POST(req: NextRequest) {
         // フロントエンドで既にチェックしているが、念のためサーバー側でもチェック
         const totalFileSize = files.reduce((sum, f) => sum + f.size, 0);
         const MAX_REQUEST_SIZE = 3.5 * 1024 * 1024; // 3.5MB（Vercelの制限4.5MBに安全マージン）
-        
+
         if (totalFileSize > MAX_REQUEST_SIZE) {
             const totalMB = (totalFileSize / 1024 / 1024).toFixed(1);
             const maxMB = (MAX_REQUEST_SIZE / 1024 / 1024).toFixed(1);
             const hasPdf = files.some(f => f.type === 'application/pdf');
-            const advice = hasPdf 
+            const advice = hasPdf
                 ? 'PDFは容量オーバーしやすいため、スマホ等で写真を撮ってアップロードすることをおすすめします。または、オンライン圧縮ツール（iLovePDF等）で圧縮してから再度お試しください。'
                 : `合計${maxMB}MB以下になるように、ファイルを圧縮するか分割してください。`;
             return NextResponse.json(
@@ -282,7 +282,7 @@ export async function POST(req: NextRequest) {
         }
 
         const sanitizedLabel = sanitizeLabel(targetLabel);
-        
+
         let pdfPageInfo: { answerPage?: string; problemPage?: string; modelAnswerPage?: string } | null = null;
         if (pdfPageInfoJson) {
             try {
@@ -291,7 +291,7 @@ export async function POST(req: NextRequest) {
                 // パース失敗時は無視
             }
         }
-        
+
         let fileRoles: Record<string, FileRole> = {};
         if (fileRolesJson) {
             try {
@@ -314,7 +314,7 @@ export async function POST(req: NextRequest) {
         const fileBuffers = await convertFilesToBuffers(files, fileRoles);
 
         // OCRのみ実行
-        const grader = new EduShiftGrader();
+        const grader = new TaskalGrader();
 
         const ocrResult = await grader.performOcrOnly(sanitizedLabel, fileBuffers, pdfPageInfo, fileRoles);
 

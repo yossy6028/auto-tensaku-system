@@ -58,16 +58,27 @@ export function HeroSection() {
             transition={{ duration: 0.5 }}
             className="mb-8"
           >
-            <div className="mb-6 inline-flex items-center rounded-full border border-slate-200 bg-white/80 px-3 py-1 text-sm text-slate-600 backdrop-blur-sm shadow-sm font-semibold">
-              EduShift AI
-            </div>
+            <motion.div
+              initial={{ opacity: 0, scale: 0.95 }}
+              animate={{ opacity: 1, scale: 1 }}
+              transition={{ duration: 0.8 }}
+              className="mb-8 flex justify-center w-full"
+            >
+              <img
+                src="/taskal-main-logo.png"
+                alt="Taskal AI - 中学高校受験国語記述添削システム"
+                className="h-auto w-full max-w-lg object-contain mix-blend-multiply"
+              />
+            </motion.div>
 
-            <h1 className="mb-6 text-4xl font-bold tracking-tight text-slate-900 sm:text-5xl md:text-6xl lg:text-7xl">
-              <span className="block mb-2 text-3xl sm:text-4xl md:text-5xl lg:text-6xl text-slate-700">中学・高校受験国語記述添削システム</span>
-              <span className="bg-gradient-to-r from-blue-600 to-indigo-600 bg-clip-text text-transparent block mt-4">
-                記述問題の添削を、<br className="sm:hidden" />もっと速く、正確に。
-              </span>
-            </h1>
+            <motion.h1
+              initial={{ opacity: 0, y: 20 }}
+              animate={{ opacity: 1, y: 0 }}
+              transition={{ duration: 0.8, delay: 0.2 }}
+              className="mb-6 text-3xl font-bold tracking-tight bg-gradient-to-r from-blue-600 to-indigo-600 bg-clip-text text-transparent sm:text-4xl md:text-5xl"
+            >
+              記述の添削を<br />もっと速く、正確に。
+            </motion.h1>
           </motion.div>
 
           <motion.div

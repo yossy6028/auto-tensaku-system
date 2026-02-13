@@ -1,0 +1,60 @@
+{
+  "success": true,
+  "quality": {
+    "blur": 0.1,
+    "brightness": 0.8,
+    "contrast": 0.8,
+    "tiltDegrees": 0.5,
+    "overallScore": 95
+  },
+  "layout": {
+    "type": "vertical",
+    "estimatedLines": 3,
+    "hasMultipleColumns": true,
+    "answerSheet": {
+      "sheetType": "grid",
+      "confidence": 0.95,
+      "grid": {
+        "columns": 3,
+        "rows": 35,
+        "totalCells": 105,
+        "filledCells": 89,
+        "direction": "vertical",
+        "lineHints": [
+          {
+            "lineNumber": 1,
+            "firstChar": "日",
+            "lastChar": "。",
+            "isEmpty": false
+          },
+          {
+            "lineNumber": 2,
+            "firstChar": "た",
+            "lastChar": "蛮",
+            "isEmpty": false
+          },
+          {
+            "lineNumber": 3,
+            "firstChar": "と",
+            "lastChar": "。",
+            "isEmpty": false
+          }
+        ]
+      }
+    }
+  },
+  "hints": {
+    "lowConfidenceRegions": [
+      {
+        "description": "問九の正確な総行数",
+        "suggestion": "マスの境界線が非常に薄いため、35行という数値は文字の間隔と余白からの推定です。"
+      }
+    ],
+    "expectedCharTypes": [],
+    "notes": []
+  },
+  "retakeRecommended": false,
+  "retakeReason": null,
+  "processingTimeMs": 59853,
+  "rawResponse": "{\n  \"answerSheet\": {\n    \"sheetType\": \"grid\",\n    \"confidence\": 0.95,\n    \"grid\": {\n      \"columns\": 3,\n      \"rows\": 35,\n      \"totalCells\": 105,\n      \"filledCells\": 89,\n      \"direction\": \"vertical\",\n      \"lineHints\": [\n        {\n          \"lineNumber\": 1,\n          \"firstChar\": \"日\",\n          \"lastChar\": \"。\",\n          \"isEmpty\": false\n        },\n        {\n          \"lineNumber\": 2,\n          \"firstChar\": \"た\",\n          \"lastChar\": \"蛮\",\n          \"isEmpty\": false\n        },\n        {\n          \"lineNumber\": 3,\n          \"firstChar\": \"と\",\n          \"lastChar\": \"。\",\n          \"isEmpty\": false\n        }\n      ]\n    }\n  },\n  \"quality\": {\n    \"blur\": 0.1,\n    \"brightness\": 0.8,\n    \"contrast\": 0.8,\n    \"tiltDegrees\": 0.5,\n    \"overallScore\": 95\n  },\n  \"lowConfidenceRegions\": [\n    {\n      \"description\": \"問九の正確な総行数\",\n      \"suggestion\": \"マスの境界線が非常に薄いため、35行という数値は文字の間隔と余白からの推定です。\"\n    }\n  ],\n  \"retakeRecommended\": false,\n  \"retakeReason\": null\n}"
+}

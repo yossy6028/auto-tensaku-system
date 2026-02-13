@@ -78,12 +78,12 @@ type GradingResponseItem = {
 };
 
 export default function Home() {
-  const { 
-    user, 
-    usageInfo, 
-    refreshUsageInfo, 
-    isLoading: authLoading, 
-    profile, 
+  const {
+    user,
+    usageInfo,
+    refreshUsageInfo,
+    isLoading: authLoading,
+    profile,
     session,
     // デバイス制限関連
     deviceInfo,
@@ -120,7 +120,7 @@ export default function Home() {
   const [currentSmall, setCurrentSmall] = useState(1);
   const [currentSub, setCurrentSub] = useState(1); // サブ番号（問1-2の「2」）
   const [freeInput, setFreeInput] = useState(''); // 自由入力用
-  
+
   // 一括追加モード
   const [isBatchMode, setIsBatchMode] = useState(false);
   const [batchEndSmall, setBatchEndSmall] = useState(5); // 終了番号（デフォルト5）
@@ -131,7 +131,7 @@ export default function Home() {
   // answer=答案, problem=問題, model=模範解答, problem_model=問題+模範解答, all=全部, other=その他
   type FileRole = 'answer' | 'problem' | 'model' | 'problem_model' | 'answer_problem' | 'all' | 'other';
   const [fileRoles, setFileRoles] = useState<Record<number, FileRole>>({});
-  
+
   // ファイル役割選択ポップアップ用の状態
   const [showFileRoleModal, setShowFileRoleModal] = useState(false);
   const [pendingFiles, setPendingFiles] = useState<File[]>([]);
@@ -154,7 +154,7 @@ export default function Home() {
     previousCount: number | null;
     currentCount: number | null;
   } | null>(null);
-  
+
   // 画像圧縮中の状態
   const [isCompressing, setIsCompressing] = useState(false);
   const [compressionProgress, setCompressionProgress] = useState(0);
@@ -186,9 +186,9 @@ export default function Home() {
   }, []);
 
   // OCR手動修正モーダル（問題条件オーバーライド対応）
-  const [ocrEditModal, setOcrEditModal] = useState<{ 
-    label: string; 
-    text: string; 
+  const [ocrEditModal, setOcrEditModal] = useState<{
+    label: string;
+    text: string;
     strictness: GradingStrictness;
     problemCondition: string;  // 字数制限などの問題条件（例: "40字以上50字以内"）
   } | null>(null);
@@ -827,7 +827,7 @@ export default function Home() {
                 <div style="width: 40px; height: 40px; background: linear-gradient(135deg, #6366f1, #8b5cf6); border-radius: 8px;"></div>
                 <div>
                   <p style="font-size: 11px; color: #64748b; margin: 0;">auto-tensaku-system</p>
-                  <p style="font-size: 14px; font-weight: bold; color: #1e293b; margin: 0;">EduShift</p>
+                  <p style="font-size: 14px; font-weight: bold; color: #1e293b; margin: 0;">Taskal</p>
                 </div>
               </div>
 
@@ -1252,7 +1252,7 @@ export default function Home() {
     const maxPoints = problemPoints[res.label];
     const safeMaxPoints = Number.isFinite(maxPoints) && maxPoints > 0 ? maxPoints : null;
     const earnedPoints = safeMaxPoints ? Math.round((score / 100) * safeMaxPoints) : null;
-    
+
     const feedback = {
       good_point: escapeHtml(editedFeedbacks[index]?.good_point ?? gradingResult.feedback_content.good_point ?? ''),
       improvement_advice: escapeHtml(editedFeedbacks[index]?.improvement_advice ?? gradingResult.feedback_content.improvement_advice ?? ''),
@@ -1535,7 +1535,7 @@ export default function Home() {
 <body>
   <div class="report-container">
     <div class="brand-row">
-      <img src="/logo.jpg" alt="EduShift" class="brand-logo" />
+      <img src="/taskal-main-logo.png" alt="Taskal AI" class="brand-logo" />
     </div>
     <div class="header-label">${safeLabel}</div>
     
@@ -1865,7 +1865,7 @@ export default function Home() {
     const oversizedFile = filesToUse.find(file => file.size > MAX_SINGLE_FILE_SIZE);
     if (oversizedFile) {
       const isPdf = oversizedFile.type === 'application/pdf';
-      const advice = isPdf 
+      const advice = isPdf
         ? PDF_SIZE_ADVICE
         : '4.3MB以下のファイルをアップロードしてください。';
       setError(`ファイル「${oversizedFile.name}」が大きすぎます（${(oversizedFile.size / 1024 / 1024).toFixed(1)}MB）。${advice}`);
@@ -1876,7 +1876,7 @@ export default function Home() {
       const totalMB = (totalSize / 1024 / 1024).toFixed(1);
       const maxMB = (MAX_TOTAL_SIZE / 1024 / 1024).toFixed(1);
       const hasPdf = filesToUse.some(f => f.type === 'application/pdf');
-      const advice = hasPdf 
+      const advice = hasPdf
         ? PDF_SIZE_ADVICE
         : `合計${maxMB}MB以下になるように、ファイルを分割するか、写真の枚数を減らしてください。`;
       setError(`ファイルの合計サイズが大きすぎます（${totalMB}MB）。${advice}`);
@@ -2291,36 +2291,36 @@ export default function Home() {
       // 自由入力モードでは一括追加不可
       return;
     }
-    
+
     const start = currentSmall;
     const end = batchEndSmall;
-    
+
     if (start > end) {
       return; // 開始 > 終了 の場合は何もしない
     }
-    
+
     const newLabels: string[] = [];
-    
+
     for (let i = start; i <= end; i++) {
       const smallLabel = formatSmallNumber(
         i,
         smallFormat,
         smallFormat === 'number-sub' ? currentSub : undefined
       );
-      
+
       let label: string;
       if (problemFormat === 'big-small') {
         label = `大問${currentBig} ${smallLabel}`;
       } else {
         label = smallLabel;
       }
-      
+
       // 重複チェック
       if (!selectedProblems.includes(label) && !newLabels.includes(label)) {
         newLabels.push(label);
       }
     }
-    
+
     if (newLabels.length > 0) {
       setSelectedProblems([...selectedProblems, ...newLabels]);
       const parsedPoints = parsePointsValue(currentPoints);
@@ -2395,18 +2395,18 @@ export default function Home() {
         setProblemPoints((prev) => ({ ...prev, [targetLabels[0]]: parsedPoints }));
       }
     }
-    
+
     // 画像ファイルを圧縮（10枚対応）
     const hasImages = uploadedFiles.some(f => isImageFile(f));
     const hasPdf = uploadedFiles.some(f => f.type === 'application/pdf');
     const hasPdfPageInfoForProcessing = !!(pdfPageInfo.answerPage || pdfPageInfo.problemPage || pdfPageInfo.modelAnswerPage);
     let filesToUse = uploadedFiles;
-    
+
     if (hasImages || (hasPdf && hasPdfPageInfoForProcessing)) {
       setIsCompressing(true);
       setCompressionProgress(0);
       setCompressionFileName('');
-      
+
       try {
         filesToUse = await prepareFilesForUpload(uploadedFiles, {
           fileRoles,
@@ -2430,7 +2430,7 @@ export default function Home() {
     // 圧縮後のファイルサイズチェック（413エラー対策）
     const totalFileSize = filesToUse.reduce((sum, file) => sum + file.size, 0);
     const MAX_REQUEST_SIZE = MAX_TOTAL_SIZE_BYTES;
-    
+
     if (totalFileSize > MAX_REQUEST_SIZE) {
       const totalMB = (totalFileSize / 1024 / 1024).toFixed(1);
       const maxMB = (MAX_REQUEST_SIZE / 1024 / 1024).toFixed(1);
@@ -2451,15 +2451,15 @@ export default function Home() {
 
     for (const label of targetLabels) {
       setCurrentOcrLabel(label);
-      
+
       const formData = new FormData();
       formData.append('targetLabel', label);
-      
+
       if (pdfPageInfo.answerPage || pdfPageInfo.problemPage || pdfPageInfo.modelAnswerPage) {
         formData.append('pdfPageInfo', JSON.stringify(pdfPageInfo));
       }
       formData.append('fileRoles', JSON.stringify(fileRoles));
-      
+
       // 圧縮後のファイルを使用
       filesToUse.forEach((file) => {
         formData.append('files', file);
@@ -2473,7 +2473,7 @@ export default function Home() {
         });
 
         const responseText = await res.text();
-        
+
         let data: OcrResponseData;
 
         // JSON以外（504など）のレスポンスも安全に扱う
@@ -2526,7 +2526,7 @@ export default function Home() {
           text: data.ocrResult.text,
           charCount: data.ocrResult.charCount
         };
-        
+
         // 初期値として確認済みテキストにも設定
         setConfirmedTexts(prev => ({
           ...prev,
@@ -2594,12 +2594,12 @@ export default function Home() {
     const hasPdf = uploadedFiles.some(f => f.type === 'application/pdf');
     const hasPdfPageInfoForProcessing = !!(pdfPageInfo.answerPage || pdfPageInfo.problemPage || pdfPageInfo.modelAnswerPage);
     let filesToUse = uploadedFiles;
-    
+
     if (hasImages || (hasPdf && hasPdfPageInfoForProcessing)) {
       setIsCompressing(true);
       setCompressionProgress(0);
       setCompressionFileName('');
-      
+
       try {
         filesToUse = await prepareFilesForUpload(uploadedFiles, {
           fileRoles,
@@ -2623,7 +2623,7 @@ export default function Home() {
     // 圧縮後のファイルサイズチェック
     const MAX_TOTAL_SIZE = MAX_TOTAL_SIZE_BYTES;
     const totalSize = filesToUse.reduce((sum, file) => sum + file.size, 0);
-    
+
     if (totalSize > MAX_TOTAL_SIZE) {
       const totalMB = (totalSize / 1024 / 1024).toFixed(1);
       const maxMB = (MAX_TOTAL_SIZE / 1024 / 1024).toFixed(1);
@@ -2661,11 +2661,11 @@ export default function Home() {
 
     try {
       console.log('[Page] Sending request to /api/grade...');
-      
+
       // 5分のタイムアウトを設定
       const controller = new AbortController();
       const timeoutId = setTimeout(() => controller.abort(), 5 * 60 * 1000);
-      
+
       const res = await fetch('/api/grade', {
         method: 'POST',
         body: formData,
@@ -2673,7 +2673,7 @@ export default function Home() {
         signal: controller.signal,
       });
       clearTimeout(timeoutId);
-      
+
       console.log('[Page] Response status:', res.status);
 
       const data = await res.json();
@@ -2772,12 +2772,12 @@ export default function Home() {
     const hasPdf = uploadedFiles.some(f => f.type === 'application/pdf');
     const hasPdfPageInfoForProcessing = !!(pdfPageInfo.answerPage || pdfPageInfo.problemPage || pdfPageInfo.modelAnswerPage);
     let filesToUse = uploadedFiles;
-    
+
     if (hasImages || (hasPdf && hasPdfPageInfoForProcessing)) {
       setIsCompressing(true);
       setCompressionProgress(0);
       setCompressionFileName('');
-      
+
       try {
         filesToUse = await prepareFilesForUpload(uploadedFiles, {
           fileRoles,
@@ -2802,17 +2802,17 @@ export default function Home() {
     const MAX_TOTAL_SIZE = MAX_TOTAL_SIZE_BYTES;
     const MAX_SINGLE_FILE_SIZE = MAX_SINGLE_FILE_SIZE_BYTES;
     const totalSize = filesToUse.reduce((sum, file) => sum + file.size, 0);
-    
+
     const oversizedFile = filesToUse.find(file => file.size > MAX_SINGLE_FILE_SIZE);
     if (oversizedFile) {
       const isPdf = oversizedFile.type === 'application/pdf';
-      const advice = isPdf 
+      const advice = isPdf
         ? PDF_SIZE_ADVICE
         : '4.3MB以下のファイルをアップロードしてください。';
       setError(`ファイル「${oversizedFile.name}」が大きすぎます（${(oversizedFile.size / 1024 / 1024).toFixed(1)}MB）。${advice}`);
       return;
     }
-    
+
     if (totalSize > MAX_TOTAL_SIZE) {
       const totalMB = (totalSize / 1024 / 1024).toFixed(1);
       const maxMB = (MAX_TOTAL_SIZE / 1024 / 1024).toFixed(1);
@@ -2880,7 +2880,7 @@ export default function Home() {
         signal: controller.signal,
       });
       clearTimeout(timeoutId);
-      
+
       console.log('[Page] Response status:', res.status);
 
       // レスポンスをテキストで取得してからJSONパース（エラー時のデバッグ用）
@@ -3150,7 +3150,7 @@ export default function Home() {
   const handleSameFilesNewProblem = () => {
     // リクエストロックをリセット
     requestLockRef.current = false;
-    
+
     // 採点関連の状態のみリセット（ファイルは保持）
     setResults(null);
     setError(null);
@@ -3166,7 +3166,7 @@ export default function Home() {
     setUsageConsumed(null);
     setIsLoading(false);
     setRegradingLabel(null);
-    
+
     // 問題選択をリセット（別の設問を選ぶため）
     setSelectedProblems([]);
     setProblemPoints({});
@@ -3174,7 +3174,7 @@ export default function Home() {
     // 問題番号は維持（次の問題を連続して採点しやすいように）
     // ただしfreeInputはクリア
     setFreeInput('');
-    
+
     // PDFページ情報はそのまま保持（同じファイルなので）
 
     // 使用情報を再取得
@@ -3225,71 +3225,18 @@ export default function Home() {
             </div>
 
             <div className="flex justify-center mb-8 transform hover:scale-105 transition-transform duration-500">
-              <div className="relative w-32 h-auto drop-shadow-2xl">
+              <div className="relative h-auto drop-shadow-2xl">
                 <img
-                  src="/logo.jpg"
-                  alt="EduShift Logo"
-                  className="w-full h-auto object-contain rounded-2xl"
+                  src="/taskal-main-logo.png"
+                  alt="Taskal AI"
+                  className="h-72 w-auto object-contain mix-blend-multiply"
                 />
               </div>
             </div>
-            <h1 className="text-4xl sm:text-5xl md:text-6xl lg:text-7xl font-black text-slate-800 tracking-tight mb-6 leading-tight">
-              <span className="block sm:inline">中学・高校受験</span>
-              <span className="block sm:inline">記述問題</span>
-              <br className="hidden sm:block" />
-              <span className="text-transparent bg-clip-text bg-gradient-to-r from-indigo-600 via-violet-600 to-blue-600 animate-gradient-x block sm:inline-block mt-1 sm:mt-0">
-                自動添削システム
-              </span>
-            </h1>
             <p className="text-lg md:text-xl text-slate-600 max-w-2xl mx-auto leading-relaxed font-medium mb-8">
               指導歴20年超のベテラン国語講師のノウハウとAIによる解析で、<br className="md:hidden" />あなたの思考に寄り添うフィードバックを。
             </p>
 
-            {/* Handwritten Answer Support Highlight */}
-            <div className="mt-8 mb-12 relative group max-w-4xl mx-auto text-left">
-              <div className="absolute inset-0 bg-gradient-to-r from-indigo-500/20 via-purple-500/20 to-pink-500/20 blur-xl rounded-3xl transform group-hover:scale-105 transition-transform duration-500"></div>
-              <div className="relative bg-white/60 backdrop-blur-xl border border-white/60 rounded-3xl p-8 shadow-xl flex flex-col md:flex-row items-center gap-8">
-                <div className="flex-shrink-0 relative">
-                  <div className="absolute inset-0 bg-indigo-400 blur-2xl opacity-20 rounded-full animate-pulse-slow"></div>
-                  <div className="relative bg-gradient-to-br from-indigo-500 to-violet-600 w-20 h-20 rounded-2xl flex items-center justify-center shadow-lg transform rotate-3 group-hover:rotate-6 transition-transform duration-300">
-                    <Edit3 className="w-10 h-10 text-white" />
-                  </div>
-                </div>
-                <div className="text-center md:text-left flex-1">
-                  <h3 className="text-2xl font-bold text-slate-800 mb-3 flex items-center justify-center md:justify-start gap-2">
-                    <span className="text-transparent bg-clip-text bg-gradient-to-r from-indigo-600 to-violet-600">手書きの答案</span>
-                    もそのままOK！
-                  </h3>
-                  <p className="text-slate-600 leading-relaxed">
-                    スマホで撮影した手書きの答案画像をそのままアップロードしてください。<br className="hidden md:block" />
-                    最新のAI文字認識技術が、あなたの文字を正確に読み取り、的確な添削を行います。<br />
-                    <span className="text-sm text-slate-500 mt-2 block bg-slate-100/50 inline-block px-3 py-1 rounded-full border border-slate-200/50">
-                      ✨ 多少の癖字や乱筆でも高精度に認識します
-                    </span>
-                  </p>
-                </div>
-                <div className="hidden md:block flex-shrink-0">
-                  <div className="bg-white rounded-xl p-4 transform -rotate-2 group-hover:rotate-0 transition-transform duration-300 border border-slate-100 shadow-md w-48">
-                    <div className="flex items-center gap-2 text-xs text-slate-500 mb-3 border-b border-slate-100 pb-2">
-                      <span className="w-2 h-2 rounded-full bg-green-500 animate-pulse"></span>
-                      AI認識中...
-                    </div>
-                    <div className="space-y-2 opacity-60">
-                      <div className="h-2 bg-slate-200 rounded w-3/4"></div>
-                      <div className="h-2 bg-slate-200 rounded w-full"></div>
-                      <div className="h-2 bg-slate-200 rounded w-5/6"></div>
-                    </div>
-                    <div className="mt-3 pt-2 border-t border-slate-100">
-                      <div className="flex justify-end">
-                        <div className="w-6 h-6 rounded-full bg-indigo-100 flex items-center justify-center text-indigo-600">
-                          <CheckCircle className="w-4 h-4" />
-                        </div>
-                      </div>
-                    </div>
-                  </div>
-                </div>
-              </div>
-            </div>
 
             {/* Batch Grading Feature Highlight */}
             <div className="mt-8 mb-12 relative group max-w-4xl mx-auto text-left">
@@ -3432,9 +3379,8 @@ export default function Home() {
           <div className="flex items-center group cursor-pointer">
             <div className="relative">
               <div className="absolute inset-0 bg-indigo-500 blur-lg opacity-20 group-hover:opacity-40 transition-opacity rounded-full"></div>
-              <img src="/logo.jpg" alt="EduShift" className="w-10 h-10 rounded-xl relative z-10 shadow-sm group-hover:scale-105 transition-transform duration-300" />
+              <img src="/taskal-main-logo.png" alt="Taskal AI" className="h-16 w-auto relative z-10 mix-blend-multiply group-hover:scale-105 transition-transform duration-300" />
             </div>
-            <span className="font-bold text-slate-800 hidden sm:block ml-3 text-lg tracking-tight group-hover:text-indigo-600 transition-colors">EduShift</span>
           </div>
 
           <div className="flex items-center gap-4">
@@ -3486,23 +3432,14 @@ export default function Home() {
           </div>
 
           <div className="flex justify-center mb-10 transform hover:scale-105 transition-transform duration-700 ease-out">
-            <div className="relative w-48 h-auto drop-shadow-2xl">
-              <div className="absolute inset-0 bg-gradient-to-tr from-indigo-500 to-violet-500 blur-2xl opacity-30 rounded-full animate-pulse-slow"></div>
+            <div className="relative h-auto drop-shadow-2xl">
               <img
-                src="/logo.jpg"
-                alt="EduShift Logo"
-                className="w-full h-auto object-contain rounded-3xl relative z-10 shadow-2xl ring-1 ring-white/20"
+                src="/taskal-main-logo.png"
+                alt="Taskal AI"
+                className="h-72 w-auto object-contain mix-blend-multiply relative z-10"
               />
             </div>
           </div>
-          <h1 className="text-4xl sm:text-5xl md:text-6xl lg:text-7xl font-black text-slate-800 tracking-tight mb-8 leading-tight">
-            <span className="block sm:inline">中学・高校受験</span>
-            <span className="block sm:inline">記述問題</span>
-            <br className="hidden sm:block" />
-            <span className="text-transparent bg-clip-text bg-gradient-to-r from-indigo-600 via-violet-600 to-fuchsia-600 animate-gradient-x pb-2 block sm:inline-block mt-1 sm:mt-0">
-              自動添削システム
-            </span>
-          </h1>
           <p className="text-lg md:text-xl text-slate-600 max-w-2xl mx-auto leading-relaxed font-medium">
             指導歴20年超のベテラン国語講師のノウハウと<br className="hidden sm:block" />
             最新AIによる解析で、あなたの思考に寄り添うフィードバックを。
@@ -3554,44 +3491,13 @@ export default function Home() {
             </div>
           </div>
 
-          {/* 信頼性とプライバシーの約束 */}
+          {/* ホーム画面に追加する案内など */}
           <div className="mt-8 max-w-3xl mx-auto space-y-4">
-            {/* プロ講師の採点基準アピール */}
-            <div className="bg-gradient-to-r from-indigo-50 to-violet-50 backdrop-blur-sm border-2 border-indigo-200 rounded-2xl p-6 shadow-lg">
-              <div className="flex items-start">
-                <svg className="w-6 h-6 text-indigo-600 mr-3 flex-shrink-0 mt-0.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4M7.835 4.697a3.42 3.42 0 001.946-.806 3.42 3.42 0 014.438 0 3.42 3.42 0 001.946.806 3.42 3.42 0 013.138 3.138 3.42 3.42 0 00.806 1.946 3.42 3.42 0 010 4.438 3.42 3.42 0 00-.806 1.946 3.42 3.42 0 01-3.138 3.138 3.42 3.42 0 00-1.946.806 3.42 3.42 0 01-4.438 0 3.42 3.42 0 00-1.946-.806 3.42 3.42 0 01-3.138-3.138 3.42 3.42 0 00-.806-1.946 3.42 3.42 0 010-4.438 3.42 3.42 0 00.806-1.946 3.42 3.42 0 013.138-3.138z" />
-                </svg>
-                <div className="flex-1">
-                  <h3 className="text-sm font-bold text-indigo-900 mb-2">プロ講師の採点基準で設計</h3>
-                  <p className="text-sm text-indigo-800 leading-relaxed">
-                    <strong>20年以上の指導経験を持つプロ講師の採点ノウハウをAIに学習させています。</strong>入試本番を見据えた実践的なフィードバックで、「なぜ減点されるのか」「どう書けば満点になるのか」を具体的にアドバイスします。
-                  </p>
-                </div>
-              </div>
-            </div>
-
-            {/* プライバシーの約束 */}
-            <div className="bg-emerald-50/80 backdrop-blur-sm border-2 border-emerald-200 rounded-2xl p-6 shadow-lg">
-              <div className="flex items-start">
-                <svg className="w-6 h-6 text-emerald-600 mr-3 flex-shrink-0 mt-0.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m5.618-4.016A11.955 11.955 0 0112 2.944a11.955 11.955 0 01-8.618 3.04A12.02 12.02 0 003 9c0 5.591 3.824 10.29 9 11.622 5.176-1.332 9-6.03 9-11.622 0-1.042-.133-2.052-.382-3.016z" />
-                </svg>
-                <div className="flex-1">
-                  <h3 className="text-sm font-bold text-emerald-900 mb-2">プライバシーの約束</h3>
-                  <p className="text-sm text-emerald-800 leading-relaxed">
-                    <strong>お子様の答案データは採点完了後すぐに削除され、AIの学習には一切使用しません。</strong>安心してご利用いただけるよう、データ保護を徹底しています。<br />
-                    <span className="text-emerald-700 mt-1 inline-block">💡 より安心のため、氏名部分を隠してアップロードすることもできます。</span>
-                  </p>
-                </div>
-              </div>
-            </div>
-
             {/* ホーム画面に追加する案内 */}
             <div className="bg-sky-50/80 backdrop-blur-sm border-2 border-sky-200 rounded-2xl p-6 shadow-lg">
               <div className="flex items-start">
-                <div className="w-10 h-10 bg-sky-100 rounded-xl flex items-center justify-center mr-3 flex-shrink-0">
-                  <img src="/icons/icon-192.png" alt="アプリアイコン" className="w-8 h-8 rounded-lg" />
+                <div className="w-10 h-10 bg-white rounded-xl flex items-center justify-center mr-3 flex-shrink-0 shadow-sm border border-sky-100">
+                  <img src="/taskal-main-logo.png" alt="Taskal AI" className="w-8 h-auto mix-blend-multiply" />
                 </div>
                 <div className="flex-1">
                   <h3 className="text-sm font-bold text-sky-900 mb-2">ホーム画面に追加</h3>
@@ -3662,1058 +3568,1054 @@ export default function Home() {
             </div>
 
             {batchMode === 'single' && (
-            <>
-            <form onSubmit={handleOcrStart} className="space-y-12">
+              <>
+                <form onSubmit={handleOcrStart} className="space-y-12">
 
-              {/* 採点可能問題数の案内 */}
-              <div className="max-w-2xl mx-auto">
-                <div className="bg-gradient-to-r from-indigo-50 via-violet-50 to-purple-50 border-2 border-indigo-200 rounded-2xl p-5 shadow-sm">
-                  <div className="flex items-center justify-center gap-3">
-                    <div className="flex-shrink-0 w-10 h-10 bg-indigo-100 rounded-full flex items-center justify-center">
-                      <span className="text-xl">✨</span>
-                    </div>
-                    <div className="text-center sm:text-left">
-                      <p className="text-sm font-bold text-indigo-800">
-                        1度に<span className="text-lg mx-1 text-violet-600">2問まで</span>添削可能です
-                      </p>
-                      <p className="text-xs text-indigo-600 mt-1">
-                        1回の採点で最大2問まで。3問以上ある場合は、続けて同じファイルで採点できます
-                      </p>
-                    </div>
-                  </div>
-                </div>
-              </div>
-
-              {/* 生徒名・添削担当者名入力 */}
-              <div className="max-w-2xl mx-auto">
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                  <div>
-                    <label className="block text-sm font-bold text-slate-600 mb-2 flex items-center">
-                      <User className="w-4 h-4 mr-2 text-indigo-500" />
-                      生徒名（任意）
-                    </label>
-                    <input
-                      type="text"
-                      value={studentName}
-                      onChange={(e) => setStudentName(e.target.value)}
-                      placeholder="例：山田太郎"
-                      className="w-full px-5 py-4 border border-slate-200 rounded-2xl focus:outline-none focus:ring-4 focus:ring-indigo-500/10 focus:border-indigo-500 bg-white/50 hover:bg-white transition-all duration-300 text-slate-700 placeholder-slate-400 shadow-sm"
-                    />
-                  </div>
-                  <div>
-                    <label className="block text-sm font-bold text-slate-600 mb-2 flex items-center">
-                      <UserCheck className="w-4 h-4 mr-2 text-violet-500" />
-                      添削担当者名（任意）
-                    </label>
-                    <input
-                      type="text"
-                      value={teacherName}
-                      onChange={(e) => setTeacherName(e.target.value)}
-                      placeholder="例：田中先生"
-                      className="w-full px-5 py-4 border border-slate-200 rounded-2xl focus:outline-none focus:ring-4 focus:ring-indigo-500/10 focus:border-indigo-500 bg-white/50 hover:bg-white transition-all duration-300 text-slate-700 placeholder-slate-400 shadow-sm"
-                    />
-                  </div>
-                </div>
-                <p className="text-xs text-slate-500 mt-2 text-center">
-                  ※ PDF出力時にレポートに表示されます
-                </p>
-              </div>
-
-              {/* Problem Selector */}
-              <div className="max-w-2xl mx-auto">
-                <label className="block text-sm font-bold text-slate-600 mb-3 text-center tracking-wide">
-                  採点対象の問題を選択
-                </label>
-
-                {/* 問題形式の選択 */}
-                <div className="flex flex-wrap gap-2 justify-center mb-4">
-                  <button
-                    type="button"
-                    onClick={() => setProblemFormat('big-small')}
-                    className={`px-4 py-2 rounded-lg text-sm font-bold transition-all ${problemFormat === 'big-small'
-                      ? 'bg-indigo-600 text-white shadow-md'
-                      : 'bg-slate-100 text-slate-600 hover:bg-slate-200'
-                      }`}
-                  >
-                    大問＋小問
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => setProblemFormat('small-only')}
-                    className={`px-4 py-2 rounded-lg text-sm font-bold transition-all ${problemFormat === 'small-only'
-                      ? 'bg-indigo-600 text-white shadow-md'
-                      : 'bg-slate-100 text-slate-600 hover:bg-slate-200'
-                      }`}
-                  >
-                    問のみ
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => setProblemFormat('free')}
-                    className={`px-4 py-2 rounded-lg text-sm font-bold transition-all ${problemFormat === 'free'
-                      ? 'bg-indigo-600 text-white shadow-md'
-                      : 'bg-slate-100 text-slate-600 hover:bg-slate-200'
-                      }`}
-                  >
-                    自由入力
-                  </button>
-                </div>
-
-                {/* 小問の表記形式（自由入力以外で表示） */}
-                {problemFormat !== 'free' && (
-                  <div className="flex flex-wrap gap-3 justify-center mb-6">
-                    <span className="text-xs font-bold text-slate-400 self-center mr-1 uppercase tracking-wider">Format:</span>
-                    <button
-                      type="button"
-                      onClick={() => setSmallFormat('number')}
-                      className={`px-4 py-2 rounded-xl text-xs font-bold transition-all duration-300 ${smallFormat === 'number'
-                        ? 'bg-violet-600 text-white shadow-lg shadow-violet-200 scale-105'
-                        : 'bg-white border border-slate-200 text-slate-600 hover:bg-slate-50 hover:border-violet-300'
-                        }`}
-                    >
-                      問1
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() => setSmallFormat('paren-number')}
-                      className={`px-4 py-2 rounded-xl text-xs font-bold transition-all duration-300 ${smallFormat === 'paren-number'
-                        ? 'bg-violet-600 text-white shadow-lg shadow-violet-200 scale-105'
-                        : 'bg-white border border-slate-200 text-slate-600 hover:bg-slate-50 hover:border-violet-300'
-                        }`}
-                    >
-                      (1)
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() => setSmallFormat('paren-alpha')}
-                      className={`px-4 py-2 rounded-xl text-xs font-bold transition-all duration-300 ${smallFormat === 'paren-alpha'
-                        ? 'bg-violet-600 text-white shadow-lg shadow-violet-200 scale-105'
-                        : 'bg-white border border-slate-200 text-slate-600 hover:bg-slate-50 hover:border-violet-300'
-                        }`}
-                    >
-                      (a)
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() => setSmallFormat('number-sub')}
-                      className={`px-4 py-2 rounded-xl text-xs font-bold transition-all duration-300 ${smallFormat === 'number-sub'
-                        ? 'bg-violet-600 text-white shadow-lg shadow-violet-200 scale-105'
-                        : 'bg-white border border-slate-200 text-slate-600 hover:bg-slate-50 hover:border-violet-300'
-                        }`}
-                    >
-                      問1-2
-                    </button>
-                  </div>
-                )}
-
-                {/* 一括追加モード切替（小問なしの場合は非表示） */}
-                {problemFormat !== 'free' && !(problemFormat === 'big-small' && currentSmall === 0) && (
-                  <div className="flex justify-center mb-3">
-                    <button
-                      type="button"
-                      onClick={() => setIsBatchMode(!isBatchMode)}
-                      className={`text-xs px-3 py-1.5 rounded-full font-bold transition-all duration-300 ${
-                        isBatchMode
-                          ? 'bg-emerald-600 text-white shadow-lg shadow-emerald-200'
-                          : 'bg-slate-100 text-slate-600 hover:bg-slate-200'
-                      }`}
-                    >
-                      {isBatchMode ? '✨ 一括追加モード ON' : '📋 一括追加モード'}
-                    </button>
-                  </div>
-                )}
-
-                {/* 問題番号入力 */}
-                <div className="flex gap-3 items-center justify-center mb-4 flex-wrap">
-                  {problemFormat === 'free' ? (
-                    <input
-                      type="text"
-                      value={freeInput}
-                      onChange={(e) => setFreeInput(e.target.value)}
-                      placeholder="例: 問三、第2問(1)、設問ア など"
-                      className="flex-1 min-w-[200px] max-w-[300px] px-4 py-3 border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-indigo-500 bg-white text-slate-700 placeholder-slate-400 text-center"
-                    />
-                  ) : (
-                    <>
-                      {/* 大問選択（大問＋小問形式のみ） */}
-                      {problemFormat === 'big-small' && (
-                        <div className="relative">
-                          <select
-                            value={currentBig}
-                            onChange={(e) => setCurrentBig(Number(e.target.value))}
-                            className="appearance-none bg-white border border-slate-200 text-slate-700 py-3 px-4 pr-8 rounded-xl leading-tight focus:outline-none focus:bg-white focus:border-indigo-500 font-bold"
-                          >
-                            {[...Array(10)].map((_, i) => (
-                              <option key={i + 1} value={i + 1}>大問 {i + 1}</option>
-                            ))}
-                          </select>
-                          <div className="pointer-events-none absolute inset-y-0 right-0 flex items-center px-2 text-slate-700">
-                            <svg className="fill-current h-4 w-4" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20">
-                              <path d="M9.293 12.95l.707.707L15.657 8l-1.414-1.414L10 10.828 5.757 6.586 4.343 8z" />
-                            </svg>
-                          </div>
+                  {/* 採点可能問題数の案内 */}
+                  <div className="max-w-2xl mx-auto">
+                    <div className="bg-gradient-to-r from-indigo-50 via-violet-50 to-purple-50 border-2 border-indigo-200 rounded-2xl p-5 shadow-sm">
+                      <div className="flex items-center justify-center gap-3">
+                        <div className="flex-shrink-0 w-10 h-10 bg-indigo-100 rounded-full flex items-center justify-center">
+                          <span className="text-xl">✨</span>
                         </div>
-                      )}
-
-                      {/* 小問選択（開始番号） - big-smallでcurrentSmall=0の場合は非表示 */}
-                      {!(problemFormat === 'big-small' && currentSmall === 0) && (
-                        <div className="relative">
-                          <select
-                            value={currentSmall}
-                            onChange={(e) => {
-                              const value = Number(e.target.value);
-                              setCurrentSmall(value);
-                              // 「なし」が選ばれたら一括追加モードをOFF
-                              if (value === 0) {
-                                setIsBatchMode(false);
-                              }
-                            }}
-                            className="appearance-none bg-white border border-slate-200 text-slate-700 py-3 px-4 pr-8 rounded-xl leading-tight focus:outline-none focus:bg-white focus:border-indigo-500 font-bold"
-                          >
-                            {/* big-small形式の場合のみ「なし」オプションを表示 */}
-                            {problemFormat === 'big-small' && (
-                              <option key={0} value={0}>なし（大問のみ）</option>
-                            )}
-                            {smallFormat === 'paren-alpha' ? (
-                              // アルファベット (a)〜(z)
-                              [...Array(26)].map((_, i) => (
-                                <option key={i + 1} value={i + 1}>({String.fromCharCode(97 + i)})</option>
-                              ))
-                            ) : smallFormat === 'paren-number' ? (
-                              // カッコ数字 (1)〜(20)
-                              [...Array(20)].map((_, i) => (
-                                <option key={i + 1} value={i + 1}>({i + 1})</option>
-                              ))
-                            ) : (
-                              // 数字 問1〜問20
-                              [...Array(20)].map((_, i) => (
-                                <option key={i + 1} value={i + 1}>問 {i + 1}</option>
-                              ))
-                            )}
-                          </select>
-                          <div className="pointer-events-none absolute inset-y-0 right-0 flex items-center px-2 text-slate-700">
-                            <svg className="fill-current h-4 w-4" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20">
-                              <path d="M9.293 12.95l.707.707L15.657 8l-1.414-1.414L10 10.828 5.757 6.586 4.343 8z" />
-                            </svg>
-                          </div>
+                        <div className="text-center sm:text-left">
+                          <p className="text-sm font-bold text-indigo-800">
+                            1度に<span className="text-lg mx-1 text-violet-600">2問まで</span>添削可能です
+                          </p>
+                          <p className="text-xs text-indigo-600 mt-1">
+                            1回の採点で最大2問まで。3問以上ある場合は、続けて同じファイルで採点できます
+                          </p>
                         </div>
-                      )}
-
-                      {/* 大問のみモード時の表示 */}
-                      {problemFormat === 'big-small' && currentSmall === 0 && (
-                        <div className="flex items-center gap-2">
-                          <span className="text-amber-600 font-bold text-sm bg-amber-50 px-3 py-2 rounded-xl border border-amber-200">
-                            大問のみ
-                          </span>
-                          <button
-                            type="button"
-                            onClick={() => setCurrentSmall(1)}
-                            className="text-xs text-slate-500 hover:text-indigo-600 underline transition-colors"
-                          >
-                            小問を追加
-                          </button>
-                        </div>
-                      )}
-
-                      {/* 一括追加モード時の終了番号 */}
-                      {isBatchMode && (
-                        <>
-                          <span className="text-emerald-600 font-bold">〜</span>
-                          <div className="relative">
-                            <select
-                              value={batchEndSmall}
-                              onChange={(e) => setBatchEndSmall(Number(e.target.value))}
-                              className="appearance-none bg-emerald-50 border border-emerald-300 text-emerald-700 py-3 px-4 pr-8 rounded-xl leading-tight focus:outline-none focus:bg-white focus:border-emerald-500 font-bold"
-                            >
-                              {smallFormat === 'paren-alpha' ? (
-                                [...Array(26)].map((_, i) => (
-                                  <option key={i + 1} value={i + 1}>({String.fromCharCode(97 + i)})</option>
-                                ))
-                              ) : smallFormat === 'paren-number' ? (
-                                [...Array(20)].map((_, i) => (
-                                  <option key={i + 1} value={i + 1}>({i + 1})</option>
-                                ))
-                              ) : (
-                                [...Array(20)].map((_, i) => (
-                                  <option key={i + 1} value={i + 1}>問 {i + 1}</option>
-                                ))
-                              )}
-                            </select>
-                            <div className="pointer-events-none absolute inset-y-0 right-0 flex items-center px-2 text-emerald-700">
-                              <svg className="fill-current h-4 w-4" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20">
-                                <path d="M9.293 12.95l.707.707L15.657 8l-1.414-1.414L10 10.828 5.757 6.586 4.343 8z" />
-                              </svg>
-                            </div>
-                          </div>
-                        </>
-                      )}
-
-                      {/* サブ番号（問1-2形式のみ） */}
-                      {smallFormat === 'number-sub' && !isBatchMode && (
-                        <>
-                          <span className="text-slate-400 font-bold">-</span>
-                          <div className="relative">
-                            <select
-                              value={currentSub}
-                              onChange={(e) => setCurrentSub(Number(e.target.value))}
-                              className="appearance-none bg-white border border-slate-200 text-slate-700 py-3 px-4 pr-8 rounded-xl leading-tight focus:outline-none focus:bg-white focus:border-indigo-500 font-bold"
-                            >
-                              {[...Array(10)].map((_, i) => (
-                                <option key={i + 1} value={i + 1}>{i + 1}</option>
-                              ))}
-                            </select>
-                            <div className="pointer-events-none absolute inset-y-0 right-0 flex items-center px-2 text-slate-700">
-                              <svg className="fill-current h-4 w-4" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20"><path d="M9.293 12.95l.707.707L15.657 8l-1.414-1.414L10 10.828 5.757 6.586 4.343 8z" /></svg>
-                            </div>
-                          </div>
-                        </>
-                      )}
-                    </>
-                  )}
-
-                  <input
-                    type="number"
-                    min="1"
-                    step="1"
-                    value={currentPoints}
-                    onChange={(e) => {
-                      const value = e.target.value;
-                      // 小数点を含む場合は整数部分のみを取得
-                      if (value.includes('.')) {
-                        const intValue = value.split('.')[0];
-                        setCurrentPoints(intValue);
-                      } else {
-                        setCurrentPoints(value);
-                      }
-                    }}
-                    placeholder="配点"
-                    className="w-24 text-center bg-white border border-slate-200 text-slate-700 py-3 px-3 rounded-xl leading-tight focus:outline-none focus:ring-2 focus:ring-indigo-500 font-bold"
-                  />
-
-                  {/* 追加ボタン（単一 or 一括） */}
-                  {isBatchMode && problemFormat !== 'free' ? (
-                    <button
-                      type="button"
-                      onClick={addProblemsInBatch}
-                      className="bg-emerald-500 hover:bg-emerald-600 text-white font-bold py-3 px-5 rounded-xl transition-colors flex items-center gap-2 shadow-lg shadow-emerald-200"
-                      title="まとめて追加"
-                    >
-                      <Plus className="w-5 h-5" />
-                      <span className="text-sm">まとめて追加</span>
-                    </button>
-                  ) : (
-                    <button
-                      type="button"
-                      onClick={addProblem}
-                      className="bg-indigo-100 hover:bg-indigo-200 text-indigo-700 font-bold py-3 px-4 rounded-xl transition-colors flex items-center"
-                      title="採点対象に追加"
-                    >
-                      <Plus className="w-5 h-5" />
-                    </button>
-                  )}
-                </div>
-
-                {/* 選択された採点対象 */}
-                <div className="mt-4">
-                  {selectedProblems.length > 0 ? (
-                    <>
-                      <div className="flex items-center justify-center gap-3 mb-2">
-                        <p className="text-sm text-slate-600 font-medium">
-                          📋 選択された採点対象: <span className="text-indigo-600 font-bold">{selectedProblems.length}問</span>
-                        </p>
-                        <button
-                          type="button"
-                          onClick={clearAllProblems}
-                          className="text-xs text-slate-500 hover:text-red-500 underline transition-colors"
-                        >
-                          全てクリア
-                        </button>
                       </div>
-                      <div className="flex flex-wrap gap-2 justify-center">
-                        {selectedProblems.map((label, index) => (
-                          <div key={index} className="bg-indigo-50 text-indigo-700 px-4 py-2 rounded-full font-bold text-sm flex items-center shadow-sm border border-indigo-100">
-                            {label}
-                            {Number.isFinite(problemPoints[label]) ? (
-                              <span className="ml-2 text-xs text-indigo-500 font-semibold">配点{formatPointsValue(problemPoints[label])}点</span>
-                            ) : null}
-                            <button
-                              type="button"
-                              onClick={() => removeProblem(index)}
-                              className="ml-2 text-indigo-400 hover:text-red-500 transition-colors"
-                            >
-                              <Trash2 className="w-4 h-4" />
-                            </button>
-                          </div>
-                        ))}
-                      </div>
-                    </>
-                  ) : (
-                    <div className="bg-slate-100 border border-slate-200 rounded-xl p-4 text-center">
-                      <p className="text-sm text-slate-600 font-medium">
-                        問題が選択されていません
-                      </p>
-                      {problemFormat !== 'free' && (
-                        <p className="text-xs text-slate-400 mt-1">
-                          💡 一括追加モードで複数問題をまとめて追加できます
-                        </p>
-                      )}
                     </div>
-                  )}
-                </div>
+                  </div>
 
-                {/* 採点の厳しさ（3段階） */}
-                <div className="mt-6">
-                  <label className="block text-sm font-bold text-slate-600 mb-3 text-center tracking-wide">
-                    採点の厳しさ
-                  </label>
-                  <div className="flex flex-wrap gap-2 justify-center">
-                    <button
-                      type="button"
-                      onClick={() => setGradingStrictness('lenient')}
-                      className={`px-4 py-2 rounded-lg text-sm font-bold transition-all ${
-                        gradingStrictness === 'lenient'
-                          ? 'bg-emerald-600 text-white shadow-md'
-                          : 'bg-slate-100 text-slate-600 hover:bg-slate-200'
-                      }`}
-                    >
-                      甘め
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() => setGradingStrictness('standard')}
-                      className={`px-4 py-2 rounded-lg text-sm font-bold transition-all ${
-                        gradingStrictness === 'standard'
+                  {/* 生徒名・添削担当者名入力 */}
+                  <div className="max-w-2xl mx-auto">
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                      <div>
+                        <label className="block text-sm font-bold text-slate-600 mb-2 flex items-center">
+                          <User className="w-4 h-4 mr-2 text-indigo-500" />
+                          生徒名（任意）
+                        </label>
+                        <input
+                          type="text"
+                          value={studentName}
+                          onChange={(e) => setStudentName(e.target.value)}
+                          placeholder="例：山田太郎"
+                          className="w-full px-5 py-4 border border-slate-200 rounded-2xl focus:outline-none focus:ring-4 focus:ring-indigo-500/10 focus:border-indigo-500 bg-white/50 hover:bg-white transition-all duration-300 text-slate-700 placeholder-slate-400 shadow-sm"
+                        />
+                      </div>
+                      <div>
+                        <label className="block text-sm font-bold text-slate-600 mb-2 flex items-center">
+                          <UserCheck className="w-4 h-4 mr-2 text-violet-500" />
+                          添削担当者名（任意）
+                        </label>
+                        <input
+                          type="text"
+                          value={teacherName}
+                          onChange={(e) => setTeacherName(e.target.value)}
+                          placeholder="例：田中先生"
+                          className="w-full px-5 py-4 border border-slate-200 rounded-2xl focus:outline-none focus:ring-4 focus:ring-indigo-500/10 focus:border-indigo-500 bg-white/50 hover:bg-white transition-all duration-300 text-slate-700 placeholder-slate-400 shadow-sm"
+                        />
+                      </div>
+                    </div>
+                    <p className="text-xs text-slate-500 mt-2 text-center">
+                      ※ PDF出力時にレポートに表示されます
+                    </p>
+                  </div>
+
+                  {/* Problem Selector */}
+                  <div className="max-w-2xl mx-auto">
+                    <label className="block text-sm font-bold text-slate-600 mb-3 text-center tracking-wide">
+                      採点対象の問題を選択
+                    </label>
+
+                    {/* 問題形式の選択 */}
+                    <div className="flex flex-wrap gap-2 justify-center mb-4">
+                      <button
+                        type="button"
+                        onClick={() => setProblemFormat('big-small')}
+                        className={`px-4 py-2 rounded-lg text-sm font-bold transition-all ${problemFormat === 'big-small'
                           ? 'bg-indigo-600 text-white shadow-md'
                           : 'bg-slate-100 text-slate-600 hover:bg-slate-200'
-                      }`}
-                    >
-                      標準
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() => setGradingStrictness('strict')}
-                      className={`px-4 py-2 rounded-lg text-sm font-bold transition-all ${
-                        gradingStrictness === 'strict'
-                          ? 'bg-rose-600 text-white shadow-md'
+                          }`}
+                      >
+                        大問＋小問
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => setProblemFormat('small-only')}
+                        className={`px-4 py-2 rounded-lg text-sm font-bold transition-all ${problemFormat === 'small-only'
+                          ? 'bg-indigo-600 text-white shadow-md'
                           : 'bg-slate-100 text-slate-600 hover:bg-slate-200'
-                      }`}
-                    >
-                      厳しめ
-                    </button>
-                  </div>
-                  <p className="text-xs text-slate-500 mt-2 text-center">
-                    ※ 採点結果に納得できない場合、「もっと厳しく/甘く」で無料再採点できます
-                  </p>
-                </div>
-              </div>
-
-              {/* File Upload Section */}
-              <div className="space-y-4">
-                <div className="text-center">
-                  <label className="block text-sm font-bold text-slate-600 mb-3">
-                    <span className="w-2.5 h-2.5 rounded-full bg-indigo-500 mr-2 shadow-[0_0_10px_rgba(99,102,241,0.5)] inline-block"></span>
-                    答案・問題・模範解答のファイルをアップロード
-                  </label>
-
-                  {/* 必須確認事項 */}
-                  <div className="bg-amber-50 border-2 border-amber-300 rounded-xl p-4 mb-4 max-w-xl mx-auto">
-                    <h4 className="text-sm font-bold text-amber-800 mb-2 flex items-center justify-center">
-                      <AlertCircle className="w-4 h-4 mr-2" />
-                      アップロード前の確認事項
-                    </h4>
-                    <ul className="text-sm text-amber-700 space-y-1 text-left">
-                      <li className="flex items-start">
-                        <span className="text-amber-500 mr-2">✓</span>
-                        <span><strong>①本人の答案</strong>が含まれている</span>
-                      </li>
-                      <li className="flex items-start">
-                        <span className="text-amber-500 mr-2">✓</span>
-                        <span><strong>②模範解答</strong>が含まれている</span>
-                      </li>
-                      <li className="flex items-start">
-                        <span className="text-amber-500 mr-2">✓</span>
-                        <span><strong>③問題文</strong>が含まれている</span>
-                      </li>
-                      <li className="flex items-start mt-2 pt-2 border-t border-amber-200">
-                        <span className="text-amber-500 mr-2">📷</span>
-                        <span><strong>文字がはっきりと読み取れる</strong>画質であること</span>
-                      </li>
-                      <li className="flex items-start mt-2 pt-2 border-t border-amber-200">
-                        <span className="text-amber-500 mr-2">📝</span>
-                        <span><strong>問題の文章は全て含める</strong>こと。該当問題と関係ない部分はできるだけ含めないこと</span>
-                      </li>
-                      <li className="flex items-start mt-2 pt-2 border-t border-amber-200">
-                        <span className="text-amber-500 mr-2">⏱️</span>
-                        <span><strong>ファイルの読み込みに時間がかかる場合は複数回に分けて処理してください</strong></span>
-                      </li>
-                    </ul>
-                  </div>
-
-                  <p className="text-xs text-blue-600 font-medium bg-blue-50 px-3 py-2 rounded-lg inline-block border border-blue-200">
-                    🔒 アップロードされた画像は採点完了後に自動削除され、AIの学習には一切利用されません
-                  </p>
-                </div>
-
-                {/* PDF圧縮ツール紹介セクション */}
-                <details className="bg-gradient-to-br from-indigo-50 to-violet-50 border-2 border-indigo-200 rounded-xl mb-4 max-w-2xl mx-auto group">
-                  <summary className="p-4 cursor-pointer list-none flex items-center justify-center gap-2 text-sm font-bold text-indigo-800 hover:text-indigo-900">
-                    <FileText className="w-4 h-4" />
-                    PDFが重すぎる場合の圧縮ツール
-                    <svg className="w-4 h-4 transition-transform group-open:rotate-180" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
-                    </svg>
-                  </summary>
-                  <div className="px-4 sm:px-6 pb-4 sm:pb-6">
-                    <p className="text-xs text-indigo-700 mb-4 text-center">
-                      PDFファイルが4MBを超える場合は、以下の無料ツールで圧縮してからアップロードしてください
-                    </p>
-                    <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 sm:gap-4">
-                    {/* iLovePDF */}
-                    <a
-                      href="https://www.ilovepdf.com/ja/compress-pdf"
-                      target="_blank"
-                      rel="noopener noreferrer"
-                      className="bg-white rounded-lg p-3 sm:p-4 border-2 border-indigo-200 hover:border-indigo-400 hover:shadow-lg transition-all duration-300 group"
-                    >
-                      <div className="flex flex-col items-center text-center">
-                        <div className="w-12 h-12 sm:w-16 sm:h-16 bg-red-100 rounded-lg flex items-center justify-center mb-2 group-hover:scale-110 transition-transform">
-                          <FileText className="w-6 h-6 sm:w-8 sm:h-8 text-red-600" />
-                        </div>
-                        <span className="text-xs sm:text-sm font-bold text-indigo-800">iLovePDF</span>
-                        <span className="text-[10px] text-indigo-600 mt-1">無料</span>
-                      </div>
-                    </a>
-                    {/* SmallPDF */}
-                    <a
-                      href="https://smallpdf.com/ja/compress-pdf"
-                      target="_blank"
-                      rel="noopener noreferrer"
-                      className="bg-white rounded-lg p-3 sm:p-4 border-2 border-indigo-200 hover:border-indigo-400 hover:shadow-lg transition-all duration-300 group"
-                    >
-                      <div className="flex flex-col items-center text-center">
-                        <div className="w-12 h-12 sm:w-16 sm:h-16 bg-orange-100 rounded-lg flex items-center justify-center mb-2 group-hover:scale-110 transition-transform">
-                          <FileText className="w-6 h-6 sm:w-8 sm:h-8 text-orange-600" />
-                        </div>
-                        <span className="text-xs sm:text-sm font-bold text-indigo-800">SmallPDF</span>
-                        <span className="text-[10px] text-indigo-600 mt-1">無料</span>
-                      </div>
-                    </a>
-                    {/* PDF24 */}
-                    <a
-                      href="https://tools.pdf24.org/ja/compress-pdf"
-                      target="_blank"
-                      rel="noopener noreferrer"
-                      className="bg-white rounded-lg p-3 sm:p-4 border-2 border-indigo-200 hover:border-indigo-400 hover:shadow-lg transition-all duration-300 group"
-                    >
-                      <div className="flex flex-col items-center text-center">
-                        <div className="w-12 h-12 sm:w-16 sm:h-16 bg-blue-100 rounded-lg flex items-center justify-center mb-2 group-hover:scale-110 transition-transform">
-                          <FileText className="w-6 h-6 sm:w-8 sm:h-8 text-blue-600" />
-                        </div>
-                        <span className="text-xs sm:text-sm font-bold text-indigo-800">PDF24</span>
-                        <span className="text-[10px] text-indigo-600 mt-1">無料</span>
-                      </div>
-                    </a>
-                    {/* Adobe Acrobat Online */}
-                    <a
-                      href="https://www.adobe.com/jp/acrobat/online/compress-pdf.html"
-                      target="_blank"
-                      rel="noopener noreferrer"
-                      className="bg-white rounded-lg p-3 sm:p-4 border-2 border-indigo-200 hover:border-indigo-400 hover:shadow-lg transition-all duration-300 group"
-                    >
-                      <div className="flex flex-col items-center text-center">
-                        <div className="w-12 h-12 sm:w-16 sm:h-16 bg-purple-100 rounded-lg flex items-center justify-center mb-2 group-hover:scale-110 transition-transform">
-                          <FileText className="w-6 h-6 sm:w-8 sm:h-8 text-purple-600" />
-                        </div>
-                        <span className="text-xs sm:text-sm font-bold text-indigo-800">Adobe</span>
-                        <span className="text-[10px] text-indigo-600 mt-1">無料</span>
-                      </div>
-                    </a>
+                          }`}
+                      >
+                        問のみ
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => setProblemFormat('free')}
+                        className={`px-4 py-2 rounded-lg text-sm font-bold transition-all ${problemFormat === 'free'
+                          ? 'bg-indigo-600 text-white shadow-md'
+                          : 'bg-slate-100 text-slate-600 hover:bg-slate-200'
+                          }`}
+                      >
+                        自由入力
+                      </button>
                     </div>
-                    <p className="text-xs text-indigo-600 mt-3 text-center">
-                      💡 各ツールのリンクをクリックすると、新しいタブで圧縮ページが開きます
-                    </p>
-                  </div>
-                </details>
 
-                <div className="group relative">
-                  <div
-                    className={clsx(
-                      "relative min-h-48 sm:min-h-72 border-2 border-dashed rounded-2xl sm:rounded-3xl transition-all duration-500 ease-out cursor-pointer overflow-hidden",
-                      isDragging
-                        ? "border-indigo-500 bg-indigo-100/60 scale-[1.02] shadow-xl shadow-indigo-200/50 ring-4 ring-indigo-500/30"
-                        : isCompressing
-                          ? "border-amber-400 bg-amber-50/50 ring-4 ring-amber-400/20"
-                          : uploadedFiles.length > 0
-                            ? "border-indigo-500 bg-indigo-50/30 ring-4 ring-indigo-500/10"
-                            : "border-slate-300 bg-slate-50/50 hover:border-indigo-400 hover:bg-white hover:shadow-xl hover:shadow-indigo-100/40 active:bg-indigo-50"
+                    {/* 小問の表記形式（自由入力以外で表示） */}
+                    {problemFormat !== 'free' && (
+                      <div className="flex flex-wrap gap-3 justify-center mb-6">
+                        <span className="text-xs font-bold text-slate-400 self-center mr-1 uppercase tracking-wider">Format:</span>
+                        <button
+                          type="button"
+                          onClick={() => setSmallFormat('number')}
+                          className={`px-4 py-2 rounded-xl text-xs font-bold transition-all duration-300 ${smallFormat === 'number'
+                            ? 'bg-violet-600 text-white shadow-lg shadow-violet-200 scale-105'
+                            : 'bg-white border border-slate-200 text-slate-600 hover:bg-slate-50 hover:border-violet-300'
+                            }`}
+                        >
+                          問1
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => setSmallFormat('paren-number')}
+                          className={`px-4 py-2 rounded-xl text-xs font-bold transition-all duration-300 ${smallFormat === 'paren-number'
+                            ? 'bg-violet-600 text-white shadow-lg shadow-violet-200 scale-105'
+                            : 'bg-white border border-slate-200 text-slate-600 hover:bg-slate-50 hover:border-violet-300'
+                            }`}
+                        >
+                          (1)
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => setSmallFormat('paren-alpha')}
+                          className={`px-4 py-2 rounded-xl text-xs font-bold transition-all duration-300 ${smallFormat === 'paren-alpha'
+                            ? 'bg-violet-600 text-white shadow-lg shadow-violet-200 scale-105'
+                            : 'bg-white border border-slate-200 text-slate-600 hover:bg-slate-50 hover:border-violet-300'
+                            }`}
+                        >
+                          (a)
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => setSmallFormat('number-sub')}
+                          className={`px-4 py-2 rounded-xl text-xs font-bold transition-all duration-300 ${smallFormat === 'number-sub'
+                            ? 'bg-violet-600 text-white shadow-lg shadow-violet-200 scale-105'
+                            : 'bg-white border border-slate-200 text-slate-600 hover:bg-slate-50 hover:border-violet-300'
+                            }`}
+                        >
+                          問1-2
+                        </button>
+                      </div>
                     )}
-                    onDragOver={handleDragOver}
-                    onDragEnter={handleDragEnter}
-                    onDragLeave={handleDragLeave}
-                    onDrop={handleDrop}
-                  >
-                    <div className="absolute inset-0 bg-gradient-to-br from-indigo-500/5 to-violet-500/5 opacity-0 group-hover:opacity-100 transition-opacity duration-500"></div>
 
-                    <input
-                      type="file"
-                      accept="image/*,.pdf"
-                      multiple
-                      capture="environment"
-                      onChange={handleFileChange}
-                      className="hidden"
-                      id="file-upload"
-                      disabled={isCompressing}
-                    />
-                    <label htmlFor="file-upload" className={clsx(
-                      "absolute inset-0 flex flex-col items-center justify-center p-4 sm:p-8 z-10",
-                      isCompressing ? "cursor-wait" : "cursor-pointer"
-                    )}>
-                      {isDragging ? (
-                        <div className="text-center animate-pulse">
-                          <div className="w-16 h-16 sm:w-20 sm:h-20 bg-indigo-500 rounded-2xl sm:rounded-3xl shadow-xl flex items-center justify-center mx-auto mb-4 sm:mb-6 text-white">
-                            <Camera className="w-8 h-8 sm:w-10 sm:h-10" />
+                    {/* 一括追加モード切替（小問なしの場合は非表示） */}
+                    {problemFormat !== 'free' && !(problemFormat === 'big-small' && currentSmall === 0) && (
+                      <div className="flex justify-center mb-3">
+                        <button
+                          type="button"
+                          onClick={() => setIsBatchMode(!isBatchMode)}
+                          className={`text-xs px-3 py-1.5 rounded-full font-bold transition-all duration-300 ${isBatchMode
+                              ? 'bg-emerald-600 text-white shadow-lg shadow-emerald-200'
+                              : 'bg-slate-100 text-slate-600 hover:bg-slate-200'
+                            }`}
+                        >
+                          {isBatchMode ? '✨ 一括追加モード ON' : '📋 一括追加モード'}
+                        </button>
+                      </div>
+                    )}
+
+                    {/* 問題番号入力 */}
+                    <div className="flex gap-3 items-center justify-center mb-4 flex-wrap">
+                      {problemFormat === 'free' ? (
+                        <input
+                          type="text"
+                          value={freeInput}
+                          onChange={(e) => setFreeInput(e.target.value)}
+                          placeholder="例: 問三、第2問(1)、設問ア など"
+                          className="flex-1 min-w-[200px] max-w-[300px] px-4 py-3 border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-indigo-500 bg-white text-slate-700 placeholder-slate-400 text-center"
+                        />
+                      ) : (
+                        <>
+                          {/* 大問選択（大問＋小問形式のみ） */}
+                          {problemFormat === 'big-small' && (
+                            <div className="relative">
+                              <select
+                                value={currentBig}
+                                onChange={(e) => setCurrentBig(Number(e.target.value))}
+                                className="appearance-none bg-white border border-slate-200 text-slate-700 py-3 px-4 pr-8 rounded-xl leading-tight focus:outline-none focus:bg-white focus:border-indigo-500 font-bold"
+                              >
+                                {[...Array(10)].map((_, i) => (
+                                  <option key={i + 1} value={i + 1}>大問 {i + 1}</option>
+                                ))}
+                              </select>
+                              <div className="pointer-events-none absolute inset-y-0 right-0 flex items-center px-2 text-slate-700">
+                                <svg className="fill-current h-4 w-4" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20">
+                                  <path d="M9.293 12.95l.707.707L15.657 8l-1.414-1.414L10 10.828 5.757 6.586 4.343 8z" />
+                                </svg>
+                              </div>
+                            </div>
+                          )}
+
+                          {/* 小問選択（開始番号） - big-smallでcurrentSmall=0の場合は非表示 */}
+                          {!(problemFormat === 'big-small' && currentSmall === 0) && (
+                            <div className="relative">
+                              <select
+                                value={currentSmall}
+                                onChange={(e) => {
+                                  const value = Number(e.target.value);
+                                  setCurrentSmall(value);
+                                  // 「なし」が選ばれたら一括追加モードをOFF
+                                  if (value === 0) {
+                                    setIsBatchMode(false);
+                                  }
+                                }}
+                                className="appearance-none bg-white border border-slate-200 text-slate-700 py-3 px-4 pr-8 rounded-xl leading-tight focus:outline-none focus:bg-white focus:border-indigo-500 font-bold"
+                              >
+                                {/* big-small形式の場合のみ「なし」オプションを表示 */}
+                                {problemFormat === 'big-small' && (
+                                  <option key={0} value={0}>なし（大問のみ）</option>
+                                )}
+                                {smallFormat === 'paren-alpha' ? (
+                                  // アルファベット (a)〜(z)
+                                  [...Array(26)].map((_, i) => (
+                                    <option key={i + 1} value={i + 1}>({String.fromCharCode(97 + i)})</option>
+                                  ))
+                                ) : smallFormat === 'paren-number' ? (
+                                  // カッコ数字 (1)〜(20)
+                                  [...Array(20)].map((_, i) => (
+                                    <option key={i + 1} value={i + 1}>({i + 1})</option>
+                                  ))
+                                ) : (
+                                  // 数字 問1〜問20
+                                  [...Array(20)].map((_, i) => (
+                                    <option key={i + 1} value={i + 1}>問 {i + 1}</option>
+                                  ))
+                                )}
+                              </select>
+                              <div className="pointer-events-none absolute inset-y-0 right-0 flex items-center px-2 text-slate-700">
+                                <svg className="fill-current h-4 w-4" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20">
+                                  <path d="M9.293 12.95l.707.707L15.657 8l-1.414-1.414L10 10.828 5.757 6.586 4.343 8z" />
+                                </svg>
+                              </div>
+                            </div>
+                          )}
+
+                          {/* 大問のみモード時の表示 */}
+                          {problemFormat === 'big-small' && currentSmall === 0 && (
+                            <div className="flex items-center gap-2">
+                              <span className="text-amber-600 font-bold text-sm bg-amber-50 px-3 py-2 rounded-xl border border-amber-200">
+                                大問のみ
+                              </span>
+                              <button
+                                type="button"
+                                onClick={() => setCurrentSmall(1)}
+                                className="text-xs text-slate-500 hover:text-indigo-600 underline transition-colors"
+                              >
+                                小問を追加
+                              </button>
+                            </div>
+                          )}
+
+                          {/* 一括追加モード時の終了番号 */}
+                          {isBatchMode && (
+                            <>
+                              <span className="text-emerald-600 font-bold">〜</span>
+                              <div className="relative">
+                                <select
+                                  value={batchEndSmall}
+                                  onChange={(e) => setBatchEndSmall(Number(e.target.value))}
+                                  className="appearance-none bg-emerald-50 border border-emerald-300 text-emerald-700 py-3 px-4 pr-8 rounded-xl leading-tight focus:outline-none focus:bg-white focus:border-emerald-500 font-bold"
+                                >
+                                  {smallFormat === 'paren-alpha' ? (
+                                    [...Array(26)].map((_, i) => (
+                                      <option key={i + 1} value={i + 1}>({String.fromCharCode(97 + i)})</option>
+                                    ))
+                                  ) : smallFormat === 'paren-number' ? (
+                                    [...Array(20)].map((_, i) => (
+                                      <option key={i + 1} value={i + 1}>({i + 1})</option>
+                                    ))
+                                  ) : (
+                                    [...Array(20)].map((_, i) => (
+                                      <option key={i + 1} value={i + 1}>問 {i + 1}</option>
+                                    ))
+                                  )}
+                                </select>
+                                <div className="pointer-events-none absolute inset-y-0 right-0 flex items-center px-2 text-emerald-700">
+                                  <svg className="fill-current h-4 w-4" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20">
+                                    <path d="M9.293 12.95l.707.707L15.657 8l-1.414-1.414L10 10.828 5.757 6.586 4.343 8z" />
+                                  </svg>
+                                </div>
+                              </div>
+                            </>
+                          )}
+
+                          {/* サブ番号（問1-2形式のみ） */}
+                          {smallFormat === 'number-sub' && !isBatchMode && (
+                            <>
+                              <span className="text-slate-400 font-bold">-</span>
+                              <div className="relative">
+                                <select
+                                  value={currentSub}
+                                  onChange={(e) => setCurrentSub(Number(e.target.value))}
+                                  className="appearance-none bg-white border border-slate-200 text-slate-700 py-3 px-4 pr-8 rounded-xl leading-tight focus:outline-none focus:bg-white focus:border-indigo-500 font-bold"
+                                >
+                                  {[...Array(10)].map((_, i) => (
+                                    <option key={i + 1} value={i + 1}>{i + 1}</option>
+                                  ))}
+                                </select>
+                                <div className="pointer-events-none absolute inset-y-0 right-0 flex items-center px-2 text-slate-700">
+                                  <svg className="fill-current h-4 w-4" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20"><path d="M9.293 12.95l.707.707L15.657 8l-1.414-1.414L10 10.828 5.757 6.586 4.343 8z" /></svg>
+                                </div>
+                              </div>
+                            </>
+                          )}
+                        </>
+                      )}
+
+                      <input
+                        type="number"
+                        min="1"
+                        step="1"
+                        value={currentPoints}
+                        onChange={(e) => {
+                          const value = e.target.value;
+                          // 小数点を含む場合は整数部分のみを取得
+                          if (value.includes('.')) {
+                            const intValue = value.split('.')[0];
+                            setCurrentPoints(intValue);
+                          } else {
+                            setCurrentPoints(value);
+                          }
+                        }}
+                        placeholder="配点"
+                        className="w-24 text-center bg-white border border-slate-200 text-slate-700 py-3 px-3 rounded-xl leading-tight focus:outline-none focus:ring-2 focus:ring-indigo-500 font-bold"
+                      />
+
+                      {/* 追加ボタン（単一 or 一括） */}
+                      {isBatchMode && problemFormat !== 'free' ? (
+                        <button
+                          type="button"
+                          onClick={addProblemsInBatch}
+                          className="bg-emerald-500 hover:bg-emerald-600 text-white font-bold py-3 px-5 rounded-xl transition-colors flex items-center gap-2 shadow-lg shadow-emerald-200"
+                          title="まとめて追加"
+                        >
+                          <Plus className="w-5 h-5" />
+                          <span className="text-sm">まとめて追加</span>
+                        </button>
+                      ) : (
+                        <button
+                          type="button"
+                          onClick={addProblem}
+                          className="bg-indigo-100 hover:bg-indigo-200 text-indigo-700 font-bold py-3 px-4 rounded-xl transition-colors flex items-center"
+                          title="採点対象に追加"
+                        >
+                          <Plus className="w-5 h-5" />
+                        </button>
+                      )}
+                    </div>
+
+                    {/* 選択された採点対象 */}
+                    <div className="mt-4">
+                      {selectedProblems.length > 0 ? (
+                        <>
+                          <div className="flex items-center justify-center gap-3 mb-2">
+                            <p className="text-sm text-slate-600 font-medium">
+                              📋 選択された採点対象: <span className="text-indigo-600 font-bold">{selectedProblems.length}問</span>
+                            </p>
+                            <button
+                              type="button"
+                              onClick={clearAllProblems}
+                              className="text-xs text-slate-500 hover:text-red-500 underline transition-colors"
+                            >
+                              全てクリア
+                            </button>
                           </div>
-                          <span className="text-base sm:text-lg text-indigo-700 font-bold block mb-2">
-                            ここにドロップ！
-                          </span>
-                          <span className="text-xs sm:text-sm text-indigo-500 block">
-                            画像・PDFファイルを受け付けます
+                          <div className="flex flex-wrap gap-2 justify-center">
+                            {selectedProblems.map((label, index) => (
+                              <div key={index} className="bg-indigo-50 text-indigo-700 px-4 py-2 rounded-full font-bold text-sm flex items-center shadow-sm border border-indigo-100">
+                                {label}
+                                {Number.isFinite(problemPoints[label]) ? (
+                                  <span className="ml-2 text-xs text-indigo-500 font-semibold">配点{formatPointsValue(problemPoints[label])}点</span>
+                                ) : null}
+                                <button
+                                  type="button"
+                                  onClick={() => removeProblem(index)}
+                                  className="ml-2 text-indigo-400 hover:text-red-500 transition-colors"
+                                >
+                                  <Trash2 className="w-4 h-4" />
+                                </button>
+                              </div>
+                            ))}
+                          </div>
+                        </>
+                      ) : (
+                        <div className="bg-slate-100 border border-slate-200 rounded-xl p-4 text-center">
+                          <p className="text-sm text-slate-600 font-medium">
+                            問題が選択されていません
+                          </p>
+                          {problemFormat !== 'free' && (
+                            <p className="text-xs text-slate-400 mt-1">
+                              💡 一括追加モードで複数問題をまとめて追加できます
+                            </p>
+                          )}
+                        </div>
+                      )}
+                    </div>
+
+                    {/* 採点の厳しさ（3段階） */}
+                    <div className="mt-6">
+                      <label className="block text-sm font-bold text-slate-600 mb-3 text-center tracking-wide">
+                        採点の厳しさ
+                      </label>
+                      <div className="flex flex-wrap gap-2 justify-center">
+                        <button
+                          type="button"
+                          onClick={() => setGradingStrictness('lenient')}
+                          className={`px-4 py-2 rounded-lg text-sm font-bold transition-all ${gradingStrictness === 'lenient'
+                              ? 'bg-emerald-600 text-white shadow-md'
+                              : 'bg-slate-100 text-slate-600 hover:bg-slate-200'
+                            }`}
+                        >
+                          甘め
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => setGradingStrictness('standard')}
+                          className={`px-4 py-2 rounded-lg text-sm font-bold transition-all ${gradingStrictness === 'standard'
+                              ? 'bg-indigo-600 text-white shadow-md'
+                              : 'bg-slate-100 text-slate-600 hover:bg-slate-200'
+                            }`}
+                        >
+                          標準
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => setGradingStrictness('strict')}
+                          className={`px-4 py-2 rounded-lg text-sm font-bold transition-all ${gradingStrictness === 'strict'
+                              ? 'bg-rose-600 text-white shadow-md'
+                              : 'bg-slate-100 text-slate-600 hover:bg-slate-200'
+                            }`}
+                        >
+                          厳しめ
+                        </button>
+                      </div>
+                      <p className="text-xs text-slate-500 mt-2 text-center">
+                        ※ 採点結果に納得できない場合、「もっと厳しく/甘く」で無料再採点できます
+                      </p>
+                    </div>
+                  </div>
+
+                  {/* File Upload Section */}
+                  <div className="space-y-4">
+                    <div className="text-center">
+                      <label className="block text-sm font-bold text-slate-600 mb-3">
+                        <span className="w-2.5 h-2.5 rounded-full bg-indigo-500 mr-2 shadow-[0_0_10px_rgba(99,102,241,0.5)] inline-block"></span>
+                        答案・問題・模範解答のファイルをアップロード
+                      </label>
+
+                      {/* 必須確認事項 */}
+                      <div className="bg-amber-50 border-2 border-amber-300 rounded-xl p-4 mb-4 max-w-xl mx-auto">
+                        <h4 className="text-sm font-bold text-amber-800 mb-2 flex items-center justify-center">
+                          <AlertCircle className="w-4 h-4 mr-2" />
+                          アップロード前の確認事項
+                        </h4>
+                        <ul className="text-sm text-amber-700 space-y-1 text-left">
+                          <li className="flex items-start">
+                            <span className="text-amber-500 mr-2">✓</span>
+                            <span><strong>①本人の答案</strong>が含まれている</span>
+                          </li>
+                          <li className="flex items-start">
+                            <span className="text-amber-500 mr-2">✓</span>
+                            <span><strong>②模範解答</strong>が含まれている</span>
+                          </li>
+                          <li className="flex items-start">
+                            <span className="text-amber-500 mr-2">✓</span>
+                            <span><strong>③問題文</strong>が含まれている</span>
+                          </li>
+                          <li className="flex items-start mt-2 pt-2 border-t border-amber-200">
+                            <span className="text-amber-500 mr-2">📷</span>
+                            <span><strong>文字がはっきりと読み取れる</strong>画質であること</span>
+                          </li>
+                          <li className="flex items-start mt-2 pt-2 border-t border-amber-200">
+                            <span className="text-amber-500 mr-2">📝</span>
+                            <span><strong>問題の文章は全て含める</strong>こと。該当問題と関係ない部分はできるだけ含めないこと</span>
+                          </li>
+                          <li className="flex items-start mt-2 pt-2 border-t border-amber-200">
+                            <span className="text-amber-500 mr-2">⏱️</span>
+                            <span><strong>ファイルの読み込みに時間がかかる場合は複数回に分けて処理してください</strong></span>
+                          </li>
+                        </ul>
+                      </div>
+
+                      <p className="text-xs text-blue-600 font-medium bg-blue-50 px-3 py-2 rounded-lg inline-block border border-blue-200">
+                        🔒 アップロードされた画像は採点完了後に自動削除され、AIの学習には一切利用されません
+                      </p>
+                    </div>
+
+                    {/* PDF圧縮ツール紹介セクション */}
+                    <details className="bg-gradient-to-br from-indigo-50 to-violet-50 border-2 border-indigo-200 rounded-xl mb-4 max-w-2xl mx-auto group">
+                      <summary className="p-4 cursor-pointer list-none flex items-center justify-center gap-2 text-sm font-bold text-indigo-800 hover:text-indigo-900">
+                        <FileText className="w-4 h-4" />
+                        PDFが重すぎる場合の圧縮ツール
+                        <svg className="w-4 h-4 transition-transform group-open:rotate-180" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+                        </svg>
+                      </summary>
+                      <div className="px-4 sm:px-6 pb-4 sm:pb-6">
+                        <p className="text-xs text-indigo-700 mb-4 text-center">
+                          PDFファイルが4MBを超える場合は、以下の無料ツールで圧縮してからアップロードしてください
+                        </p>
+                        <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 sm:gap-4">
+                          {/* iLovePDF */}
+                          <a
+                            href="https://www.ilovepdf.com/ja/compress-pdf"
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            className="bg-white rounded-lg p-3 sm:p-4 border-2 border-indigo-200 hover:border-indigo-400 hover:shadow-lg transition-all duration-300 group"
+                          >
+                            <div className="flex flex-col items-center text-center">
+                              <div className="w-12 h-12 sm:w-16 sm:h-16 bg-red-100 rounded-lg flex items-center justify-center mb-2 group-hover:scale-110 transition-transform">
+                                <FileText className="w-6 h-6 sm:w-8 sm:h-8 text-red-600" />
+                              </div>
+                              <span className="text-xs sm:text-sm font-bold text-indigo-800">iLovePDF</span>
+                              <span className="text-[10px] text-indigo-600 mt-1">無料</span>
+                            </div>
+                          </a>
+                          {/* SmallPDF */}
+                          <a
+                            href="https://smallpdf.com/ja/compress-pdf"
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            className="bg-white rounded-lg p-3 sm:p-4 border-2 border-indigo-200 hover:border-indigo-400 hover:shadow-lg transition-all duration-300 group"
+                          >
+                            <div className="flex flex-col items-center text-center">
+                              <div className="w-12 h-12 sm:w-16 sm:h-16 bg-orange-100 rounded-lg flex items-center justify-center mb-2 group-hover:scale-110 transition-transform">
+                                <FileText className="w-6 h-6 sm:w-8 sm:h-8 text-orange-600" />
+                              </div>
+                              <span className="text-xs sm:text-sm font-bold text-indigo-800">SmallPDF</span>
+                              <span className="text-[10px] text-indigo-600 mt-1">無料</span>
+                            </div>
+                          </a>
+                          {/* PDF24 */}
+                          <a
+                            href="https://tools.pdf24.org/ja/compress-pdf"
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            className="bg-white rounded-lg p-3 sm:p-4 border-2 border-indigo-200 hover:border-indigo-400 hover:shadow-lg transition-all duration-300 group"
+                          >
+                            <div className="flex flex-col items-center text-center">
+                              <div className="w-12 h-12 sm:w-16 sm:h-16 bg-blue-100 rounded-lg flex items-center justify-center mb-2 group-hover:scale-110 transition-transform">
+                                <FileText className="w-6 h-6 sm:w-8 sm:h-8 text-blue-600" />
+                              </div>
+                              <span className="text-xs sm:text-sm font-bold text-indigo-800">PDF24</span>
+                              <span className="text-[10px] text-indigo-600 mt-1">無料</span>
+                            </div>
+                          </a>
+                          {/* Adobe Acrobat Online */}
+                          <a
+                            href="https://www.adobe.com/jp/acrobat/online/compress-pdf.html"
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            className="bg-white rounded-lg p-3 sm:p-4 border-2 border-indigo-200 hover:border-indigo-400 hover:shadow-lg transition-all duration-300 group"
+                          >
+                            <div className="flex flex-col items-center text-center">
+                              <div className="w-12 h-12 sm:w-16 sm:h-16 bg-purple-100 rounded-lg flex items-center justify-center mb-2 group-hover:scale-110 transition-transform">
+                                <FileText className="w-6 h-6 sm:w-8 sm:h-8 text-purple-600" />
+                              </div>
+                              <span className="text-xs sm:text-sm font-bold text-indigo-800">Adobe</span>
+                              <span className="text-[10px] text-indigo-600 mt-1">無料</span>
+                            </div>
+                          </a>
+                        </div>
+                        <p className="text-xs text-indigo-600 mt-3 text-center">
+                          💡 各ツールのリンクをクリックすると、新しいタブで圧縮ページが開きます
+                        </p>
+                      </div>
+                    </details>
+
+                    <div className="group relative">
+                      <div
+                        className={clsx(
+                          "relative min-h-48 sm:min-h-72 border-2 border-dashed rounded-2xl sm:rounded-3xl transition-all duration-500 ease-out cursor-pointer overflow-hidden",
+                          isDragging
+                            ? "border-indigo-500 bg-indigo-100/60 scale-[1.02] shadow-xl shadow-indigo-200/50 ring-4 ring-indigo-500/30"
+                            : isCompressing
+                              ? "border-amber-400 bg-amber-50/50 ring-4 ring-amber-400/20"
+                              : uploadedFiles.length > 0
+                                ? "border-indigo-500 bg-indigo-50/30 ring-4 ring-indigo-500/10"
+                                : "border-slate-300 bg-slate-50/50 hover:border-indigo-400 hover:bg-white hover:shadow-xl hover:shadow-indigo-100/40 active:bg-indigo-50"
+                        )}
+                        onDragOver={handleDragOver}
+                        onDragEnter={handleDragEnter}
+                        onDragLeave={handleDragLeave}
+                        onDrop={handleDrop}
+                      >
+                        <div className="absolute inset-0 bg-gradient-to-br from-indigo-500/5 to-violet-500/5 opacity-0 group-hover:opacity-100 transition-opacity duration-500"></div>
+
+                        <input
+                          type="file"
+                          accept="image/*,.pdf"
+                          multiple
+                          capture="environment"
+                          onChange={handleFileChange}
+                          className="hidden"
+                          id="file-upload"
+                          disabled={isCompressing}
+                        />
+                        <label htmlFor="file-upload" className={clsx(
+                          "absolute inset-0 flex flex-col items-center justify-center p-4 sm:p-8 z-10",
+                          isCompressing ? "cursor-wait" : "cursor-pointer"
+                        )}>
+                          {isDragging ? (
+                            <div className="text-center animate-pulse">
+                              <div className="w-16 h-16 sm:w-20 sm:h-20 bg-indigo-500 rounded-2xl sm:rounded-3xl shadow-xl flex items-center justify-center mx-auto mb-4 sm:mb-6 text-white">
+                                <Camera className="w-8 h-8 sm:w-10 sm:h-10" />
+                              </div>
+                              <span className="text-base sm:text-lg text-indigo-700 font-bold block mb-2">
+                                ここにドロップ！
+                              </span>
+                              <span className="text-xs sm:text-sm text-indigo-500 block">
+                                画像・PDFファイルを受け付けます
+                              </span>
+                            </div>
+                          ) : isCompressing ? (
+                            <div className="animate-pulse text-center w-full">
+                              <div className="w-16 h-16 sm:w-20 sm:h-20 bg-amber-100 rounded-2xl sm:rounded-3xl flex items-center justify-center mx-auto mb-4 text-amber-600">
+                                <Loader2 className="w-8 h-8 sm:w-10 sm:h-10 animate-spin" />
+                              </div>
+                              <span className="text-base sm:text-lg text-amber-800 font-bold block mb-2">
+                                画像を最適化中... {compressionProgress}%
+                              </span>
+                              <span className="text-xs sm:text-sm text-amber-600 block">
+                                {compressionFileName}
+                              </span>
+                              <div className="w-48 sm:w-64 h-2 bg-amber-200 rounded-full mx-auto mt-3 overflow-hidden">
+                                <div
+                                  className="h-full bg-amber-500 rounded-full transition-all duration-300"
+                                  style={{ width: `${compressionProgress}%` }}
+                                />
+                              </div>
+                            </div>
+                          ) : uploadedFiles.length > 0 ? (
+                            <div className="animate-scale-in text-center w-full">
+                              <div className="w-16 h-16 sm:w-20 sm:h-20 bg-white rounded-2xl sm:rounded-3xl shadow-xl shadow-indigo-100 flex items-center justify-center mx-auto mb-3 sm:mb-4 text-indigo-600 transform group-hover:scale-110 transition-transform duration-500 ring-1 ring-indigo-50">
+                                <CheckCircle className="w-8 h-8 sm:w-10 sm:h-10" />
+                              </div>
+                              <span className="text-base sm:text-lg text-indigo-900 font-bold block mb-1 sm:mb-2">
+                                {uploadedFiles.length}個のファイルを選択中
+                              </span>
+                              <span className="text-xs sm:text-sm text-indigo-600 block mb-2 sm:mb-3">
+                                合計: {formatFileSize(uploadedFiles.reduce((sum, f) => sum + f.size, 0))}
+                              </span>
+                              <span className="inline-flex items-center px-3 sm:px-4 py-2 bg-white text-indigo-600 text-xs sm:text-sm font-bold rounded-full shadow-sm border border-indigo-100 group-hover:bg-indigo-50 transition-colors">
+                                <Plus className="w-3 h-3 sm:w-4 sm:h-4 mr-1" />
+                                追加する
+                              </span>
+                            </div>
+                          ) : (
+                            <div className="text-center group-hover:scale-105 active:scale-95 transition-transform duration-500">
+                              <div className="w-16 h-16 sm:w-20 sm:h-20 bg-white rounded-2xl sm:rounded-3xl shadow-lg shadow-slate-200/50 flex items-center justify-center mx-auto mb-4 sm:mb-6 text-slate-400 group-hover:text-indigo-500 group-hover:shadow-2xl group-hover:shadow-indigo-200/50 transition-all duration-500 ring-1 ring-slate-100">
+                                <Camera className="w-8 h-8 sm:w-10 sm:h-10" />
+                              </div>
+                              <span className="text-base sm:text-lg text-slate-700 font-bold block mb-2">
+                                📸 写真をアップロード
+                              </span>
+                              <span className="text-xs sm:text-sm text-slate-500 block bg-slate-100/50 px-3 sm:px-4 py-1 rounded-full mb-2">
+                                タップ or ドラッグ＆ドロップ
+                              </span>
+                              <span className="text-xs text-slate-400 block">
+                                複数枚OK・自動で圧縮されます
+                              </span>
+                            </div>
+                          )}
+                        </label>
+                      </div>
+                    </div>
+
+                    {/* File List - スマホ対応 */}
+                    {uploadedFiles.length > 0 && (
+                      <div className="bg-white/60 rounded-2xl sm:rounded-3xl p-4 sm:p-6 border border-slate-200 shadow-sm">
+                        <div className="flex items-center justify-between mb-3 sm:mb-4">
+                          <h3 className="text-sm font-bold text-slate-700 flex items-center">
+                            <ImageIcon className="w-4 h-4 mr-2 text-indigo-500" />
+                            ファイル一覧 ({uploadedFiles.length}件)
+                          </h3>
+                          <span className="text-xs text-slate-500 bg-slate-100 px-2 py-1 rounded-full">
+                            合計: {formatFileSize(uploadedFiles.reduce((sum, f) => sum + f.size, 0))}
                           </span>
                         </div>
-                      ) : isCompressing ? (
-                        <div className="animate-pulse text-center w-full">
-                          <div className="w-16 h-16 sm:w-20 sm:h-20 bg-amber-100 rounded-2xl sm:rounded-3xl flex items-center justify-center mx-auto mb-4 text-amber-600">
-                            <Loader2 className="w-8 h-8 sm:w-10 sm:h-10 animate-spin" />
-                          </div>
-                          <span className="text-base sm:text-lg text-amber-800 font-bold block mb-2">
-                            画像を最適化中... {compressionProgress}%
-                          </span>
-                          <span className="text-xs sm:text-sm text-amber-600 block">
-                            {compressionFileName}
-                          </span>
-                          <div className="w-48 sm:w-64 h-2 bg-amber-200 rounded-full mx-auto mt-3 overflow-hidden">
+
+                        {/* クイック役割設定ボタン（スマホ向け） */}
+                        <div className="flex flex-wrap gap-2 mb-3 sm:mb-4">
+                          <button
+                            type="button"
+                            onClick={() => {
+                              // 最初のファイルを答案、残りを問題+模範解答に設定
+                              const newRoles: Record<number, FileRole> = {};
+                              uploadedFiles.forEach((_, i) => {
+                                newRoles[i] = i === 0 ? 'answer' : 'problem_model';
+                              });
+                              setFileRoles(newRoles);
+                              // 答案インデックスを再計算
+                              setAnswerFileIndex(detectAnswerIndexByRole(uploadedFiles, newRoles, null));
+                            }}
+                            className="px-3 py-1.5 text-xs font-bold bg-indigo-100 text-indigo-700 rounded-lg border border-indigo-200 hover:bg-indigo-200 transition-colors"
+                          >
+                            📝 1枚目=答案 / 残り=問題
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => {
+                              // 全てを「全部入り」に設定
+                              const newRoles: Record<number, FileRole> = {};
+                              uploadedFiles.forEach((_, i) => {
+                                newRoles[i] = 'all';
+                              });
+                              setFileRoles(newRoles);
+                              // 答案インデックスを再計算
+                              setAnswerFileIndex(detectAnswerIndexByRole(uploadedFiles, newRoles, null));
+                            }}
+                            className="px-3 py-1.5 text-xs font-bold bg-rose-100 text-rose-700 rounded-lg border border-rose-200 hover:bg-rose-200 transition-colors"
+                          >
+                            📦 全て一括設定
+                          </button>
+                        </div>
+
+                        <p className="text-xs text-indigo-700 font-medium bg-indigo-50 px-3 py-2 rounded-xl mb-3 sm:mb-4 border border-indigo-100">
+                          💡 各ファイルの内容を選択してください
+                        </p>
+
+                        {/* ファイルグリッド - スマホ対応 */}
+                        <div className="grid grid-cols-1 gap-2 sm:gap-3">
+                          {uploadedFiles.map((file, index) => (
                             <div
-                              className="h-full bg-amber-500 rounded-full transition-all duration-300"
-                              style={{ width: `${compressionProgress}%` }}
+                              key={index}
+                              className={clsx(
+                                "rounded-xl sm:rounded-2xl p-3 sm:p-4 border transition-all duration-300",
+                                fileRoles[index] === 'answer' ? "bg-indigo-50/50 border-indigo-200" :
+                                  fileRoles[index] === 'problem' ? "bg-amber-50/50 border-amber-200" :
+                                    fileRoles[index] === 'model' ? "bg-emerald-50/50 border-emerald-200" :
+                                      fileRoles[index] === 'problem_model' ? "bg-cyan-50/50 border-cyan-200" :
+                                        fileRoles[index] === 'answer_problem' ? "bg-violet-50/50 border-violet-200" :
+                                          fileRoles[index] === 'all' ? "bg-rose-50/50 border-rose-200" :
+                                            "bg-white border-slate-100"
+                              )}
+                            >
+                              {/* ファイル情報行 */}
+                              <div className="flex items-center gap-2 sm:gap-3 mb-2">
+                                <div className={clsx(
+                                  "w-10 h-10 sm:w-12 sm:h-12 rounded-lg flex items-center justify-center flex-shrink-0",
+                                  file.type === 'application/pdf' ? "bg-orange-100 text-orange-600" : "bg-blue-100 text-blue-600"
+                                )}>
+                                  {file.type === 'application/pdf' ? (
+                                    <FileText className="w-5 h-5 sm:w-6 sm:h-6" />
+                                  ) : (
+                                    <ImageIcon className="w-5 h-5 sm:w-6 sm:h-6" />
+                                  )}
+                                </div>
+                                <div className="flex-1 min-w-0">
+                                  <p className="text-xs sm:text-sm font-bold text-slate-700 truncate">{file.name}</p>
+                                  <p className="text-xs text-slate-500">
+                                    {formatFileSize(file.size)}
+                                    {file.type === 'application/pdf' && (
+                                      <span className="ml-2 text-orange-600 bg-orange-100 px-1.5 py-0.5 rounded text-[10px] font-bold">PDF</span>
+                                    )}
+                                  </p>
+                                </div>
+                                <button
+                                  type="button"
+                                  onClick={() => removeFile(index)}
+                                  className="p-2 text-slate-400 hover:text-red-500 hover:bg-red-50 rounded-lg transition-all flex-shrink-0"
+                                  title="削除"
+                                >
+                                  <Trash2 className="w-4 h-4" />
+                                </button>
+                              </div>
+
+                              {/* 役割選択ボタン（スマホ向けタップしやすい） */}
+                              <div className="flex flex-wrap gap-1.5 sm:gap-2">
+                                {[
+                                  { value: 'answer', label: '📝 答案', color: 'indigo' },
+                                  { value: 'problem', label: '📋 問題', color: 'amber' },
+                                  { value: 'model', label: '✅ 模範解答', color: 'emerald' },
+                                  { value: 'problem_model', label: '📋✅ 問題+模範解答', color: 'cyan' },
+                                  { value: 'all', label: '📦 全部', color: 'rose' },
+                                ].map(({ value, label, color }) => (
+                                  <button
+                                    key={value}
+                                    type="button"
+                                    onClick={() => {
+                                      const newRoles = { ...fileRoles, [index]: value as FileRole };
+                                      setFileRoles(newRoles);
+                                      // 答案インデックスを再計算
+                                      setAnswerFileIndex(detectAnswerIndexByRole(uploadedFiles, newRoles, answerFileIndex));
+                                    }}
+                                    className={clsx(
+                                      "px-2 sm:px-3 py-1 sm:py-1.5 text-[10px] sm:text-xs font-bold rounded-lg border transition-all",
+                                      fileRoles[index] === value
+                                        ? `bg-${color}-200 border-${color}-400 text-${color}-800 ring-2 ring-${color}-400/30`
+                                        : `bg-white border-slate-200 text-slate-600 hover:border-${color}-300 hover:bg-${color}-50`
+                                    )}
+                                    style={{
+                                      backgroundColor: fileRoles[index] === value
+                                        ? color === 'indigo' ? '#c7d2fe' : color === 'amber' ? '#fde68a' : color === 'emerald' ? '#a7f3d0' : color === 'cyan' ? '#a5f3fc' : '#fecdd3'
+                                        : undefined,
+                                      borderColor: fileRoles[index] === value
+                                        ? color === 'indigo' ? '#818cf8' : color === 'amber' ? '#fbbf24' : color === 'emerald' ? '#34d399' : color === 'cyan' ? '#22d3ee' : '#fb7185'
+                                        : undefined,
+                                    }}
+                                  >
+                                    {label}
+                                  </button>
+                                ))}
+                              </div>
+                            </div>
+                          ))}
+                        </div>
+
+                        {/* 全削除ボタン */}
+                        {uploadedFiles.length > 1 && (
+                          <button
+                            type="button"
+                            onClick={() => {
+                              setUploadedFiles([]);
+                              setFileRoles({});
+                              setAnswerFileIndex(null);
+                            }}
+                            className="mt-3 sm:mt-4 w-full py-2 text-xs sm:text-sm font-bold text-red-600 bg-red-50 border border-red-200 rounded-xl hover:bg-red-100 transition-colors"
+                          >
+                            <Trash2 className="w-4 h-4 inline mr-1" />
+                            すべて削除
+                          </button>
+                        )}
+                      </div>
+                    )}
+
+                    {/* PDFページ番号指定（複数ページPDF対応） */}
+                    {uploadedFiles.some(f => f.type === 'application/pdf') && (
+                      <div className="bg-orange-50 rounded-2xl p-4 border border-orange-200">
+                        <h3 className="text-sm font-bold text-orange-800 mb-2 flex items-center">
+                          <span className="mr-2">📑</span>
+                          PDFのページ番号を指定（複数ページの場合）
+                        </h3>
+                        <p className="text-xs text-orange-700 mb-3">
+                          PDFが複数ページある場合、各内容があるページ番号を入力すると読み取り精度が向上します。
+                          <br />
+                          <span className="font-medium">※ 空欄の場合は自動で全ページをスキャンします</span>
+                        </p>
+                        <div className="grid grid-cols-3 gap-3">
+                          <div>
+                            <label className="text-xs font-medium text-orange-700 block mb-1">
+                              📝 答案のページ
+                            </label>
+                            <input
+                              type="text"
+                              placeholder="例: 5"
+                              value={pdfPageInfo.answerPage}
+                              onChange={(e) => setPdfPageInfo(prev => ({ ...prev, answerPage: e.target.value }))}
+                              className="w-full px-3 py-2 text-sm border border-orange-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-orange-500 focus:border-transparent bg-white"
+                            />
+                          </div>
+                          <div>
+                            <label className="text-xs font-medium text-orange-700 block mb-1">
+                              📖 問題文のページ
+                            </label>
+                            <input
+                              type="text"
+                              placeholder="例: 1-3"
+                              value={pdfPageInfo.problemPage}
+                              onChange={(e) => setPdfPageInfo(prev => ({ ...prev, problemPage: e.target.value }))}
+                              className="w-full px-3 py-2 text-sm border border-orange-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-orange-500 focus:border-transparent bg-white"
+                            />
+                          </div>
+                          <div>
+                            <label className="text-xs font-medium text-orange-700 block mb-1">
+                              ✅ 模範解答のページ
+                            </label>
+                            <input
+                              type="text"
+                              placeholder="例: 10-12"
+                              value={pdfPageInfo.modelAnswerPage}
+                              onChange={(e) => setPdfPageInfo(prev => ({ ...prev, modelAnswerPage: e.target.value }))}
+                              className="w-full px-3 py-2 text-sm border border-orange-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-orange-500 focus:border-transparent bg-white"
+                              disabled={modelAnswerInputMode === 'text'}
                             />
                           </div>
                         </div>
-                      ) : uploadedFiles.length > 0 ? (
-                        <div className="animate-scale-in text-center w-full">
-                          <div className="w-16 h-16 sm:w-20 sm:h-20 bg-white rounded-2xl sm:rounded-3xl shadow-xl shadow-indigo-100 flex items-center justify-center mx-auto mb-3 sm:mb-4 text-indigo-600 transform group-hover:scale-110 transition-transform duration-500 ring-1 ring-indigo-50">
-                            <CheckCircle className="w-8 h-8 sm:w-10 sm:h-10" />
-                          </div>
-                          <span className="text-base sm:text-lg text-indigo-900 font-bold block mb-1 sm:mb-2">
-                            {uploadedFiles.length}個のファイルを選択中
-                          </span>
-                          <span className="text-xs sm:text-sm text-indigo-600 block mb-2 sm:mb-3">
-                            合計: {formatFileSize(uploadedFiles.reduce((sum, f) => sum + f.size, 0))}
-                          </span>
-                          <span className="inline-flex items-center px-3 sm:px-4 py-2 bg-white text-indigo-600 text-xs sm:text-sm font-bold rounded-full shadow-sm border border-indigo-100 group-hover:bg-indigo-50 transition-colors">
-                            <Plus className="w-3 h-3 sm:w-4 sm:h-4 mr-1" />
-                            追加する
-                          </span>
-                        </div>
-                      ) : (
-                        <div className="text-center group-hover:scale-105 active:scale-95 transition-transform duration-500">
-                          <div className="w-16 h-16 sm:w-20 sm:h-20 bg-white rounded-2xl sm:rounded-3xl shadow-lg shadow-slate-200/50 flex items-center justify-center mx-auto mb-4 sm:mb-6 text-slate-400 group-hover:text-indigo-500 group-hover:shadow-2xl group-hover:shadow-indigo-200/50 transition-all duration-500 ring-1 ring-slate-100">
-                            <Camera className="w-8 h-8 sm:w-10 sm:h-10" />
-                          </div>
-                          <span className="text-base sm:text-lg text-slate-700 font-bold block mb-2">
-                            📸 写真をアップロード
-                          </span>
-                          <span className="text-xs sm:text-sm text-slate-500 block bg-slate-100/50 px-3 sm:px-4 py-1 rounded-full mb-2">
-                            タップ or ドラッグ＆ドロップ
-                          </span>
-                          <span className="text-xs text-slate-400 block">
-                            複数枚OK・自動で圧縮されます
-                          </span>
-                        </div>
-                      )}
-                    </label>
-                  </div>
-                </div>
+                      </div>
+                    )}
 
-                {/* File List - スマホ対応 */}
-                {uploadedFiles.length > 0 && (
-                  <div className="bg-white/60 rounded-2xl sm:rounded-3xl p-4 sm:p-6 border border-slate-200 shadow-sm">
-                    <div className="flex items-center justify-between mb-3 sm:mb-4">
-                      <h3 className="text-sm font-bold text-slate-700 flex items-center">
-                        <ImageIcon className="w-4 h-4 mr-2 text-indigo-500" />
-                        ファイル一覧 ({uploadedFiles.length}件)
-                      </h3>
-                      <span className="text-xs text-slate-500 bg-slate-100 px-2 py-1 rounded-full">
-                        合計: {formatFileSize(uploadedFiles.reduce((sum, f) => sum + f.size, 0))}
-                      </span>
-                    </div>
-                    
-                    {/* クイック役割設定ボタン（スマホ向け） */}
-                    <div className="flex flex-wrap gap-2 mb-3 sm:mb-4">
-                      <button
-                        type="button"
-                        onClick={() => {
-                          // 最初のファイルを答案、残りを問題+模範解答に設定
-                          const newRoles: Record<number, FileRole> = {};
-                          uploadedFiles.forEach((_, i) => {
-                            newRoles[i] = i === 0 ? 'answer' : 'problem_model';
-                          });
-                          setFileRoles(newRoles);
-                          // 答案インデックスを再計算
-                          setAnswerFileIndex(detectAnswerIndexByRole(uploadedFiles, newRoles, null));
-                        }}
-                        className="px-3 py-1.5 text-xs font-bold bg-indigo-100 text-indigo-700 rounded-lg border border-indigo-200 hover:bg-indigo-200 transition-colors"
-                      >
-                        📝 1枚目=答案 / 残り=問題
-                      </button>
-                      <button
-                        type="button"
-                        onClick={() => {
-                          // 全てを「全部入り」に設定
-                          const newRoles: Record<number, FileRole> = {};
-                          uploadedFiles.forEach((_, i) => {
-                            newRoles[i] = 'all';
-                          });
-                          setFileRoles(newRoles);
-                          // 答案インデックスを再計算
-                          setAnswerFileIndex(detectAnswerIndexByRole(uploadedFiles, newRoles, null));
-                        }}
-                        className="px-3 py-1.5 text-xs font-bold bg-rose-100 text-rose-700 rounded-lg border border-rose-200 hover:bg-rose-200 transition-colors"
-                      >
-                        📦 全て一括設定
-                      </button>
-                    </div>
-                    
-                    <p className="text-xs text-indigo-700 font-medium bg-indigo-50 px-3 py-2 rounded-xl mb-3 sm:mb-4 border border-indigo-100">
-                      💡 各ファイルの内容を選択してください
-                    </p>
-                    
-                    {/* ファイルグリッド - スマホ対応 */}
-                    <div className="grid grid-cols-1 gap-2 sm:gap-3">
-                      {uploadedFiles.map((file, index) => (
-                        <div
-                          key={index}
-                          className={clsx(
-                            "rounded-xl sm:rounded-2xl p-3 sm:p-4 border transition-all duration-300",
-                            fileRoles[index] === 'answer' ? "bg-indigo-50/50 border-indigo-200" :
-                            fileRoles[index] === 'problem' ? "bg-amber-50/50 border-amber-200" :
-                            fileRoles[index] === 'model' ? "bg-emerald-50/50 border-emerald-200" :
-                            fileRoles[index] === 'problem_model' ? "bg-cyan-50/50 border-cyan-200" :
-                            fileRoles[index] === 'answer_problem' ? "bg-violet-50/50 border-violet-200" :
-                            fileRoles[index] === 'all' ? "bg-rose-50/50 border-rose-200" :
-                            "bg-white border-slate-100"
-                          )}
-                        >
-                          {/* ファイル情報行 */}
-                          <div className="flex items-center gap-2 sm:gap-3 mb-2">
-                            <div className={clsx(
-                              "w-10 h-10 sm:w-12 sm:h-12 rounded-lg flex items-center justify-center flex-shrink-0",
-                              file.type === 'application/pdf' ? "bg-orange-100 text-orange-600" : "bg-blue-100 text-blue-600"
-                            )}>
-                              {file.type === 'application/pdf' ? (
-                                <FileText className="w-5 h-5 sm:w-6 sm:h-6" />
-                              ) : (
-                                <ImageIcon className="w-5 h-5 sm:w-6 sm:h-6" />
-                              )}
-                            </div>
-                            <div className="flex-1 min-w-0">
-                              <p className="text-xs sm:text-sm font-bold text-slate-700 truncate">{file.name}</p>
-                              <p className="text-xs text-slate-500">
-                                {formatFileSize(file.size)}
-                                {file.type === 'application/pdf' && (
-                                  <span className="ml-2 text-orange-600 bg-orange-100 px-1.5 py-0.5 rounded text-[10px] font-bold">PDF</span>
-                                )}
-                              </p>
-                            </div>
+                    {/* 模範解答入力モード選択 */}
+                    {uploadedFiles.length > 0 && (
+                      <div className="mt-4 p-4 bg-gradient-to-br from-emerald-50 to-teal-50 border border-emerald-200 rounded-xl">
+                        <div className="flex items-center justify-between mb-3">
+                          <h4 className="text-sm font-bold text-emerald-800 flex items-center">
+                            <Edit3 className="w-4 h-4 mr-2" />
+                            模範解答の入力方法
+                          </h4>
+                          <div className="flex bg-white rounded-lg p-1 border border-emerald-200">
                             <button
                               type="button"
-                              onClick={() => removeFile(index)}
-                              className="p-2 text-slate-400 hover:text-red-500 hover:bg-red-50 rounded-lg transition-all flex-shrink-0"
-                              title="削除"
+                              onClick={() => setModelAnswerInputMode('image')}
+                              className={clsx(
+                                "px-3 py-1.5 text-xs font-medium rounded-md transition-all",
+                                modelAnswerInputMode === 'image'
+                                  ? "bg-emerald-500 text-white shadow-sm"
+                                  : "text-emerald-600 hover:bg-emerald-50"
+                              )}
                             >
-                              <Trash2 className="w-4 h-4" />
+                              📷 画像から
+                            </button>
+                            <button
+                              type="button"
+                              onClick={() => setModelAnswerInputMode('text')}
+                              className={clsx(
+                                "px-3 py-1.5 text-xs font-medium rounded-md transition-all",
+                                modelAnswerInputMode === 'text'
+                                  ? "bg-emerald-500 text-white shadow-sm"
+                                  : "text-emerald-600 hover:bg-emerald-50"
+                              )}
+                            >
+                              ✏️ 手入力
                             </button>
                           </div>
-                          
-                          {/* 役割選択ボタン（スマホ向けタップしやすい） */}
-                          <div className="flex flex-wrap gap-1.5 sm:gap-2">
-                            {[
-                              { value: 'answer', label: '📝 答案', color: 'indigo' },
-                              { value: 'problem', label: '📋 問題', color: 'amber' },
-                              { value: 'model', label: '✅ 模範解答', color: 'emerald' },
-                              { value: 'problem_model', label: '📋✅ 問題+模範解答', color: 'cyan' },
-                              { value: 'all', label: '📦 全部', color: 'rose' },
-                            ].map(({ value, label, color }) => (
-                              <button
-                                key={value}
-                                type="button"
-                                onClick={() => {
-                                  const newRoles = { ...fileRoles, [index]: value as FileRole };
-                                  setFileRoles(newRoles);
-                                  // 答案インデックスを再計算
-                                  setAnswerFileIndex(detectAnswerIndexByRole(uploadedFiles, newRoles, answerFileIndex));
-                                }}
-                                className={clsx(
-                                  "px-2 sm:px-3 py-1 sm:py-1.5 text-[10px] sm:text-xs font-bold rounded-lg border transition-all",
-                                  fileRoles[index] === value
-                                    ? `bg-${color}-200 border-${color}-400 text-${color}-800 ring-2 ring-${color}-400/30`
-                                    : `bg-white border-slate-200 text-slate-600 hover:border-${color}-300 hover:bg-${color}-50`
-                                )}
-                                style={{
-                                  backgroundColor: fileRoles[index] === value 
-                                    ? color === 'indigo' ? '#c7d2fe' : color === 'amber' ? '#fde68a' : color === 'emerald' ? '#a7f3d0' : color === 'cyan' ? '#a5f3fc' : '#fecdd3'
-                                    : undefined,
-                                  borderColor: fileRoles[index] === value
-                                    ? color === 'indigo' ? '#818cf8' : color === 'amber' ? '#fbbf24' : color === 'emerald' ? '#34d399' : color === 'cyan' ? '#22d3ee' : '#fb7185'
-                                    : undefined,
-                                }}
-                              >
-                                {label}
-                              </button>
-                            ))}
-                          </div>
                         </div>
-                      ))}
-                    </div>
-                    
-                    {/* 全削除ボタン */}
-                    {uploadedFiles.length > 1 && (
-                      <button
-                        type="button"
-                        onClick={() => {
-                          setUploadedFiles([]);
-                          setFileRoles({});
-                          setAnswerFileIndex(null);
-                        }}
-                        className="mt-3 sm:mt-4 w-full py-2 text-xs sm:text-sm font-bold text-red-600 bg-red-50 border border-red-200 rounded-xl hover:bg-red-100 transition-colors"
-                      >
-                        <Trash2 className="w-4 h-4 inline mr-1" />
-                        すべて削除
-                      </button>
+
+                        {modelAnswerInputMode === 'text' && (
+                          <div className="mt-3">
+                            <label className="text-xs font-medium text-emerald-700 block mb-2">
+                              模範解答のテキストを入力してください
+                            </label>
+                            <textarea
+                              value={modelAnswerText}
+                              onChange={(e) => setModelAnswerText(e.target.value)}
+                              placeholder="例: 主人公は友人との別れに対する悲しみと、新しい土地での生活に対する不安を感じているから。"
+                              className="w-full h-32 p-3 border border-emerald-200 rounded-lg focus:ring-2 focus:ring-emerald-500 focus:border-emerald-500 text-sm leading-relaxed resize-y bg-white"
+                            />
+                            <p className="text-xs text-emerald-600 mt-2">
+                              💡 採点対象の問題ごとに「大問○ 問○: 模範解答」の形式で入力できます。複数問題を採点する場合は改行して入力してください。
+                            </p>
+                          </div>
+                        )}
+
+                        {modelAnswerInputMode === 'image' && (
+                          <p className="text-xs text-emerald-600">
+                            アップロードした画像から模範解答を読み取ります。ファイルの役割設定で「模範解答」を指定してください。
+                          </p>
+                        )}
+                      </div>
                     )}
                   </div>
-                )}
 
-                {/* PDFページ番号指定（複数ページPDF対応） */}
-                {uploadedFiles.some(f => f.type === 'application/pdf') && (
-                  <div className="bg-orange-50 rounded-2xl p-4 border border-orange-200">
-                    <h3 className="text-sm font-bold text-orange-800 mb-2 flex items-center">
-                      <span className="mr-2">📑</span>
-                      PDFのページ番号を指定（複数ページの場合）
+                  {error && session && user && (
+                    <div className="rounded-2xl bg-red-50 p-5 border border-red-100 animate-shake shadow-sm">
+                      <div className="flex items-center mb-2">
+                        <div className="bg-red-100 p-2 rounded-full mr-4">
+                          <AlertCircle className="h-6 w-6 text-red-500" />
+                        </div>
+                        <p className="text-sm text-red-700 font-bold">{error}</p>
+                      </div>
+                      {requirePlan && (
+                        <div className="mt-3 ml-14">
+                          <Link
+                            href="/pricing"
+                            className="inline-flex items-center px-4 py-2 bg-indigo-600 text-white font-bold rounded-xl hover:bg-indigo-700 transition-colors text-sm"
+                          >
+                            <CreditCard className="w-4 h-4 mr-2" />
+                            プランを購入する
+                          </Link>
+                        </div>
+                      )}
+                    </div>
+                  )}
+
+                  <div className="pt-6">
+                    <button
+                      type="submit"
+                      disabled={isLoading || ocrFlowStep !== 'idle'}
+                      className="w-full group relative flex justify-center py-5 px-6 border-0 rounded-2xl shadow-[0_10px_30px_rgba(79,70,229,0.3)] text-lg font-bold text-white bg-gradient-to-r from-indigo-600 via-violet-600 to-indigo-600 bg-[length:200%_auto] hover:bg-[position:right_center] focus:outline-none focus:ring-4 focus:ring-indigo-500/30 disabled:opacity-70 disabled:cursor-not-allowed transition-all duration-500 transform hover:-translate-y-1"
+                    >
+                      {ocrFlowStep === 'ocr-loading' ? (
+                        <span className="flex items-center">
+                          <Loader2 className="animate-spin -ml-1 mr-3 h-6 w-6" />
+                          {currentOcrLabel ? `「${currentOcrLabel}」を読み取り中...` : '読み取り中...'}
+                        </span>
+                      ) : (
+                        <span className="flex items-center">
+                          <BookOpen className="mr-3 h-6 w-6" />
+                          答案を読み取る
+                          <ArrowRight className="ml-3 h-6 w-6 group-hover:translate-x-1 transition-transform" />
+                        </span>
+                      )}
+                    </button>
+                  </div>
+                </form>
+
+                {/* OCR確認UI */}
+                {ocrFlowStep === 'confirm' && Object.keys(ocrResults).length > 0 && (
+                  <div className="mt-8 p-6 bg-gradient-to-br from-amber-50 to-orange-50 border border-amber-200 rounded-2xl">
+                    <h3 className="text-lg font-bold text-amber-800 mb-4 flex items-center">
+                      <Edit3 className="mr-2 h-5 w-5" />
+                      読み取り結果を確認・修正してください
                     </h3>
-                    <p className="text-xs text-orange-700 mb-3">
-                      PDFが複数ページある場合、各内容があるページ番号を入力すると読み取り精度が向上します。
-                      <br />
-                      <span className="font-medium">※ 空欄の場合は自動で全ページをスキャンします</span>
+                    <p className="text-sm text-amber-700 mb-6">
+                      AIが読み取った内容に誤りがあれば、下のテキストを直接編集してから「採点を開始」を押してください。
                     </p>
-                    <div className="grid grid-cols-3 gap-3">
-                      <div>
-                        <label className="text-xs font-medium text-orange-700 block mb-1">
-                          📝 答案のページ
-                        </label>
-                        <input
-                          type="text"
-                          placeholder="例: 5"
-                          value={pdfPageInfo.answerPage}
-                          onChange={(e) => setPdfPageInfo(prev => ({ ...prev, answerPage: e.target.value }))}
-                          className="w-full px-3 py-2 text-sm border border-orange-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-orange-500 focus:border-transparent bg-white"
-                        />
-                      </div>
-                      <div>
-                        <label className="text-xs font-medium text-orange-700 block mb-1">
-                          📖 問題文のページ
-                        </label>
-                        <input
-                          type="text"
-                          placeholder="例: 1-3"
-                          value={pdfPageInfo.problemPage}
-                          onChange={(e) => setPdfPageInfo(prev => ({ ...prev, problemPage: e.target.value }))}
-                          className="w-full px-3 py-2 text-sm border border-orange-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-orange-500 focus:border-transparent bg-white"
-                        />
-                      </div>
-                      <div>
-                        <label className="text-xs font-medium text-orange-700 block mb-1">
-                          ✅ 模範解答のページ
-                        </label>
-                        <input
-                          type="text"
-                          placeholder="例: 10-12"
-                          value={pdfPageInfo.modelAnswerPage}
-                          onChange={(e) => setPdfPageInfo(prev => ({ ...prev, modelAnswerPage: e.target.value }))}
-                          className="w-full px-3 py-2 text-sm border border-orange-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-orange-500 focus:border-transparent bg-white"
-                          disabled={modelAnswerInputMode === 'text'}
-                        />
-                      </div>
-                    </div>
-                  </div>
-                )}
 
-                {/* 模範解答入力モード選択 */}
-                {uploadedFiles.length > 0 && (
-                  <div className="mt-4 p-4 bg-gradient-to-br from-emerald-50 to-teal-50 border border-emerald-200 rounded-xl">
-                    <div className="flex items-center justify-between mb-3">
-                      <h4 className="text-sm font-bold text-emerald-800 flex items-center">
-                        <Edit3 className="w-4 h-4 mr-2" />
-                        模範解答の入力方法
-                      </h4>
-                      <div className="flex bg-white rounded-lg p-1 border border-emerald-200">
-                        <button
-                          type="button"
-                          onClick={() => setModelAnswerInputMode('image')}
-                          className={clsx(
-                            "px-3 py-1.5 text-xs font-medium rounded-md transition-all",
-                            modelAnswerInputMode === 'image'
-                              ? "bg-emerald-500 text-white shadow-sm"
-                              : "text-emerald-600 hover:bg-emerald-50"
-                          )}
-                        >
-                          📷 画像から
-                        </button>
-                        <button
-                          type="button"
-                          onClick={() => setModelAnswerInputMode('text')}
-                          className={clsx(
-                            "px-3 py-1.5 text-xs font-medium rounded-md transition-all",
-                            modelAnswerInputMode === 'text'
-                              ? "bg-emerald-500 text-white shadow-sm"
-                              : "text-emerald-600 hover:bg-emerald-50"
-                          )}
-                        >
-                          ✏️ 手入力
-                        </button>
-                      </div>
-                    </div>
-
-                    {modelAnswerInputMode === 'text' && (
-                      <div className="mt-3">
-                        <label className="text-xs font-medium text-emerald-700 block mb-2">
-                          模範解答のテキストを入力してください
-                        </label>
+                    {Object.entries(ocrResults).map(([label, result]) => (
+                      <div key={label} className="mb-6 last:mb-0">
+                        <div className="flex items-center justify-between mb-2">
+                          <label className="font-semibold text-slate-700">{label}</label>
+                          <span className="text-sm text-slate-500">
+                            {confirmedTexts[label]?.length || 0}文字
+                          </span>
+                        </div>
                         <textarea
-                          value={modelAnswerText}
-                          onChange={(e) => setModelAnswerText(e.target.value)}
-                          placeholder="例: 主人公は友人との別れに対する悲しみと、新しい土地での生活に対する不安を感じているから。"
-                          className="w-full h-32 p-3 border border-emerald-200 rounded-lg focus:ring-2 focus:ring-emerald-500 focus:border-emerald-500 text-sm leading-relaxed resize-y bg-white"
+                          value={confirmedTexts[label] || ''}
+                          onChange={(e) => setConfirmedTexts(prev => ({ ...prev, [label]: e.target.value }))}
+                          className="w-full h-40 p-4 border border-slate-300 rounded-xl focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 font-mono text-sm leading-relaxed resize-y"
+                          placeholder="読み取り結果がここに表示されます"
                         />
-                        <p className="text-xs text-emerald-600 mt-2">
-                          💡 採点対象の問題ごとに「大問○ 問○: 模範解答」の形式で入力できます。複数問題を採点する場合は改行して入力してください。
-                        </p>
+                        {result.charCount !== (confirmedTexts[label]?.length || 0) && (
+                          <p className="mt-1 text-xs text-amber-600">
+                            ※ 元の読み取り: {result.charCount}文字 → 修正後: {confirmedTexts[label]?.length || 0}文字
+                          </p>
+                        )}
                       </div>
-                    )}
+                    ))}
 
-                    {modelAnswerInputMode === 'image' && (
-                      <p className="text-xs text-emerald-600">
-                        アップロードした画像から模範解答を読み取ります。ファイルの役割設定で「模範解答」を指定してください。
-                      </p>
-                    )}
+                    <div className="flex gap-4 mt-6">
+                      <button
+                        onClick={handleOcrCancel}
+                        className="flex-1 py-3 px-6 border border-slate-300 rounded-xl text-slate-700 font-semibold hover:bg-slate-50 transition-colors"
+                      >
+                        キャンセル
+                      </button>
+                      <button
+                        onClick={handleGradeWithConfirmed}
+                        disabled={isLoading}
+                        className="flex-1 py-3 px-6 bg-gradient-to-r from-emerald-500 to-teal-500 text-white font-bold rounded-xl shadow-lg hover:shadow-xl transition-all disabled:opacity-70 flex items-center justify-center"
+                      >
+                        <CheckCircle className="mr-2 h-5 w-5" />
+                        採点を開始
+                      </button>
+                    </div>
                   </div>
                 )}
-              </div>
 
-              {error && session && user && (
-                <div className="rounded-2xl bg-red-50 p-5 border border-red-100 animate-shake shadow-sm">
-                  <div className="flex items-center mb-2">
-                    <div className="bg-red-100 p-2 rounded-full mr-4">
-                      <AlertCircle className="h-6 w-6 text-red-500" />
-                    </div>
-                    <p className="text-sm text-red-700 font-bold">{error}</p>
+                {/* 採点中の大きな表示（独立） */}
+                {ocrFlowStep === 'grading' && (
+                  <div className="mt-8 p-8 bg-gradient-to-br from-indigo-50 to-violet-50 border-2 border-indigo-200 rounded-2xl text-center">
+                    <Loader2 className="animate-spin h-12 w-12 text-indigo-600 mx-auto mb-4" />
+                    <p className="text-xl font-bold text-indigo-800 animate-pulse">AIが採点中...</p>
+                    <p className="text-sm text-indigo-600 mt-2">30秒〜2分程度かかる場合があります。<br />このままお待ちください。</p>
                   </div>
-                  {requirePlan && (
-                    <div className="mt-3 ml-14">
-                      <Link
-                        href="/pricing"
-                        className="inline-flex items-center px-4 py-2 bg-indigo-600 text-white font-bold rounded-xl hover:bg-indigo-700 transition-colors text-sm"
-                      >
-                        <CreditCard className="w-4 h-4 mr-2" />
-                        プランを購入する
-                      </Link>
-                    </div>
-                  )}
-                </div>
-              )}
-
-              <div className="pt-6">
-                <button
-                  type="submit"
-                  disabled={isLoading || ocrFlowStep !== 'idle'}
-                  className="w-full group relative flex justify-center py-5 px-6 border-0 rounded-2xl shadow-[0_10px_30px_rgba(79,70,229,0.3)] text-lg font-bold text-white bg-gradient-to-r from-indigo-600 via-violet-600 to-indigo-600 bg-[length:200%_auto] hover:bg-[position:right_center] focus:outline-none focus:ring-4 focus:ring-indigo-500/30 disabled:opacity-70 disabled:cursor-not-allowed transition-all duration-500 transform hover:-translate-y-1"
-                >
-                  {ocrFlowStep === 'ocr-loading' ? (
-                    <span className="flex items-center">
-                      <Loader2 className="animate-spin -ml-1 mr-3 h-6 w-6" />
-                      {currentOcrLabel ? `「${currentOcrLabel}」を読み取り中...` : '読み取り中...'}
-                    </span>
-                  ) : (
-                    <span className="flex items-center">
-                      <BookOpen className="mr-3 h-6 w-6" />
-                      答案を読み取る
-                      <ArrowRight className="ml-3 h-6 w-6 group-hover:translate-x-1 transition-transform" />
-                    </span>
-                  )}
-                </button>
-              </div>
-            </form>
-
-            {/* OCR確認UI */}
-            {ocrFlowStep === 'confirm' && Object.keys(ocrResults).length > 0 && (
-              <div className="mt-8 p-6 bg-gradient-to-br from-amber-50 to-orange-50 border border-amber-200 rounded-2xl">
-                <h3 className="text-lg font-bold text-amber-800 mb-4 flex items-center">
-                  <Edit3 className="mr-2 h-5 w-5" />
-                  読み取り結果を確認・修正してください
-                </h3>
-                <p className="text-sm text-amber-700 mb-6">
-                  AIが読み取った内容に誤りがあれば、下のテキストを直接編集してから「採点を開始」を押してください。
-                </p>
-
-                {Object.entries(ocrResults).map(([label, result]) => (
-                  <div key={label} className="mb-6 last:mb-0">
-                    <div className="flex items-center justify-between mb-2">
-                      <label className="font-semibold text-slate-700">{label}</label>
-                      <span className="text-sm text-slate-500">
-                        {confirmedTexts[label]?.length || 0}文字
-                      </span>
-                    </div>
-                    <textarea
-                      value={confirmedTexts[label] || ''}
-                      onChange={(e) => setConfirmedTexts(prev => ({ ...prev, [label]: e.target.value }))}
-                      className="w-full h-40 p-4 border border-slate-300 rounded-xl focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 font-mono text-sm leading-relaxed resize-y"
-                      placeholder="読み取り結果がここに表示されます"
-                    />
-                    {result.charCount !== (confirmedTexts[label]?.length || 0) && (
-                      <p className="mt-1 text-xs text-amber-600">
-                        ※ 元の読み取り: {result.charCount}文字 → 修正後: {confirmedTexts[label]?.length || 0}文字
-                      </p>
-                    )}
-                  </div>
-                ))}
-
-                <div className="flex gap-4 mt-6">
-                  <button
-                    onClick={handleOcrCancel}
-                    className="flex-1 py-3 px-6 border border-slate-300 rounded-xl text-slate-700 font-semibold hover:bg-slate-50 transition-colors"
-                  >
-                    キャンセル
-                  </button>
-                  <button
-                    onClick={handleGradeWithConfirmed}
-                    disabled={isLoading}
-                    className="flex-1 py-3 px-6 bg-gradient-to-r from-emerald-500 to-teal-500 text-white font-bold rounded-xl shadow-lg hover:shadow-xl transition-all disabled:opacity-70 flex items-center justify-center"
-                  >
-                    <CheckCircle className="mr-2 h-5 w-5" />
-                    採点を開始
-                  </button>
-                </div>
-              </div>
-            )}
-
-            {/* 採点中の大きな表示（独立） */}
-            {ocrFlowStep === 'grading' && (
-              <div className="mt-8 p-8 bg-gradient-to-br from-indigo-50 to-violet-50 border-2 border-indigo-200 rounded-2xl text-center">
-                <Loader2 className="animate-spin h-12 w-12 text-indigo-600 mx-auto mb-4" />
-                <p className="text-xl font-bold text-indigo-800 animate-pulse">AIが採点中...</p>
-                <p className="text-sm text-indigo-600 mt-2">30秒〜2分程度かかる場合があります。<br />このままお待ちください。</p>
-              </div>
-            )}
-            </>
+                )}
+              </>
             )}
             {/* End of Single Mode UI (inside Main Card) */}
 
@@ -5412,7 +5314,7 @@ export default function Home() {
                               </span>
                             )}
                           </div>
-                          
+
                           {/* 再採点中の表示 */}
                           {regradingLabel === res.label && (
                             <div className="flex items-center justify-end gap-2 mb-3 px-4 py-3 bg-gradient-to-r from-amber-50 to-orange-50 rounded-lg border border-amber-200 shadow-sm">
@@ -5421,7 +5323,7 @@ export default function Home() {
                               <span className="text-amber-600 text-xs">AIが採点をやり直しています</span>
                             </div>
                           )}
-                          
+
                           <div className="flex flex-wrap gap-2 justify-end">
                             <button
                               type="button"
@@ -5485,7 +5387,7 @@ export default function Home() {
                   {/* Recognized Text Section */}
                   <div className="mb-16">
                     {/* Recognized Text Section */}
-                    { (gradingResult.recognized_text || gradingResult.recognized_text_full) && (
+                    {(gradingResult.recognized_text || gradingResult.recognized_text_full) && (
                       <div className="mb-16">
                         <h3 className="text-xl font-bold text-slate-800 mb-6 flex items-center">
                           <span className="bg-blue-100 text-blue-600 rounded-lg w-8 h-8 flex items-center justify-center mr-3">👁️</span>
@@ -5847,7 +5749,7 @@ export default function Home() {
               <p className="text-sm text-slate-600">
                 読み取り結果に誤りがある場合、ここで修正して再採点できます（無料）。
               </p>
-              
+
               {/* 生徒の答案テキスト入力 */}
               <div>
                 <label className="block text-sm font-medium text-slate-700 mb-2">

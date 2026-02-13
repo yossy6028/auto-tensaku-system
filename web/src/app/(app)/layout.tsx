@@ -58,7 +58,7 @@ export default function AppLayout({
             </nav>
 
             <p className="text-xs text-slate-400">
-              © 2025 Taskal. All rights reserved.
+              © 2025 EduShift. All rights reserved.
             </p>
           </div>
         </div>

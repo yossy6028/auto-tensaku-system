@@ -34,7 +34,7 @@ export function LPFooter() {
 
         <div className="mt-8 border-t border-white/10 pt-8 text-center">
           <p className="text-xs text-slate-500">
-            &copy; {new Date().getFullYear()} Taskal AI. All rights reserved.
+            &copy; {new Date().getFullYear()} EduShift. All rights reserved.
           </p>
         </div>
       </div>

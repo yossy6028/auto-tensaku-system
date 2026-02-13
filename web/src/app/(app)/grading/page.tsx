@@ -826,8 +826,8 @@ export default function Home() {
               <div style="display: flex; align-items: center; gap: 12px; margin-bottom: 16px;">
                 <div style="width: 40px; height: 40px; background: linear-gradient(135deg, #6366f1, #8b5cf6); border-radius: 8px;"></div>
                 <div>
-                  <p style="font-size: 11px; color: #64748b; margin: 0;">auto-tensaku-system</p>
-                  <p style="font-size: 14px; font-weight: bold; color: #1e293b; margin: 0;">Taskal</p>
+                  <p style="font-size: 11px; color: #64748b; margin: 0;">EduShift</p>
+                  <p style="font-size: 14px; font-weight: bold; color: #1e293b; margin: 0;">Taskal AI</p>
                 </div>
               </div>
 

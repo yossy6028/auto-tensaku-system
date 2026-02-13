@@ -21,8 +21,8 @@ function TermsContent() {
         <div className="text-slate-700 leading-relaxed whitespace-pre-wrap text-sm">
           {`本規約において、以下の用語は以下の意味を有するものとします。
 
-1. 「本サービス」とは、当社が「auto-tensaku-system」の名称で提供する国語記述答案の自動添削サービス（関連するWebサイト、アプリケーション、APIその他一切のサービスを含みます）をいいます。
-2. 「当社」とは、Taskalをいいます。
+1. 「本サービス」とは、当社が「Taskal AI」の名称で提供する国語記述答案のAI自動添削サービス（関連するWebサイト、アプリケーション、APIその他一切のサービスを含みます）をいいます。
+2. 「当社」とは、EduShiftをいいます。
 3. 「ユーザー」とは、本規約に同意のうえ本サービスを利用するすべての個人または法人をいいます。
 4. 「法人ユーザー」とは、学習塾その他の教育機関として本サービスを利用する法人または団体をいいます。
 5. 「個人ユーザー」とは、法人ユーザー以外のユーザーをいいます。
@@ -264,9 +264,9 @@ function PrivacyContent() {
       <section>
         <h3 className="text-xl font-bold text-slate-800 mb-4 border-b border-slate-200 pb-2">1. 基本方針</h3>
         <p className="text-slate-700 leading-relaxed text-sm">
-          Taskal（以下「当社」といいます）は、お客様の個人情報保護を最重要事項と考え、
+          EduShift（以下「当社」といいます）は、お客様の個人情報保護を最重要事項と考え、
           関連する法令を遵守し、適切な管理を行います。本プライバシーポリシーは、
-          当社が提供する自動添削システム（以下「本サービス」といいます）における
+          当社が提供するTaskal AI（以下「本サービス」といいます）における
           個人情報の取り扱いについて定めるものです。
         </p>
       </section>
@@ -554,7 +554,7 @@ function PrivacyContent() {
         </p>
         <div className="bg-slate-50 rounded-xl p-5 border border-slate-200">
           <p className="text-slate-700 text-sm">
-            <strong>Taskal 運営事務局</strong><br />
+            <strong>EduShift 運営事務局</strong><br />
             メール：katsu.yoshii@gmail.com
           </p>
         </div>
@@ -574,13 +574,13 @@ function TokushohoContent() {
       <div className="overflow-x-auto">
         <dl className="divide-y divide-slate-200">
           {[
-            { term: '販売業者', desc: 'Taskal' },
+            { term: '販売業者', desc: 'EduShift' },
             { term: '代表者', desc: '吉井勝彦' },
             { term: '所在地', desc: '〒150-0021\n東京都渋谷区恵比寿西2丁目4番8号ウィンド恵比寿ビル8F' },
             { term: '電話番号', desc: '090-6028-3779（受付: 平日10:00〜17:00）' },
             { term: 'メールアドレス', desc: 'katsu.yoshii@gmail.com' },
             { term: 'ホームページURL', desc: 'https://www.edu-shift.com/' },
-            { term: 'サービスの名称', desc: 'auto-tensaku-system（国語記述答案 自動添削システム）' },
+            { term: 'サービスの名称', desc: 'Taskal AI（国語記述答案 AI自動添削システム）' },
             {
               term: '販売価格（税込）',
               desc: null,
@@ -732,7 +732,7 @@ export default function LegalPage() {
         {/* Footer */}
         <div className="text-center mt-12">
           <p className="text-sm text-slate-500">
-            &copy; 2025 Taskal. All rights reserved.
+            &copy; 2025 EduShift. All rights reserved.
           </p>
         </div>
       </div>

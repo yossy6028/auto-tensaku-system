@@ -135,7 +135,7 @@ export const GradingReport = React.forwardRef<HTMLDivElement, GradingReportProps
                         priority
                     />
                     <div className="leading-tight">
-                        <p className="text-xs text-slate-500 print:text-[11px]">auto-tensaku-system</p>
+                        <p className="text-xs text-slate-500 print:text-[11px]">EduShift</p>
                         <p className="text-sm font-bold text-slate-800 print:text-xs">Taskal AI</p>
                     </div>
                 </div>

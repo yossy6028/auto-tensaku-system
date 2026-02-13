@@ -98,8 +98,9 @@ export function HowItWorksSection() {
       <div className="mx-auto max-w-7xl px-6 lg:px-8">
         <motion.h2
           className="text-center text-3xl font-bold tracking-tight text-slate-900 sm:text-4xl"
-          initial={skipAnimation ? undefined : { opacity: 0, y: 20 }}
-          whileInView={{ opacity: 1, y: 0 }}
+          initial={{ opacity: 0, y: 20 }}
+          animate={skipAnimation ? { opacity: 1, y: 0 } : undefined}
+          whileInView={skipAnimation ? undefined : { opacity: 1, y: 0 }}
           viewport={{ once: true }}
           transition={{ duration: 0.5 }}
         >
@@ -111,16 +112,17 @@ export function HowItWorksSection() {
 
           <motion.div
             className="relative grid gap-12 md:grid-cols-3 md:gap-8"
-            variants={skipAnimation ? undefined : containerVariants}
-            initial={skipAnimation ? undefined : "hidden"}
-            whileInView="visible"
+            variants={containerVariants}
+            initial="hidden"
+            animate={skipAnimation ? "visible" : undefined}
+            whileInView={skipAnimation ? undefined : "visible"}
             viewport={{ once: true }}
           >
             {steps.map((step) => (
               <motion.div
                 key={step.number}
                 className="flex flex-col items-center text-center"
-                variants={skipAnimation ? undefined : stepVariants}
+                variants={stepVariants}
               >
                 <div className="relative flex h-32 w-32 items-center justify-center">
                   <div className="absolute inset-0 rounded-full bg-sky-100" />

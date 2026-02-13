@@ -79,8 +79,9 @@ export function PricingPreview() {
       <div className="mx-auto max-w-7xl px-6 lg:px-8">
         <motion.h2
           className="text-center text-3xl font-bold tracking-tight text-white sm:text-4xl"
-          initial={skipAnimation ? undefined : { opacity: 0, y: 20 }}
-          whileInView={{ opacity: 1, y: 0 }}
+          initial={{ opacity: 0, y: 20 }}
+          animate={skipAnimation ? { opacity: 1, y: 0 } : undefined}
+          whileInView={skipAnimation ? undefined : { opacity: 1, y: 0 }}
           viewport={{ once: true }}
           transition={{ duration: 0.5 }}
         >
@@ -89,16 +90,17 @@ export function PricingPreview() {
 
         <motion.div
           className="mt-16 grid items-center gap-8 sm:grid-cols-2 lg:grid-cols-3"
-          variants={skipAnimation ? undefined : containerVariants}
-          initial={skipAnimation ? undefined : "hidden"}
-          whileInView="visible"
+          variants={containerVariants}
+          initial="hidden"
+          animate={skipAnimation ? "visible" : undefined}
+          whileInView={skipAnimation ? undefined : "visible"}
           viewport={{ once: true }}
         >
           {plans.map((plan) => (
             <motion.div
               key={plan.name}
               className={`relative ${plan.recommended ? 'z-10 md:scale-105' : ''}`}
-              variants={skipAnimation ? undefined : cardVariants}
+              variants={cardVariants}
             >
               {plan.badge && (
                 <div className="absolute -top-4 left-1/2 z-10 -translate-x-1/2">
@@ -152,8 +154,9 @@ export function PricingPreview() {
 
         <motion.div
           className="mt-12 text-center"
-          initial={skipAnimation ? undefined : { opacity: 0 }}
-          whileInView={{ opacity: 1 }}
+          initial={{ opacity: 0 }}
+          animate={skipAnimation ? { opacity: 1 } : undefined}
+          whileInView={skipAnimation ? undefined : { opacity: 1 }}
           viewport={{ once: true }}
           transition={{ duration: 0.5, delay: 0.4 }}
         >

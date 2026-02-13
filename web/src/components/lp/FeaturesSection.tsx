@@ -62,8 +62,9 @@ export function FeaturesSection() {
       <div className="mx-auto max-w-7xl px-6 lg:px-8">
         <motion.h2
           className="text-center text-3xl font-bold tracking-tight text-white sm:text-4xl"
-          initial={skipAnimation ? undefined : { opacity: 0, y: 20 }}
-          whileInView={{ opacity: 1, y: 0 }}
+          initial={{ opacity: 0, y: 20 }}
+          animate={skipAnimation ? { opacity: 1, y: 0 } : undefined}
+          whileInView={skipAnimation ? undefined : { opacity: 1, y: 0 }}
           viewport={{ once: true }}
           transition={{ duration: 0.5 }}
         >
@@ -72,15 +73,16 @@ export function FeaturesSection() {
 
         <motion.div
           className="mt-16 grid gap-8 md:grid-cols-3"
-          variants={skipAnimation ? undefined : containerVariants}
-          initial={skipAnimation ? undefined : "hidden"}
-          whileInView="visible"
+          variants={containerVariants}
+          initial="hidden"
+          animate={skipAnimation ? "visible" : undefined}
+          whileInView={skipAnimation ? undefined : "visible"}
           viewport={{ once: true }}
         >
           {features.map((feature) => (
             <motion.div
               key={feature.title}
-              variants={skipAnimation ? undefined : cardVariants}
+              variants={cardVariants}
             >
               <div style={skipAnimation ? undefined : { perspective: 1000 }}>
                 <motion.div

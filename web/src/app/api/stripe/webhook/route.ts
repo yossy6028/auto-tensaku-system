@@ -6,15 +6,17 @@ import { logger } from '@/lib/security/logger';
 
 type SubscriptionStatus = 'active' | 'cancelled' | 'past_due';
 
-// Supabase Admin Client (サービスロールキー必須)
-const supabaseServiceRoleKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
-if (!supabaseServiceRoleKey) {
-  console.error('[Stripe Webhook] SUPABASE_SERVICE_ROLE_KEY is not set');
+// Supabase Admin Client (遅延初期化 — ビルド時にはenv未設定のためランタイムで生成)
+function getSupabaseAdmin() {
+  const supabaseServiceRoleKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
+  if (!supabaseServiceRoleKey) {
+    throw new Error('[Stripe Webhook] SUPABASE_SERVICE_ROLE_KEY is not set');
+  }
+  return createClient(
+    process.env.NEXT_PUBLIC_SUPABASE_URL!,
+    supabaseServiceRoleKey
+  );
 }
-const supabaseAdmin = createClient(
-  process.env.NEXT_PUBLIC_SUPABASE_URL!,
-  supabaseServiceRoleKey || ''
-);
 
 // プラン情報
 const PLAN_LIMITS: Record<string, number> = {
@@ -56,7 +58,7 @@ async function resolveUserIdFromStripe(params: {
 
   // 1) stripe_customer_id で user_profiles を検索
   if (customerId) {
-    const { data: profileByCustomer } = await supabaseAdmin
+    const { data: profileByCustomer } = await getSupabaseAdmin()
       .from('user_profiles')
       .select('id')
       .eq('stripe_customer_id', customerId)
@@ -68,7 +70,7 @@ async function resolveUserIdFromStripe(params: {
 
   // 2) email で検索
   if (customerEmail) {
-    const { data: profileByEmail } = await supabaseAdmin
+    const { data: profileByEmail } = await getSupabaseAdmin()
       .from('user_profiles')
       .select('id')
       .ilike('email', customerEmail)
@@ -84,7 +86,7 @@ async function resolveUserIdFromStripe(params: {
 // pricing_plansテーブルに紐づくプラン情報を解決し、存在しなければ作成する
 async function resolvePlan(stripePriceId?: string | null): Promise<PlanResolution> {
   // 1) price_id で紐づくプランを探す
-  const { data: planByPrice, error: planByPriceError } = await supabaseAdmin
+  const { data: planByPrice, error: planByPriceError } = await getSupabaseAdmin()
     .from('pricing_plans')
     .select('id, usage_limit, price_yen')
     .eq('stripe_price_id', stripePriceId || '')
@@ -108,7 +110,7 @@ async function resolvePlan(stripePriceId?: string | null): Promise<PlanResolutio
     logger.error('Unknown stripe_price_id, cannot map to plan:', stripePriceId);
   }
   const fallbackPlanId = resolvedPlanId || 'light';
-  const { data: planById, error: planByIdError } = await supabaseAdmin
+  const { data: planById, error: planByIdError } = await getSupabaseAdmin()
     .from('pricing_plans')
     .select('id, usage_limit, price_yen')
     .eq('id', fallbackPlanId)
@@ -129,7 +131,7 @@ async function resolvePlan(stripePriceId?: string | null): Promise<PlanResolutio
   // 3) なければ最低限の情報でプランを作成（外部キー制約エラー防止）
   const usageLimit = PLAN_LIMITS[fallbackPlanId] ?? null;
   const pricePaid = PLAN_PRICES[fallbackPlanId] ?? PLAN_PRICES.light;
-  const { data: insertedPlan, error: insertPlanError } = await supabaseAdmin
+  const { data: insertedPlan, error: insertPlanError } = await getSupabaseAdmin()
     .from('pricing_plans')
     .insert({
       id: fallbackPlanId,
@@ -199,7 +201,7 @@ async function upsertSubscriptionRecord(params: {
   };
 
   // 既存レコードをstripe_subscription_id優先で取得、なければuser_idで取得
-  const { data: existingByStripe, error: existingByStripeError } = await supabaseAdmin
+  const { data: existingByStripe, error: existingByStripeError } = await getSupabaseAdmin()
     .from('subscriptions')
     .select('id')
     .eq('stripe_subscription_id', subscriptionId)
@@ -212,7 +214,7 @@ async function upsertSubscriptionRecord(params: {
   let targetId = existingByStripe?.id;
 
   if (!targetId) {
-    const { data: existingByUser, error: existingByUserError } = await supabaseAdmin
+    const { data: existingByUser, error: existingByUserError } = await getSupabaseAdmin()
       .from('subscriptions')
       .select('id')
       .eq('user_id', userId)
@@ -228,7 +230,7 @@ async function upsertSubscriptionRecord(params: {
   }
 
   if (targetId) {
-    const { error: updateError } = await supabaseAdmin
+    const { error: updateError } = await getSupabaseAdmin()
       .from('subscriptions')
       .update({
         ...basePayload,
@@ -244,7 +246,7 @@ async function upsertSubscriptionRecord(params: {
     return;
   }
 
-  const { error: insertError } = await supabaseAdmin
+  const { error: insertError } = await getSupabaseAdmin()
     .from('subscriptions')
     .insert({
       ...basePayload,
@@ -283,7 +285,7 @@ export async function POST(request: NextRequest) {
   logger.info('Webhook event received:', event.type);
 
   // イベント重複処理防止（冪等性チェック — upsert + on conflict で原子的に判定）
-  const { data: insertedEvent, error: eventInsertError } = await supabaseAdmin
+  const { data: insertedEvent, error: eventInsertError } = await getSupabaseAdmin()
     .from('stripe_events')
     .upsert(
       { event_id: event.id, event_type: event.type, data: event.data },
@@ -348,11 +350,16 @@ export async function POST(request: NextRequest) {
           customerId,
           customerEmail,
         });
-        
+
         if (!userId) {
           logger.error('No user ID in subscription metadata');
           break;
         }
+
+        // プラン変更（price_id変更）を検出 → usage_count をリセット
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        const previousAttributes = (event.data as any).previous_attributes;
+        const planChanged = previousAttributes?.items !== undefined;
 
         const priceId = subscription.items.data[0]?.price?.id;
         await upsertSubscriptionRecord({
@@ -363,7 +370,12 @@ export async function POST(request: NextRequest) {
           currentPeriodStart: new Date(subscription.current_period_start * 1000),
           currentPeriodEnd: new Date(subscription.current_period_end * 1000),
           cancelAtPeriodEnd: subscription.cancel_at_period_end || false,
+          resetUsageCount: planChanged,
         });
+
+        if (planChanged) {
+          logger.info('Plan changed for user, usage_count reset:', userId);
+        }
         break;
       }
 

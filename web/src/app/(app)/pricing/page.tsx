@@ -93,9 +93,9 @@ function PricingContent() {
     const checkout = searchParams.get('checkout');
     if (checkout === 'success') {
       setCheckoutStatus('success');
-      // 3秒後に利用状況ページにリダイレクト
+      // 3秒後にサブスクリプション管理ページにリダイレクト
       setTimeout(() => {
-        router.push('/usage');
+        router.push('/subscription');
       }, 3000);
     } else if (checkout === 'cancelled') {
       setCheckoutStatus('cancelled');

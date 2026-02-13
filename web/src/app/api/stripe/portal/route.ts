@@ -13,7 +13,7 @@ const ALLOWED_ORIGINS = [
 
 function getSafeReturnUrl(request: NextRequest): string {
   const origin = request.headers.get('origin');
-  if (origin && ALLOWED_ORIGINS.some(allowed => origin.startsWith(allowed!))) {
+  if (origin && ALLOWED_ORIGINS.some(allowed => origin === allowed)) {
     return `${origin}/subscription`;
   }
   return `${ALLOWED_ORIGINS[0] || 'https://auto-tensaku-system.vercel.app'}/subscription`;

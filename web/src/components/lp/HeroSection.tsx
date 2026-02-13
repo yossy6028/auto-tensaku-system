@@ -50,9 +50,9 @@ export function HeroSection() {
           {...fadeUp}
           transition={{ duration: 0.6 }}
         >
-          添削に1時間、
+          もう、夜中に
           <br className="sm:hidden" />
-          もういらない。
+          赤ペン握らなくていい。
         </motion.h1>
 
         <motion.p
@@ -60,9 +60,9 @@ export function HeroSection() {
           {...fadeUp}
           transition={{ duration: 0.6, delay: 0.15 }}
         >
-          AIが国語の記述問題を瞬時に採点。
+          AIが記述問題を自動採点。
           <br className="hidden sm:inline" />
-          先生も保護者も、添削の負担から解放。
+          先生は授業準備や生徒対応に集中できる。
         </motion.p>
 
         <motion.div

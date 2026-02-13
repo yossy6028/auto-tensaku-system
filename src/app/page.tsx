@@ -145,11 +145,13 @@ export default function Home() {
     <main className="min-h-screen bg-slate-50 relative overflow-hidden selection:bg-indigo-100 selection:text-indigo-900 font-sans text-slate-900">
 
       {/* Background Decoration */}
-      <div className="absolute top-0 left-0 w-full h-full overflow-hidden -z-10 pointer-events-none">
-        <div className="absolute inset-0 bg-[radial-gradient(#6366f1_1px,transparent_1px)] [background-size:24px_24px] opacity-[0.03]"></div>
-        <div className="absolute top-[-10%] left-[-10%] w-[40%] h-[40%] rounded-full bg-indigo-400/20 blur-[100px] animate-pulse-slow"></div>
-        <div className="absolute top-[20%] right-[-5%] w-[30%] h-[30%] rounded-full bg-violet-400/20 blur-[100px] animate-pulse-slow delay-1000"></div>
-        <div className="absolute bottom-[-10%] left-[20%] w-[35%] h-[35%] rounded-full bg-blue-400/20 blur-[100px] animate-pulse-slow delay-2000"></div>
+      <div className="fixed top-0 left-0 w-full h-full overflow-hidden -z-10 pointer-events-none">
+        <img
+          src="/bg-realistic.png"
+          alt="Classroom Background"
+          className="absolute inset-0 w-full h-full object-cover"
+        />
+        <div className="absolute inset-0 bg-white/70 backdrop-blur-[2px]"></div>
       </div>
 
       <div className="max-w-5xl mx-auto py-12 px-4 sm:px-6 lg:px-8 relative z-10">
@@ -157,32 +159,40 @@ export default function Home() {
         {/* Header Section */}
         <div className="text-center mb-16 animate-fade-in relative">
           {/* Floating Icons */}
-          <div className="absolute top-10 left-[10%] text-indigo-200/60 hidden lg:block animate-float-slow">
+          <div className="absolute top-10 left-[5%] text-indigo-600/20 hidden lg:block animate-float-slow">
             <BookOpen className="w-16 h-16" />
           </div>
-          <div className="absolute bottom-10 right-[10%] text-violet-200/60 hidden lg:block animate-float-slower">
+          <div className="absolute bottom-10 right-[5%] text-violet-600/20 hidden lg:block animate-float-slower">
             <PenTool className="w-14 h-14" />
           </div>
-          <div className="absolute top-0 right-[15%] text-blue-200/60 hidden lg:block animate-float-slow delay-700">
+          <div className="absolute top-0 right-[15%] text-blue-600/20 hidden lg:block animate-float-slow delay-700">
             <GraduationCap className="w-12 h-12" />
           </div>
 
-          <div className="flex justify-center mb-8 transform hover:scale-105 transition-transform duration-500">
-            <div className="relative w-48 h-auto drop-shadow-2xl">
+          <div className="flex flex-col md:flex-row items-center justify-center gap-8 mb-10">
+            <div className="relative w-48 h-auto drop-shadow-lg transform hover:scale-105 transition-transform duration-500">
               <img
                 src="/logo.jpg"
                 alt="EduShift Logo"
                 className="w-full h-auto object-contain rounded-2xl"
               />
             </div>
+            <div className="relative w-64 h-auto rounded-2xl overflow-hidden shadow-2xl transform rotate-2 hover:rotate-0 transition-transform duration-500 border-4 border-white">
+               <img
+                src="/hero-correction.png"
+                alt="Correction Example"
+                className="w-full h-auto object-cover"
+              />
+            </div>
           </div>
-          <h1 className="text-5xl md:text-7xl font-black text-slate-800 tracking-tight mb-6 leading-tight">
+
+          <h1 className="text-5xl md:text-7xl font-black text-slate-800 tracking-tight mb-6 leading-tight drop-shadow-sm">
             国語記述式問題<br className="hidden md:block" />
-            <span className="text-transparent bg-clip-text bg-gradient-to-r from-indigo-600 via-violet-600 to-blue-600 animate-gradient-x">
+            <span className="text-transparent bg-clip-text bg-gradient-to-r from-indigo-700 via-violet-700 to-blue-700 animate-gradient-x">
               自動添削システム
             </span>
           </h1>
-          <p className="text-lg md:text-xl text-slate-600 max-w-2xl mx-auto leading-relaxed font-medium">
+          <p className="text-lg md:text-xl text-slate-700 max-w-2xl mx-auto leading-relaxed font-bold bg-white/40 backdrop-blur-sm p-4 rounded-xl shadow-sm">
             指導歴20年超のベテラン国語講師のノウハウとAIによる解析で、<br className="md:hidden" />あなたの思考に寄り添うフィードバックを。
           </p>
         </div>

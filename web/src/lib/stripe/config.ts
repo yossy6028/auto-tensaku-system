@@ -13,10 +13,16 @@ function getRequiredStripeEnv(key: string): string {
 
 const stripeSecretKey = getRequiredStripeEnv('STRIPE_SECRET_KEY');
 
-// サーバーサイド用Stripeインスタンス（キーが空の場合は初期化を遅延）
-export const stripe = stripeSecretKey
-  ? new Stripe(stripeSecretKey, { typescript: true })
-  : (null as unknown as Stripe); // 開発環境でStripeを使わない場合用
+// サーバーサイド用Stripeインスタンス
+// クライアントサイドでは実行されないため、サーバーサイドでキー未設定は致命的エラー
+function createStripeClient(): Stripe {
+  if (!stripeSecretKey) {
+    throw new Error('[Stripe] STRIPE_SECRET_KEY is not set. Stripe API calls will fail.');
+  }
+  return new Stripe(stripeSecretKey, { typescript: true });
+}
+
+export const stripe = typeof window === 'undefined' ? createStripeClient() : (null as unknown as Stripe);
 
 // 料金プランIDのマッピング
 // Stripeダッシュボードで作成したPrice IDをここに設定

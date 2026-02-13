@@ -6,10 +6,14 @@ import { logger } from '@/lib/security/logger';
 
 type SubscriptionStatus = 'active' | 'cancelled' | 'past_due';
 
-// Supabase Admin Client (サービスロールキー使用)
+// Supabase Admin Client (サービスロールキー必須)
+const supabaseServiceRoleKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
+if (!supabaseServiceRoleKey) {
+  console.error('[Stripe Webhook] SUPABASE_SERVICE_ROLE_KEY is not set');
+}
 const supabaseAdmin = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_URL!,
-  process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
+  supabaseServiceRoleKey || ''
 );
 
 // プラン情報
@@ -32,9 +36,10 @@ interface PlanResolution {
 }
 
 const mapStripeStatus = (stripeStatus?: string | null): SubscriptionStatus => {
-  if (stripeStatus === 'past_due' || stripeStatus === 'unpaid') return 'past_due';
+  if (stripeStatus === 'active' || stripeStatus === 'trialing') return 'active';
   if (stripeStatus === 'canceled' || stripeStatus === 'cancelled') return 'cancelled';
-  return 'active';
+  // incomplete, incomplete_expired, past_due, unpaid, paused など → past_due扱い
+  return 'past_due';
 };
 
 // Supabaseユーザーを特定する
@@ -98,7 +103,11 @@ async function resolvePlan(stripePriceId?: string | null): Promise<PlanResolutio
   }
 
   // 2) price_id からプランIDを解決し、既存IDで探す
-  const fallbackPlanId = getPlanIdFromStripePriceId(stripePriceId || '') || 'light';
+  const resolvedPlanId = getPlanIdFromStripePriceId(stripePriceId || '');
+  if (!resolvedPlanId) {
+    logger.error('Unknown stripe_price_id, cannot map to plan:', stripePriceId);
+  }
+  const fallbackPlanId = resolvedPlanId || 'light';
   const { data: planById, error: planByIdError } = await supabaseAdmin
     .from('pricing_plans')
     .select('id, usage_limit, price_yen')
@@ -273,22 +282,21 @@ export async function POST(request: NextRequest) {
 
   logger.info('Webhook event received:', event.type);
 
-  // イベント重複処理防止（冪等性チェック）
-  const { data: existingEvent } = await supabaseAdmin
+  // イベント重複処理防止（冪等性チェック — upsert + on conflict で原子的に判定）
+  const { data: insertedEvent, error: eventInsertError } = await supabaseAdmin
     .from('stripe_events')
+    .upsert(
+      { event_id: event.id, event_type: event.type, data: event.data },
+      { onConflict: 'event_id', ignoreDuplicates: true }
+    )
     .select('id')
-    .eq('event_id', event.id)
     .maybeSingle();
 
-  if (existingEvent) {
+  // upsert で行が返らない = 既に処理済み
+  if (!insertedEvent && !eventInsertError) {
     logger.info('Duplicate event skipped:', event.id);
     return NextResponse.json({ received: true });
   }
-
-  // イベントを記録
-  await supabaseAdmin
-    .from('stripe_events')
-    .insert({ event_id: event.id, event_type: event.type, data: event.data });
 
   try {
     switch (event.type) {

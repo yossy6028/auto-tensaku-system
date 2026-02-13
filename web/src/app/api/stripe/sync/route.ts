@@ -17,9 +17,9 @@ const PLAN_PRICES: Record<string, number> = {
 type SubscriptionStatus = 'active' | 'cancelled' | 'past_due';
 
 const mapStripeStatus = (stripeStatus?: string | null): SubscriptionStatus => {
-  if (stripeStatus === 'past_due' || stripeStatus === 'unpaid') return 'past_due';
+  if (stripeStatus === 'active' || stripeStatus === 'trialing') return 'active';
   if (stripeStatus === 'canceled' || stripeStatus === 'cancelled') return 'cancelled';
-  return 'active';
+  return 'past_due';
 };
 
 export async function POST(request: NextRequest) {
@@ -64,13 +64,23 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: 'Stripe上にサブスクリプションがありません' }, { status: 404 });
     }
 
-    // createdの新しい順にソートして最新を取得
-    const sorted = [...subscriptions.data].sort((a, b) => b.created - a.created);
+    // active/trialing を優先し、同一ステータス内ではcreatedの新しい順にソート
+    const statusPriority: Record<string, number> = { active: 0, trialing: 0, past_due: 1, unpaid: 2 };
+    const sorted = [...subscriptions.data].sort((a, b) => {
+      const pa = statusPriority[a.status] ?? 3;
+      const pb = statusPriority[b.status] ?? 3;
+      if (pa !== pb) return pa - pb;
+      return b.created - a.created;
+    });
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const subscription = sorted[0] as any;
 
     const priceId = subscription.items.data[0]?.price?.id || null;
-    const planId = getPlanIdFromStripePriceId(priceId || '') || 'light';
+    const resolvedPlanId = getPlanIdFromStripePriceId(priceId || '');
+    if (!resolvedPlanId) {
+      console.error('[Stripe Sync] Unknown stripe_price_id, cannot map to plan:', priceId);
+    }
+    const planId = resolvedPlanId || 'light';
     const usageLimit = PLAN_LIMITS[planId] ?? null;
     const pricePaid = PLAN_PRICES[planId] ?? PLAN_PRICES.light;
 

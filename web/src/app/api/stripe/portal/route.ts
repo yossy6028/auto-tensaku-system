@@ -4,10 +4,25 @@ import { stripe } from '@/lib/stripe/config';
 
 export const dynamic = 'force-dynamic';
 
+// 許可するリダイレクト先ドメインのホワイトリスト
+const ALLOWED_ORIGINS = [
+  process.env.NEXT_PUBLIC_APP_URL,
+  'https://auto-tensaku-system.vercel.app',
+  'http://localhost:3000',
+].filter(Boolean);
+
+function getSafeReturnUrl(request: NextRequest): string {
+  const origin = request.headers.get('origin');
+  if (origin && ALLOWED_ORIGINS.some(allowed => origin.startsWith(allowed!))) {
+    return `${origin}/subscription`;
+  }
+  return `${ALLOWED_ORIGINS[0] || 'https://auto-tensaku-system.vercel.app'}/subscription`;
+}
+
 export async function POST(request: NextRequest) {
   try {
     const supabase = await createClient();
-    
+
     // 認証チェック
     const { data: { user }, error: authError } = await supabase.auth.getUser();
     if (authError || !user) {
@@ -16,8 +31,6 @@ export async function POST(request: NextRequest) {
         { status: 401 }
       );
     }
-
-    const { returnUrl } = await request.json().catch(() => ({}));
 
     // ユーザープロファイルからStripe customer_idを取得
     const { data: profile } = await supabase
@@ -34,11 +47,11 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    // カスタマーポータルセッション作成
+    // カスタマーポータルセッション作成（リダイレクト先はサーバー固定）
     const portalSession = await stripe.billingPortal.sessions.create({
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       customer: (profile as any).stripe_customer_id,
-      return_url: returnUrl || `${request.headers.get('origin')}/subscription`,
+      return_url: getSafeReturnUrl(request),
     });
 
     return NextResponse.json({
@@ -46,18 +59,9 @@ export async function POST(request: NextRequest) {
     });
   } catch (error) {
     console.error('Portal session creation error:', error);
-    
-    if (error instanceof Error) {
-      return NextResponse.json(
-        { error: error.message },
-        { status: 500 }
-      );
-    }
-    
     return NextResponse.json(
       { error: 'ポータルセッションの作成に失敗しました' },
       { status: 500 }
     );
   }
 }
-

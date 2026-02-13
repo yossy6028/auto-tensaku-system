@@ -4,16 +4,29 @@ import { stripe, getStripePriceId } from '@/lib/stripe/config';
 
 export const dynamic = 'force-dynamic';
 
+// 許可するリダイレクト先ドメインのホワイトリスト
+const ALLOWED_ORIGINS = [
+  process.env.NEXT_PUBLIC_APP_URL,
+  'https://auto-tensaku-system.vercel.app',
+  'http://localhost:3000',
+].filter(Boolean);
+
+function getSafeOrigin(request: NextRequest): string {
+  const origin = request.headers.get('origin');
+  if (origin && ALLOWED_ORIGINS.some(allowed => origin.startsWith(allowed!))) {
+    return origin;
+  }
+  return ALLOWED_ORIGINS[0] || 'https://auto-tensaku-system.vercel.app';
+}
+
 interface CheckoutRequestBody {
   planName: string;
-  successUrl?: string;
-  cancelUrl?: string;
 }
 
 export async function POST(request: NextRequest) {
   try {
     const supabase = await createClient();
-    
+
     // 認証チェック
     const { data: { user }, error: authError } = await supabase.auth.getUser();
     if (authError || !user) {
@@ -24,7 +37,7 @@ export async function POST(request: NextRequest) {
     }
 
     const body: CheckoutRequestBody = await request.json();
-    const { planName, successUrl, cancelUrl } = body;
+    const { planName } = body;
 
     // プラン名からStripe Price IDを取得
     const priceId = getStripePriceId(planName);
@@ -77,9 +90,10 @@ export async function POST(request: NextRequest) {
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     if ((existingSubscription as any)?.stripe_subscription_id) {
       // カスタマーポータルにリダイレクトしてプラン変更させる
+      const safeOrigin = getSafeOrigin(request);
       const portalSession = await stripe.billingPortal.sessions.create({
         customer: customerId,
-        return_url: successUrl || `${request.headers.get('origin')}/subscription`,
+        return_url: `${safeOrigin}/subscription`,
       });
 
       return NextResponse.json({ 
@@ -88,8 +102,8 @@ export async function POST(request: NextRequest) {
       });
     }
 
-    // ベースURL取得
-    const origin = request.headers.get('origin') || 'http://localhost:3000';
+    // 安全なベースURL取得
+    const safeOrigin = getSafeOrigin(request);
 
     // Checkout Session作成
     const session = await stripe.checkout.sessions.create({
@@ -102,8 +116,8 @@ export async function POST(request: NextRequest) {
           quantity: 1,
         },
       ],
-      success_url: successUrl || `${origin}/subscription?checkout=success&session_id={CHECKOUT_SESSION_ID}`,
-      cancel_url: cancelUrl || `${origin}/pricing?checkout=cancelled`,
+      success_url: `${safeOrigin}/subscription?checkout=success&session_id={CHECKOUT_SESSION_ID}`,
+      cancel_url: `${safeOrigin}/pricing?checkout=cancelled`,
       subscription_data: {
         metadata: {
           supabase_user_id: user.id,
@@ -129,14 +143,6 @@ export async function POST(request: NextRequest) {
 
   } catch (error) {
     console.error('Checkout session creation error:', error);
-    
-    if (error instanceof Error) {
-      return NextResponse.json(
-        { error: error.message },
-        { status: 500 }
-      );
-    }
-    
     return NextResponse.json(
       { error: '決済セッションの作成に失敗しました' },
       { status: 500 }

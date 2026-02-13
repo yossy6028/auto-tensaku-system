@@ -18,7 +18,7 @@ type Plan = {
 const plans: Plan[] = [
   {
     name: 'ライト',
-    price: '¥780',
+    price: '¥980',
     frequency: '月10回',
     features: ['AI自動添削', '3軸評価', '写真アップロード'],
     accent: 'text-es-teal',

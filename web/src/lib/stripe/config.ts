@@ -21,7 +21,7 @@ export const stripe = stripeSecretKey
 // 料金プランIDのマッピング
 // Stripeダッシュボードで作成したPrice IDをここに設定
 export const STRIPE_PRICE_IDS = {
-  light: getRequiredStripeEnv('STRIPE_PRICE_LIGHT_ID'),      // ライトプラン (¥780/月)※期間限定
+  light: getRequiredStripeEnv('STRIPE_PRICE_LIGHT_ID'),      // ライトプラン (¥980/月)※期間限定
   standard: getRequiredStripeEnv('STRIPE_PRICE_STANDARD_ID'), // スタンダードプラン (¥1,980/月)※期間限定
   unlimited: getRequiredStripeEnv('STRIPE_PRICE_UNLIMITED_ID'), // 無制限プラン (¥4,980/月)※期間限定
 } as const;

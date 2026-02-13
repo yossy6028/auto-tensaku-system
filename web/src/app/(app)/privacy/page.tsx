@@ -585,7 +585,7 @@ function TokushohoContent() {
               term: '販売価格（税込）',
               desc: null,
               table: [
-                { plan: 'ライトプラン', price: '月額 ¥780（税込）※期間限定価格' },
+                { plan: 'ライトプラン', price: '月額 ¥980（税込）※期間限定価格' },
                 { plan: 'スタンダードプラン', price: '月額 ¥1,980（税込）※期間限定価格' },
                 { plan: '無制限プラン', price: '月額 ¥4,980（税込）※期間限定価格' },
               ],

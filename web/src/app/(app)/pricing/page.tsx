@@ -10,7 +10,7 @@ const plans = [
   {
     name: 'ライト',
     originalPrice: 1480,
-    price: 780,
+    price: 980,
     period: '月額',
     description: '気軽に始めたい方向け',
     features: [

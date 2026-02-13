@@ -1,0 +1,640 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>EduShift AI - Color Palette Preview</title>
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body {
+    font-family: 'Inter', 'Noto Sans JP', -apple-system, sans-serif;
+    background: #f8fafc;
+    color: #171717;
+    padding: 40px;
+    line-height: 1.6;
+  }
+  h1 { font-size: 28px; font-weight: 900; margin-bottom: 8px; }
+  h2 { font-size: 20px; font-weight: 700; margin: 40px 0 16px; color: #334155; }
+  h3 { font-size: 14px; font-weight: 600; margin-bottom: 12px; color: #64748b; text-transform: uppercase; letter-spacing: 0.05em; }
+  .subtitle { color: #64748b; margin-bottom: 40px; }
+
+  .palette-row {
+    display: flex;
+    gap: 16px;
+    flex-wrap: wrap;
+    margin-bottom: 32px;
+  }
+  .swatch {
+    width: 160px;
+    border-radius: 12px;
+    overflow: hidden;
+    background: white;
+    box-shadow: 0 1px 3px rgba(0,0,0,0.1);
+    transition: transform 0.2s;
+  }
+  .swatch:hover { transform: translateY(-2px); box-shadow: 0 4px 12px rgba(0,0,0,0.15); }
+  .swatch-color {
+    height: 80px;
+    display: flex;
+    align-items: flex-end;
+    padding: 8px 12px;
+  }
+  .swatch-info { padding: 10px 12px; }
+  .swatch-name { font-size: 13px; font-weight: 600; }
+  .swatch-hex { font-size: 12px; color: #94a3b8; font-family: monospace; }
+  .swatch-usage { font-size: 11px; color: #94a3b8; margin-top: 2px; }
+
+  .current-tag {
+    display: inline-block; font-size: 10px; font-weight: 600;
+    background: #e2e8f0; color: #475569; padding: 2px 6px;
+    border-radius: 4px; margin-left: 4px; vertical-align: middle;
+  }
+  .new-tag {
+    display: inline-block; font-size: 10px; font-weight: 600;
+    background: #dcfce7; color: #166534; padding: 2px 6px;
+    border-radius: 4px; margin-left: 4px; vertical-align: middle;
+  }
+
+  .section-demo {
+    margin-top: 48px;
+    border-top: 1px solid #e2e8f0;
+    padding-top: 40px;
+  }
+
+  .demo-row {
+    display: flex;
+    gap: 24px;
+    flex-wrap: wrap;
+    margin-top: 20px;
+  }
+
+  /* Button demos */
+  .btn {
+    display: inline-flex; align-items: center; justify-content: center;
+    padding: 12px 32px; border-radius: 9999px; font-size: 15px;
+    font-weight: 600; cursor: pointer; border: none;
+    transition: transform 0.2s, box-shadow 0.2s;
+    text-decoration: none;
+  }
+  .btn:hover { transform: scale(1.05); }
+  .btn-primary { background: #2DB3A0; color: white; box-shadow: 0 4px 14px rgba(45,179,160,0.25); }
+  .btn-secondary { background: transparent; color: white; border: 1px solid rgba(255,255,255,0.3); }
+  .btn-gradient { background: linear-gradient(135deg, #1565C0, #2DB3A0); color: white; box-shadow: 0 4px 14px rgba(21,101,192,0.25); }
+
+  /* Card demos */
+  .card-demo {
+    border-radius: 16px; padding: 24px; width: 280px;
+  }
+  .card-light { background: white; box-shadow: 0 4px 12px rgba(0,0,0,0.08); }
+  .card-dark { background: rgba(255,255,255,0.05); border: 1px solid rgba(255,255,255,0.1); backdrop-filter: blur(8px); }
+  .dark-bg { background: #0f172a; padding: 32px; border-radius: 16px; }
+
+  /* Gradient section demos */
+  .gradient-strip {
+    height: 120px; border-radius: 12px; display: flex;
+    align-items: center; justify-content: center;
+    color: white; font-weight: 600; font-size: 14px;
+    margin-bottom: 12px;
+  }
+
+  /* Section rhythm demo */
+  .rhythm-demo { display: flex; flex-direction: column; gap: 0; border-radius: 12px; overflow: hidden; box-shadow: 0 4px 12px rgba(0,0,0,0.1); }
+  .rhythm-section { padding: 20px 24px; font-size: 13px; font-weight: 500; }
+
+  /* Comparison */
+  .compare-container { display: flex; gap: 32px; flex-wrap: wrap; margin-top: 24px; }
+  .compare-col { flex: 1; min-width: 300px; }
+  .compare-title { font-size: 14px; font-weight: 700; margin-bottom: 12px; text-align: center; }
+</style>
+</head>
+<body>
+
+<h1>EduShift AI — カラーパレット提案</h1>
+<p class="subtitle">ロゴのティール〜ブルーグラデーションを軸にした拡張パレット</p>
+
+<!-- ==================== BRAND COLORS ==================== -->
+<h2>Brand Colors（ブランドカラー）</h2>
+<h3>Primary</h3>
+<div class="palette-row">
+  <div class="swatch">
+    <div class="swatch-color" style="background: #2DB3A0;"></div>
+    <div class="swatch-info">
+      <div class="swatch-name">Teal <span class="current-tag">現行</span></div>
+      <div class="swatch-hex">#2DB3A0</div>
+      <div class="swatch-usage">CTA, 主要アクション</div>
+    </div>
+  </div>
+  <div class="swatch">
+    <div class="swatch-color" style="background: #249688;"></div>
+    <div class="swatch-info">
+      <div class="swatch-name">Teal Dark <span class="new-tag">NEW</span></div>
+      <div class="swatch-hex">#249688</div>
+      <div class="swatch-usage">CTAホバー</div>
+    </div>
+  </div>
+  <div class="swatch">
+    <div class="swatch-color" style="background: #E6F7F5;"></div>
+    <div class="swatch-info">
+      <div class="swatch-name">Teal Light <span class="new-tag">NEW</span></div>
+      <div class="swatch-hex">#E6F7F5</div>
+      <div class="swatch-usage">背景, バッジ背景</div>
+    </div>
+  </div>
+</div>
+
+<h3>Secondary</h3>
+<div class="palette-row">
+  <div class="swatch">
+    <div class="swatch-color" style="background: #1565C0;"></div>
+    <div class="swatch-info">
+      <div class="swatch-name">Blue <span class="current-tag">現行</span></div>
+      <div class="swatch-hex">#1565C0</div>
+      <div class="swatch-usage">特長, ステップ番号</div>
+    </div>
+  </div>
+  <div class="swatch">
+    <div class="swatch-color" style="background: #0D47A1;"></div>
+    <div class="swatch-info">
+      <div class="swatch-name">Dark Blue <span class="current-tag">現行</span></div>
+      <div class="swatch-hex">#0D47A1</div>
+      <div class="swatch-usage">Hero/CTA背景</div>
+    </div>
+  </div>
+  <div class="swatch">
+    <div class="swatch-color" style="background: #E3F2FD;"></div>
+    <div class="swatch-info">
+      <div class="swatch-name">Blue Light <span class="new-tag">NEW</span></div>
+      <div class="swatch-hex">#E3F2FD</div>
+      <div class="swatch-usage">Feature背景, アクセント</div>
+    </div>
+  </div>
+</div>
+
+<h3>Accent（注目・強調用）</h3>
+<div class="palette-row">
+  <div class="swatch">
+    <div class="swatch-color" style="background: #F59E0B;"></div>
+    <div class="swatch-info">
+      <div class="swatch-name">Amber <span class="new-tag">NEW</span></div>
+      <div class="swatch-hex">#F59E0B</div>
+      <div class="swatch-usage">バッジ, 星評価, 注目</div>
+    </div>
+  </div>
+  <div class="swatch">
+    <div class="swatch-color" style="background: #FEF3C7;"></div>
+    <div class="swatch-info">
+      <div class="swatch-name">Amber Light <span class="new-tag">NEW</span></div>
+      <div class="swatch-hex">#FEF3C7</div>
+      <div class="swatch-usage">ハイライト背景</div>
+    </div>
+  </div>
+  <div class="swatch">
+    <div class="swatch-color" style="background: #D97706;"></div>
+    <div class="swatch-info">
+      <div class="swatch-name">Amber Dark <span class="new-tag">NEW</span></div>
+      <div class="swatch-hex">#D97706</div>
+      <div class="swatch-usage">バッジテキスト</div>
+    </div>
+  </div>
+</div>
+
+<!-- ==================== SURFACE COLORS ==================== -->
+<h2>Surface Colors（背景色）</h2>
+<div class="palette-row">
+  <div class="swatch">
+    <div class="swatch-color" style="background: #FFFFFF; border-bottom: 1px solid #e2e8f0;"></div>
+    <div class="swatch-info">
+      <div class="swatch-name">White</div>
+      <div class="swatch-hex">#FFFFFF</div>
+      <div class="swatch-usage">カード, ベース背景</div>
+    </div>
+  </div>
+  <div class="swatch">
+    <div class="swatch-color" style="background: #F8FAFC; border-bottom: 1px solid #e2e8f0;"></div>
+    <div class="swatch-info">
+      <div class="swatch-name">Slate 50</div>
+      <div class="swatch-hex">#F8FAFC</div>
+      <div class="swatch-usage">ライトセクション背景</div>
+    </div>
+  </div>
+  <div class="swatch">
+    <div class="swatch-color" style="background: #F0FDFA; border-bottom: 1px solid #e2e8f0;"></div>
+    <div class="swatch-info">
+      <div class="swatch-name">Teal 50 <span class="new-tag">NEW</span></div>
+      <div class="swatch-hex">#F0FDFA</div>
+      <div class="swatch-usage">Solution背景</div>
+    </div>
+  </div>
+  <div class="swatch">
+    <div class="swatch-color" style="background: #0F172A;"><span style="color:white;font-size:11px;"></span></div>
+    <div class="swatch-info">
+      <div class="swatch-name">Slate 900</div>
+      <div class="swatch-hex">#0F172A</div>
+      <div class="swatch-usage">ダークセクション</div>
+    </div>
+  </div>
+  <div class="swatch">
+    <div class="swatch-color" style="background: #0A1628;"></div>
+    <div class="swatch-info">
+      <div class="swatch-name">Deep Navy <span class="new-tag">NEW</span></div>
+      <div class="swatch-hex">#0A1628</div>
+      <div class="swatch-usage">Hero/CTA 深い背景</div>
+    </div>
+  </div>
+</div>
+
+<!-- ==================== TEXT COLORS ==================== -->
+<h2>Text Colors（テキスト色）</h2>
+<div class="palette-row">
+  <div class="swatch">
+    <div class="swatch-color" style="background: #171717;"></div>
+    <div class="swatch-info">
+      <div class="swatch-name">On Light - Primary</div>
+      <div class="swatch-hex">#171717</div>
+      <div class="swatch-usage">見出し</div>
+    </div>
+  </div>
+  <div class="swatch">
+    <div class="swatch-color" style="background: #475569;"></div>
+    <div class="swatch-info">
+      <div class="swatch-name">On Light - Secondary</div>
+      <div class="swatch-hex">#475569</div>
+      <div class="swatch-usage">本文</div>
+    </div>
+  </div>
+  <div class="swatch">
+    <div class="swatch-color" style="background: #FFFFFF; border: 2px solid #0f172a;"></div>
+    <div class="swatch-info">
+      <div class="swatch-name">On Dark - Primary</div>
+      <div class="swatch-hex">#FFFFFF</div>
+      <div class="swatch-usage">ダーク上の見出し</div>
+    </div>
+  </div>
+  <div class="swatch">
+    <div class="swatch-color" style="background: #CBD5E1;"></div>
+    <div class="swatch-info">
+      <div class="swatch-name">On Dark - Secondary</div>
+      <div class="swatch-hex">#CBD5E1</div>
+      <div class="swatch-usage">ダーク上の本文</div>
+    </div>
+  </div>
+  <div class="swatch">
+    <div class="swatch-color" style="background: #94A3B8;"></div>
+    <div class="swatch-info">
+      <div class="swatch-name">On Dark - Tertiary</div>
+      <div class="swatch-hex">#94A3B8</div>
+      <div class="swatch-usage">補助テキスト, キャプション</div>
+    </div>
+  </div>
+</div>
+
+<!-- ==================== SEMANTIC COLORS ==================== -->
+<h2>Semantic Colors（意味的カラー）</h2>
+<h3>SolutionSection Before/After 改善案</h3>
+<div class="compare-container">
+  <div class="compare-col">
+    <div class="compare-title">現行: 汎用 赤/緑</div>
+    <div style="display:flex; gap:12px;">
+      <div class="swatch" style="width:140px;">
+        <div class="swatch-color" style="background: #FEF2F2; border: 1px solid #FECACA; height:60px;"></div>
+        <div class="swatch-info">
+          <div class="swatch-name" style="color:#991B1B;">Before (赤系)</div>
+          <div class="swatch-hex">#FEF2F2 / #DC2626</div>
+        </div>
+      </div>
+      <div class="swatch" style="width:140px;">
+        <div class="swatch-color" style="background: #F0FDF4; border: 1px solid #BBF7D0; height:60px;"></div>
+        <div class="swatch-info">
+          <div class="swatch-name" style="color:#166534;">After (緑系)</div>
+          <div class="swatch-hex">#F0FDF4 / #16A34A</div>
+        </div>
+      </div>
+    </div>
+  </div>
+  <div class="compare-col">
+    <div class="compare-title">提案A: ブランド色ベース</div>
+    <div style="display:flex; gap:12px;">
+      <div class="swatch" style="width:140px;">
+        <div class="swatch-color" style="background: #F1F5F9; border: 1px solid #CBD5E1; height:60px;"></div>
+        <div class="swatch-info">
+          <div class="swatch-name" style="color:#475569;">Before (グレー系)</div>
+          <div class="swatch-hex">#F1F5F9 / #64748B</div>
+        </div>
+      </div>
+      <div class="swatch" style="width:140px;">
+        <div class="swatch-color" style="background: #E6F7F5; border: 1px solid #99DDD3; height:60px;"></div>
+        <div class="swatch-info">
+          <div class="swatch-name" style="color:#1A7A6C;">After (Teal系)</div>
+          <div class="swatch-hex">#E6F7F5 / #2DB3A0</div>
+        </div>
+      </div>
+    </div>
+  </div>
+  <div class="compare-col">
+    <div class="compare-title">提案B: コントラスト重視</div>
+    <div style="display:flex; gap:12px;">
+      <div class="swatch" style="width:140px;">
+        <div class="swatch-color" style="background: #FFF7ED; border: 1px solid #FED7AA; height:60px;"></div>
+        <div class="swatch-info">
+          <div class="swatch-name" style="color:#9A3412;">Before (Amber系)</div>
+          <div class="swatch-hex">#FFF7ED / #EA580C</div>
+        </div>
+      </div>
+      <div class="swatch" style="width:140px;">
+        <div class="swatch-color" style="background: #E6F7F5; border: 1px solid #99DDD3; height:60px;"></div>
+        <div class="swatch-info">
+          <div class="swatch-name" style="color:#1A7A6C;">After (Teal系)</div>
+          <div class="swatch-hex">#E6F7F5 / #2DB3A0</div>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ==================== SECTION RHYTHM ==================== -->
+<div class="section-demo">
+<h2>セクション背景リズム比較</h2>
+<div class="compare-container">
+  <div class="compare-col">
+    <div class="compare-title">現行（不規則な明暗）</div>
+    <div class="rhythm-demo">
+      <div class="rhythm-section" style="background: linear-gradient(135deg, #0F172A, #0D47A1); color: white;">Header + Hero（ダーク）</div>
+      <div class="rhythm-section" style="background: #F8FAFC; color: #334155;">Problem（ライト）</div>
+      <div class="rhythm-section" style="background: linear-gradient(135deg, #E0F2FE, #CCFBF1); color: #334155;">Solution（ライト薄青/緑）</div>
+      <div class="rhythm-section" style="background: #0F172A; color: white;">Features（ダーク）</div>
+      <div class="rhythm-section" style="background: #F8FAFC; color: #334155;">HowItWorks（ライト）</div>
+      <div class="rhythm-section" style="background: #0F172A; color: white;">Video（ダーク）</div>
+      <div class="rhythm-section" style="background: linear-gradient(135deg, #0F172A, #0D47A1); color: white;">Pricing（ダーク）</div>
+      <div class="rhythm-section" style="background: #F8FAFC; color: #334155;">Testimonials（ライト）</div>
+      <div class="rhythm-section" style="background: linear-gradient(135deg, #0D47A1, #0F172A); color: white;">CTA（ダーク）</div>
+    </div>
+  </div>
+  <div class="compare-col">
+    <div class="compare-title">提案（整理されたリズム）</div>
+    <div class="rhythm-demo">
+      <div class="rhythm-section" style="background: linear-gradient(135deg, #0A1628, #0D47A1); color: white;">Header + Hero（ダーク）</div>
+      <div class="rhythm-section" style="background: #FFFFFF; color: #334155; border-bottom: 1px solid #f1f5f9;">Social Proof Bar（白）★NEW</div>
+      <div class="rhythm-section" style="background: #F8FAFC; color: #334155;">Problem（ライト）</div>
+      <div class="rhythm-section" style="background: #FFFFFF; color: #334155;">Solution（白）</div>
+      <div class="rhythm-section" style="background: #0F172A; color: white;">Features（ダーク）</div>
+      <div class="rhythm-section" style="background: #F8FAFC; color: #334155;">HowItWorks（ライト）</div>
+      <div class="rhythm-section" style="background: #FFFFFF; color: #334155;">Testimonials + Video（白）</div>
+      <div class="rhythm-section" style="background: linear-gradient(135deg, #0F172A, #0D47A1); color: white;">Pricing（ダーク）</div>
+      <div class="rhythm-section" style="background: #F8FAFC; color: #334155;">FAQ（ライト）★NEW</div>
+      <div class="rhythm-section" style="background: linear-gradient(135deg, #0D47A1, #2DB3A0); color: white;">CTA（ブランドグラデーション）</div>
+      <div class="rhythm-section" style="background: #0A1628; color: #94A3B8;">Footer（ダーク）★NEW</div>
+    </div>
+  </div>
+</div>
+</div>
+
+<!-- ==================== GRADIENT DEMOS ==================== -->
+<div class="section-demo">
+<h2>グラデーション定義</h2>
+<div class="gradient-strip" style="background: linear-gradient(135deg, #0A1628, #0D47A1, #0a3060);">
+  Hero: Navy → Blue → Dark Blue
+</div>
+<div class="gradient-strip" style="background: linear-gradient(135deg, #0F172A, #0D47A1);">
+  Pricing: Slate 900 → Blue
+</div>
+<div class="gradient-strip" style="background: linear-gradient(135deg, #0D47A1, #2DB3A0);">
+  CTA / ボタン: Blue → Teal（ブランドシグネチャー）
+</div>
+<div class="gradient-strip" style="background: linear-gradient(135deg, #2DB3A0, #1565C0);">
+  アバター / アクセント: Teal → Blue
+</div>
+<div class="gradient-strip" style="background: linear-gradient(135deg, #F59E0B, #EA580C);">
+  バッジ: Amber → Orange
+</div>
+</div>
+
+<!-- ==================== BUTTON DEMOS ==================== -->
+<div class="section-demo">
+<h2>ボタンプレビュー</h2>
+<div style="display:flex; gap:24px; flex-wrap:wrap; align-items:center; margin-top:20px;">
+  <div style="padding:24px;">
+    <button class="btn btn-primary">無料で試してみる</button>
+    <div style="font-size:11px; color:#94a3b8; margin-top:8px; text-align:center;">Primary CTA</div>
+  </div>
+  <div style="padding:24px;">
+    <button class="btn btn-gradient">このプランで始める</button>
+    <div style="font-size:11px; color:#94a3b8; margin-top:8px; text-align:center;">Gradient CTA</div>
+  </div>
+  <div style="background:#0F172A; padding:24px; border-radius:12px;">
+    <button class="btn btn-primary">無料で始める</button>
+    <div style="font-size:11px; color:#94a3b8; margin-top:8px; text-align:center;">Primary on Dark</div>
+  </div>
+  <div style="background:#0F172A; padding:24px; border-radius:12px;">
+    <button class="btn btn-secondary">料金プランを見る</button>
+    <div style="font-size:11px; color:#94a3b8; margin-top:8px; text-align:center;">Secondary on Dark</div>
+  </div>
+</div>
+</div>
+
+<!-- ==================== PROBLEM SECTION COLOR UNIFICATION ==================== -->
+<div class="section-demo">
+<h2>ProblemSection カラー統一案</h2>
+<div class="compare-container">
+  <div class="compare-col">
+    <div class="compare-title">現行: バラバラのアクセント色</div>
+    <div style="display:flex; gap:12px;">
+      <div style="width:100px; text-align:center;">
+        <div style="width:56px; height:56px; border-radius:50%; background:#FFE4E6; display:flex; align-items:center; justify-content:center; margin:0 auto;">
+          <span style="color:#DC2626; font-size:24px;">&#9201;</span>
+        </div>
+        <div style="font-size:11px; color:#64748b; margin-top:4px;">Rose</div>
+      </div>
+      <div style="width:100px; text-align:center;">
+        <div style="width:56px; height:56px; border-radius:50%; background:#FEF3C7; display:flex; align-items:center; justify-content:center; margin:0 auto;">
+          <span style="color:#D97706; font-size:24px;">&#9878;</span>
+        </div>
+        <div style="font-size:11px; color:#64748b; margin-top:4px;">Amber</div>
+      </div>
+      <div style="width:100px; text-align:center;">
+        <div style="width:56px; height:56px; border-radius:50%; background:#DBEAFE; display:flex; align-items:center; justify-content:center; margin:0 auto;">
+          <span style="color:#2563EB; font-size:24px;">&#8600;</span>
+        </div>
+        <div style="font-size:11px; color:#64748b; margin-top:4px;">Blue</div>
+      </div>
+    </div>
+  </div>
+  <div class="compare-col">
+    <div class="compare-title">提案: ブランドカラーバリエーション</div>
+    <div style="display:flex; gap:12px;">
+      <div style="width:100px; text-align:center;">
+        <div style="width:56px; height:56px; border-radius:50%; background:#E6F7F5; display:flex; align-items:center; justify-content:center; margin:0 auto;">
+          <span style="color:#2DB3A0; font-size:24px;">&#9201;</span>
+        </div>
+        <div style="font-size:11px; color:#64748b; margin-top:4px;">Teal Light</div>
+      </div>
+      <div style="width:100px; text-align:center;">
+        <div style="width:56px; height:56px; border-radius:50%; background:#E3F2FD; display:flex; align-items:center; justify-content:center; margin:0 auto;">
+          <span style="color:#1565C0; font-size:24px;">&#9878;</span>
+        </div>
+        <div style="font-size:11px; color:#64748b; margin-top:4px;">Blue Light</div>
+      </div>
+      <div style="width:100px; text-align:center;">
+        <div style="width:56px; height:56px; border-radius:50%; background:#E8EAF6; display:flex; align-items:center; justify-content:center; margin:0 auto;">
+          <span style="color:#0D47A1; font-size:24px;">&#8600;</span>
+        </div>
+        <div style="font-size:11px; color:#64748b; margin-top:4px;">Dark Blue Light</div>
+      </div>
+    </div>
+  </div>
+</div>
+</div>
+
+<!-- ==================== FULL PALETTE SUMMARY ==================== -->
+<div class="section-demo">
+<h2>最終パレットサマリ</h2>
+<p style="color:#64748b; margin-bottom:20px;">Figma Variables に登録する全色一覧</p>
+<table style="width:100%; border-collapse:collapse; font-size:13px;">
+  <thead>
+    <tr style="border-bottom:2px solid #e2e8f0;">
+      <th style="text-align:left; padding:8px; color:#64748b;">トークン名</th>
+      <th style="text-align:left; padding:8px; color:#64748b;">HEX</th>
+      <th style="text-align:left; padding:8px; color:#64748b;">用途</th>
+      <th style="text-align:center; padding:8px; color:#64748b;">プレビュー</th>
+      <th style="text-align:center; padding:8px; color:#64748b;">ステータス</th>
+    </tr>
+  </thead>
+  <tbody>
+    <tr style="border-bottom:1px solid #f1f5f9;">
+      <td style="padding:8px; font-weight:600;">brand/teal</td>
+      <td style="padding:8px; font-family:monospace;">#2DB3A0</td>
+      <td style="padding:8px;">Primary CTA, アクセント</td>
+      <td style="padding:8px; text-align:center;"><div style="width:32px;height:20px;background:#2DB3A0;border-radius:4px;margin:0 auto;"></div></td>
+      <td style="padding:8px; text-align:center;"><span class="current-tag">現行</span></td>
+    </tr>
+    <tr style="border-bottom:1px solid #f1f5f9;">
+      <td style="padding:8px; font-weight:600;">brand/teal-dark</td>
+      <td style="padding:8px; font-family:monospace;">#249688</td>
+      <td style="padding:8px;">CTA ホバー</td>
+      <td style="padding:8px; text-align:center;"><div style="width:32px;height:20px;background:#249688;border-radius:4px;margin:0 auto;"></div></td>
+      <td style="padding:8px; text-align:center;"><span class="new-tag">NEW</span></td>
+    </tr>
+    <tr style="border-bottom:1px solid #f1f5f9;">
+      <td style="padding:8px; font-weight:600;">brand/teal-light</td>
+      <td style="padding:8px; font-family:monospace;">#E6F7F5</td>
+      <td style="padding:8px;">Tealアクセント背景</td>
+      <td style="padding:8px; text-align:center;"><div style="width:32px;height:20px;background:#E6F7F5;border:1px solid #CBD5E1;border-radius:4px;margin:0 auto;"></div></td>
+      <td style="padding:8px; text-align:center;"><span class="new-tag">NEW</span></td>
+    </tr>
+    <tr style="border-bottom:1px solid #f1f5f9;">
+      <td style="padding:8px; font-weight:600;">brand/blue</td>
+      <td style="padding:8px; font-family:monospace;">#1565C0</td>
+      <td style="padding:8px;">Secondary, 特長</td>
+      <td style="padding:8px; text-align:center;"><div style="width:32px;height:20px;background:#1565C0;border-radius:4px;margin:0 auto;"></div></td>
+      <td style="padding:8px; text-align:center;"><span class="current-tag">現行</span></td>
+    </tr>
+    <tr style="border-bottom:1px solid #f1f5f9;">
+      <td style="padding:8px; font-weight:600;">brand/blue-light</td>
+      <td style="padding:8px; font-family:monospace;">#E3F2FD</td>
+      <td style="padding:8px;">Blueアクセント背景</td>
+      <td style="padding:8px; text-align:center;"><div style="width:32px;height:20px;background:#E3F2FD;border:1px solid #CBD5E1;border-radius:4px;margin:0 auto;"></div></td>
+      <td style="padding:8px; text-align:center;"><span class="new-tag">NEW</span></td>
+    </tr>
+    <tr style="border-bottom:1px solid #f1f5f9;">
+      <td style="padding:8px; font-weight:600;">brand/dark-blue</td>
+      <td style="padding:8px; font-family:monospace;">#0D47A1</td>
+      <td style="padding:8px;">Hero背景, 深い要素</td>
+      <td style="padding:8px; text-align:center;"><div style="width:32px;height:20px;background:#0D47A1;border-radius:4px;margin:0 auto;"></div></td>
+      <td style="padding:8px; text-align:center;"><span class="current-tag">現行</span></td>
+    </tr>
+    <tr style="border-bottom:1px solid #f1f5f9;">
+      <td style="padding:8px; font-weight:600;">brand/dark-blue-light</td>
+      <td style="padding:8px; font-family:monospace;">#E8EAF6</td>
+      <td style="padding:8px;">Dark Blueアクセント背景</td>
+      <td style="padding:8px; text-align:center;"><div style="width:32px;height:20px;background:#E8EAF6;border:1px solid #CBD5E1;border-radius:4px;margin:0 auto;"></div></td>
+      <td style="padding:8px; text-align:center;"><span class="new-tag">NEW</span></td>
+    </tr>
+    <tr style="border-bottom:1px solid #f1f5f9;">
+      <td style="padding:8px; font-weight:600;">accent/amber</td>
+      <td style="padding:8px; font-family:monospace;">#F59E0B</td>
+      <td style="padding:8px;">バッジ, 星, 注目要素</td>
+      <td style="padding:8px; text-align:center;"><div style="width:32px;height:20px;background:#F59E0B;border-radius:4px;margin:0 auto;"></div></td>
+      <td style="padding:8px; text-align:center;"><span class="new-tag">NEW</span></td>
+    </tr>
+    <tr style="border-bottom:1px solid #f1f5f9;">
+      <td style="padding:8px; font-weight:600;">accent/amber-light</td>
+      <td style="padding:8px; font-family:monospace;">#FEF3C7</td>
+      <td style="padding:8px;">ハイライト背景</td>
+      <td style="padding:8px; text-align:center;"><div style="width:32px;height:20px;background:#FEF3C7;border:1px solid #CBD5E1;border-radius:4px;margin:0 auto;"></div></td>
+      <td style="padding:8px; text-align:center;"><span class="new-tag">NEW</span></td>
+    </tr>
+    <tr style="border-bottom:1px solid #f1f5f9;">
+      <td style="padding:8px; font-weight:600;">surface/white</td>
+      <td style="padding:8px; font-family:monospace;">#FFFFFF</td>
+      <td style="padding:8px;">カード, ベース</td>
+      <td style="padding:8px; text-align:center;"><div style="width:32px;height:20px;background:#FFFFFF;border:1px solid #CBD5E1;border-radius:4px;margin:0 auto;"></div></td>
+      <td style="padding:8px; text-align:center;"><span class="current-tag">現行</span></td>
+    </tr>
+    <tr style="border-bottom:1px solid #f1f5f9;">
+      <td style="padding:8px; font-weight:600;">surface/light</td>
+      <td style="padding:8px; font-family:monospace;">#F8FAFC</td>
+      <td style="padding:8px;">ライトセクション背景</td>
+      <td style="padding:8px; text-align:center;"><div style="width:32px;height:20px;background:#F8FAFC;border:1px solid #CBD5E1;border-radius:4px;margin:0 auto;"></div></td>
+      <td style="padding:8px; text-align:center;"><span class="current-tag">現行</span></td>
+    </tr>
+    <tr style="border-bottom:1px solid #f1f5f9;">
+      <td style="padding:8px; font-weight:600;">surface/teal</td>
+      <td style="padding:8px; font-family:monospace;">#F0FDFA</td>
+      <td style="padding:8px;">ティール系セクション背景</td>
+      <td style="padding:8px; text-align:center;"><div style="width:32px;height:20px;background:#F0FDFA;border:1px solid #CBD5E1;border-radius:4px;margin:0 auto;"></div></td>
+      <td style="padding:8px; text-align:center;"><span class="new-tag">NEW</span></td>
+    </tr>
+    <tr style="border-bottom:1px solid #f1f5f9;">
+      <td style="padding:8px; font-weight:600;">surface/dark</td>
+      <td style="padding:8px; font-family:monospace;">#0F172A</td>
+      <td style="padding:8px;">ダークセクション</td>
+      <td style="padding:8px; text-align:center;"><div style="width:32px;height:20px;background:#0F172A;border-radius:4px;margin:0 auto;"></div></td>
+      <td style="padding:8px; text-align:center;"><span class="current-tag">現行</span></td>
+    </tr>
+    <tr style="border-bottom:1px solid #f1f5f9;">
+      <td style="padding:8px; font-weight:600;">surface/deep-navy</td>
+      <td style="padding:8px; font-family:monospace;">#0A1628</td>
+      <td style="padding:8px;">Hero/CTA深い背景</td>
+      <td style="padding:8px; text-align:center;"><div style="width:32px;height:20px;background:#0A1628;border-radius:4px;margin:0 auto;"></div></td>
+      <td style="padding:8px; text-align:center;"><span class="new-tag">NEW</span></td>
+    </tr>
+    <tr style="border-bottom:1px solid #f1f5f9;">
+      <td style="padding:8px; font-weight:600;">text/on-light</td>
+      <td style="padding:8px; font-family:monospace;">#171717</td>
+      <td style="padding:8px;">ライト背景の見出し</td>
+      <td style="padding:8px; text-align:center;"><div style="width:32px;height:20px;background:#171717;border-radius:4px;margin:0 auto;"></div></td>
+      <td style="padding:8px; text-align:center;"><span class="current-tag">現行</span></td>
+    </tr>
+    <tr style="border-bottom:1px solid #f1f5f9;">
+      <td style="padding:8px; font-weight:600;">text/on-light-secondary</td>
+      <td style="padding:8px; font-family:monospace;">#475569</td>
+      <td style="padding:8px;">ライト背景の本文</td>
+      <td style="padding:8px; text-align:center;"><div style="width:32px;height:20px;background:#475569;border-radius:4px;margin:0 auto;"></div></td>
+      <td style="padding:8px; text-align:center;"><span class="current-tag">現行</span></td>
+    </tr>
+    <tr style="border-bottom:1px solid #f1f5f9;">
+      <td style="padding:8px; font-weight:600;">text/on-dark</td>
+      <td style="padding:8px; font-family:monospace;">#FFFFFF</td>
+      <td style="padding:8px;">ダーク背景の見出し</td>
+      <td style="padding:8px; text-align:center;"><div style="width:32px;height:20px;background:#FFFFFF;border:1px solid #CBD5E1;border-radius:4px;margin:0 auto;"></div></td>
+      <td style="padding:8px; text-align:center;"><span class="current-tag">現行</span></td>
+    </tr>
+    <tr style="border-bottom:1px solid #f1f5f9;">
+      <td style="padding:8px; font-weight:600;">text/on-dark-secondary</td>
+      <td style="padding:8px; font-family:monospace;">#CBD5E1</td>
+      <td style="padding:8px;">ダーク背景の本文</td>
+      <td style="padding:8px; text-align:center;"><div style="width:32px;height:20px;background:#CBD5E1;border-radius:4px;margin:0 auto;"></div></td>
+      <td style="padding:8px; text-align:center;"><span class="current-tag">現行</span></td>
+    </tr>
+    <tr>
+      <td style="padding:8px; font-weight:600;">text/on-dark-tertiary</td>
+      <td style="padding:8px; font-family:monospace;">#94A3B8</td>
+      <td style="padding:8px;">補助テキスト</td>
+      <td style="padding:8px; text-align:center;"><div style="width:32px;height:20px;background:#94A3B8;border-radius:4px;margin:0 auto;"></div></td>
+      <td style="padding:8px; text-align:center;"><span class="current-tag">現行</span></td>
+    </tr>
+  </tbody>
+</table>
+</div>
+
+</body>
+</html>

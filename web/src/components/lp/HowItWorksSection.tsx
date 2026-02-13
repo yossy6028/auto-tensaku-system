@@ -93,7 +93,7 @@ export function HowItWorksSection() {
   const isMobile = useIsMobile();
 
   return (
-    <section id="how-it-works" className="bg-slate-50 py-24 sm:py-32">
+    <section id="how-it-works" className="bg-es-surface-light py-24 sm:py-32">
       <div className="mx-auto max-w-7xl px-6 lg:px-8">
         <motion.h2
           className="text-center text-3xl font-bold tracking-tight text-slate-900 sm:text-4xl"

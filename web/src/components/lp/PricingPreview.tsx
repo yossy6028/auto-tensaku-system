@@ -135,14 +135,16 @@ export function PricingPreview() {
                   ))}
                 </ul>
 
-                {plan.recommended && (
-                  <Link
-                    href="/pricing"
-                    className="mt-8 block rounded-lg bg-gradient-to-r from-es-blue to-es-teal px-6 py-3 text-center text-sm font-semibold text-white shadow-md transition-all hover:shadow-lg hover:brightness-110"
-                  >
-                    このプランで始める
-                  </Link>
-                )}
+                <Link
+                  href={plan.recommended ? '/pricing' : '/grading'}
+                  className={`mt-8 block rounded-lg px-6 py-3 text-center text-sm font-semibold transition-all ${
+                    plan.recommended
+                      ? 'bg-gradient-to-r from-es-blue to-es-teal text-white shadow-md hover:shadow-lg hover:brightness-110'
+                      : 'border border-white/20 text-white hover:bg-white/10'
+                  }`}
+                >
+                  {plan.recommended ? 'このプランで始める' : '無料で試す'}
+                </Link>
               </div>
             </motion.div>
           ))}

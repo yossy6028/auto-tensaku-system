@@ -70,7 +70,7 @@ export function CTASection() {
   const particleCount = isMobile ? 8 : 15;
 
   return (
-    <section className="relative overflow-hidden bg-gradient-to-br from-[#0D47A1] via-[#0a3060] to-slate-900 py-24 sm:py-32">
+    <section className="relative overflow-hidden bg-gradient-to-br from-es-dark-blue via-es-blue to-es-teal py-24 sm:py-32">
       <Particles count={particleCount} reducedMotion={reducedMotion} />
 
       <div className="relative mx-auto max-w-3xl px-6 text-center lg:px-8">

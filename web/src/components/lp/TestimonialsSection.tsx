@@ -1,8 +1,21 @@
 'use client';
 
 import { motion } from 'framer-motion';
-import { Star } from 'lucide-react';
+import { Star, TrendingUp, Clock, ThumbsUp } from 'lucide-react';
 import { useReducedMotion } from '@/hooks/useMediaQuery';
+import type { ComponentType, SVGProps } from 'react';
+
+type MetricItem = {
+  icon: ComponentType<SVGProps<SVGSVGElement>>;
+  value: string;
+  label: string;
+};
+
+const metrics: MetricItem[] = [
+  { icon: Clock, value: '1/3', label: '添削時間を短縮' },
+  { icon: TrendingUp, value: '95%', label: '採点精度' },
+  { icon: ThumbsUp, value: '98%', label: 'が継続利用' },
+];
 
 type Testimonial = {
   quote: string;
@@ -83,7 +96,7 @@ export function TestimonialsSection() {
   const reducedMotion = useReducedMotion();
 
   return (
-    <section className="bg-slate-50 py-24 sm:py-32">
+    <section className="bg-white py-24 sm:py-32">
       <div className="mx-auto max-w-7xl px-6 lg:px-8">
         <motion.h2
           className="text-center text-3xl font-bold tracking-tight text-slate-900 sm:text-4xl"
@@ -95,8 +108,29 @@ export function TestimonialsSection() {
           利用者の声
         </motion.h2>
 
+        {/* Key metrics */}
         <motion.div
-          className="mt-16 grid gap-8 sm:grid-cols-2"
+          className="mx-auto mt-10 flex max-w-2xl flex-col items-center justify-center gap-8 sm:flex-row sm:gap-12"
+          initial={reducedMotion ? undefined : { opacity: 0, y: 20 }}
+          whileInView={{ opacity: 1, y: 0 }}
+          viewport={{ once: true }}
+          transition={{ duration: 0.5, delay: 0.1 }}
+        >
+          {metrics.map((m) => (
+            <div key={m.label} className="flex items-center gap-3">
+              <div className="flex h-10 w-10 items-center justify-center rounded-full bg-es-teal-light">
+                <m.icon className="h-5 w-5 text-es-teal" />
+              </div>
+              <div>
+                <p className="text-2xl font-bold text-slate-900">{m.value}</p>
+                <p className="text-xs text-slate-500">{m.label}</p>
+              </div>
+            </div>
+          ))}
+        </motion.div>
+
+        <motion.div
+          className="mt-12 grid gap-8 sm:grid-cols-2"
           variants={reducedMotion ? undefined : containerVariants}
           initial="hidden"
           whileInView="visible"
@@ -105,7 +139,7 @@ export function TestimonialsSection() {
           {testimonials.map((testimonial, index) => (
             <motion.div
               key={index}
-              className="rounded-2xl border border-slate-200 bg-white p-6 shadow-lg transition-all duration-300 hover:-translate-y-0.5 hover:shadow-xl"
+              className="rounded-2xl border border-slate-100 bg-es-surface-light p-6 shadow-sm transition-all duration-300 hover:-translate-y-0.5 hover:shadow-lg"
               variants={reducedMotion ? undefined : cardVariants}
             >
               <div className="flex items-start justify-between">

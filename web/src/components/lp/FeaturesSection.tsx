@@ -56,7 +56,7 @@ export function FeaturesSection() {
   const reducedMotion = useReducedMotion();
 
   return (
-    <section id="features" className="relative bg-slate-900 py-24 sm:py-32">
+    <section id="features" className="relative bg-es-surface-dark py-24 sm:py-32">
       <div className="mx-auto max-w-7xl px-6 lg:px-8">
         <motion.h2
           className="text-center text-3xl font-bold tracking-tight text-white sm:text-4xl"

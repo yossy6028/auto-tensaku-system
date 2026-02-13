@@ -3,19 +3,47 @@
 :root {
   --background: #ffffff;
   --foreground: #171717;
+  /* Brand */
   --es-teal: #2DB3A0;
+  --es-teal-dark: #249688;
+  --es-teal-light: #E6F7F5;
   --es-blue: #1565C0;
+  --es-blue-light: #E3F2FD;
   --es-dark-blue: #0D47A1;
+  --es-dark-blue-light: #E8EAF6;
+  /* Accent */
+  --es-amber: #F59E0B;
+  --es-amber-light: #FEF3C7;
+  --es-amber-dark: #D97706;
+  /* Surface */
+  --es-surface-light: #F8FAFC;
+  --es-surface-teal: #F0FDFA;
+  --es-surface-dark: #0F172A;
+  --es-surface-deep-navy: #0A1628;
 }
 
 @theme inline {
   --color-background: var(--background);
   --color-foreground: var(--foreground);
-  --font-sans: var(--font-geist-sans);
+  --font-sans: var(--font-inter), var(--font-noto-sans-jp), system-ui, sans-serif;
   --font-mono: var(--font-geist-mono);
+  /* Brand */
   --color-es-teal: var(--es-teal);
+  --color-es-teal-dark: var(--es-teal-dark);
+  --color-es-teal-light: var(--es-teal-light);
   --color-es-blue: var(--es-blue);
+  --color-es-blue-light: var(--es-blue-light);
   --color-es-dark-blue: var(--es-dark-blue);
+  --color-es-dark-blue-light: var(--es-dark-blue-light);
+  /* Accent */
+  --color-es-amber: var(--es-amber);
+  --color-es-amber-light: var(--es-amber-light);
+  --color-es-amber-dark: var(--es-amber-dark);
+  /* Surface */
+  --color-es-surface-light: var(--es-surface-light);
+  --color-es-surface-teal: var(--es-surface-teal);
+  --color-es-surface-dark: var(--es-surface-dark);
+  --color-es-surface-deep-navy: var(--es-surface-deep-navy);
 }
 
 @media (prefers-color-scheme: dark) {
@@ -28,7 +56,6 @@
 body {
   background: var(--background);
   color: var(--foreground);
-  font-family: Arial, Helvetica, sans-serif;
 }
 
 /* 印刷用スタイル */

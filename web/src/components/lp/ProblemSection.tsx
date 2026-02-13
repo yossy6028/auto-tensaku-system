@@ -18,24 +18,24 @@ const painPoints: PainPoint[] = [
     title: '膨大な添削時間',
     description:
       '1クラス分の記述問題、添削に1時間以上…他の業務が圧迫されていませんか？',
-    accentBg: 'bg-rose-100',
-    accentText: 'text-rose-600',
+    accentBg: 'bg-es-teal-light',
+    accentText: 'text-es-teal',
   },
   {
     icon: Scale,
     title: '採点基準のブレ',
     description:
       '疲労や時間帯で採点が変わる…生徒への公平性に不安はありませんか？',
-    accentBg: 'bg-amber-100',
-    accentText: 'text-amber-600',
+    accentBg: 'bg-es-blue-light',
+    accentText: 'text-es-blue',
   },
   {
     icon: TrendingDown,
     title: 'フィードバックの質',
     description:
       '疲労で添削が雑になる…もっと丁寧に指導したいのに時間がない',
-    accentBg: 'bg-blue-100',
-    accentText: 'text-blue-600',
+    accentBg: 'bg-es-dark-blue-light',
+    accentText: 'text-es-dark-blue',
   },
 ];
 

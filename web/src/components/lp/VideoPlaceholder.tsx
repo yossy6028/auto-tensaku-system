@@ -8,7 +8,7 @@ export function VideoPlaceholder() {
   const reducedMotion = useReducedMotion();
 
   return (
-    <section className="bg-slate-900 py-24 sm:py-32">
+    <section className="bg-white py-24 sm:py-32">
       <div className="mx-auto max-w-4xl px-6 lg:px-8">
         <motion.div
           initial={reducedMotion ? undefined : { opacity: 0, y: 30 }}
@@ -17,8 +17,8 @@ export function VideoPlaceholder() {
           transition={{ duration: 0.6, ease: 'easeOut' }}
         >
           {/* Gradient border wrapper */}
-          <div className="rounded-2xl bg-gradient-to-br from-es-blue via-es-dark-blue to-es-teal p-[2px]">
-            <div className="flex aspect-video flex-col items-center justify-center rounded-2xl bg-slate-950">
+          <div className="rounded-2xl bg-gradient-to-br from-es-blue via-es-dark-blue to-es-teal p-[2px] shadow-lg">
+            <div className="flex aspect-video flex-col items-center justify-center rounded-2xl bg-es-surface-dark">
               <motion.div
                 className="flex h-20 w-20 items-center justify-center rounded-full bg-white/10 backdrop-blur-sm"
                 animate={

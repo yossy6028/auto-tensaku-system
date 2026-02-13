@@ -1,10 +1,14 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { createClient } from '@supabase/supabase-js';
 
-const supabaseAdmin = createClient(
-  process.env.NEXT_PUBLIC_SUPABASE_URL!,
-  process.env.SUPABASE_SERVICE_ROLE_KEY || ''
-);
+// 遅延初期化 — ビルド時にはenv未設定のためランタイムで生成
+function getSupabaseAdmin() {
+  const key = process.env.SUPABASE_SERVICE_ROLE_KEY;
+  if (!key) {
+    throw new Error('[check-email] SUPABASE_SERVICE_ROLE_KEY is not set');
+  }
+  return createClient(process.env.NEXT_PUBLIC_SUPABASE_URL!, key);
+}
 
 /**
  * メールアドレスを正規化する（Gmailエイリアス等の同一人物検出用）
@@ -46,7 +50,7 @@ export async function POST(request: NextRequest) {
 
     const normalized = normalizeEmail(email);
 
-    const { data, error } = await supabaseAdmin
+    const { data, error } = await getSupabaseAdmin()
       .from('user_profiles')
       .select('id')
       .eq('normalized_email', normalized)

@@ -1,6 +1,6 @@
 import { LPHeader } from '@/components/lp/LPHeader';
 import { HeroSection } from '@/components/lp/HeroSection';
-import { SocialProofBar } from '@/components/lp/SocialProofBar';
+
 import { ProblemSection } from '@/components/lp/ProblemSection';
 import { SolutionSection } from '@/components/lp/SolutionSection';
 import { FeaturesSection } from '@/components/lp/FeaturesSection';
@@ -17,7 +17,7 @@ export default function LandingPage() {
     <main className="overflow-x-hidden">
       <LPHeader />
       <HeroSection />
-      <SocialProofBar />
+
       <ProblemSection />
       <SolutionSection />
       <FeaturesSection />

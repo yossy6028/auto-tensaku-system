@@ -21,13 +21,11 @@ export default function AppLayout({
         <div className="max-w-5xl mx-auto px-4 sm:px-6 lg:px-8">
           <div className="flex flex-col md:flex-row justify-between items-center gap-4">
             <div className="flex items-center">
-              <div className="rounded-lg bg-white px-4 py-2 mr-3">
-                <img
-                  src="/taskal-main-logo.png"
-                  alt="Taskal AI"
-                  className="h-20 w-auto mix-blend-multiply"
-                />
-              </div>
+              <img
+                src="/logo-edushift.png"
+                alt="EduShift"
+                className="h-10 w-auto brightness-0 invert mr-3"
+              />
             </div>
 
             <nav className="flex flex-wrap justify-center gap-6 text-sm">

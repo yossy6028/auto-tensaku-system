@@ -15,9 +15,7 @@ export function LPFooter() {
       <div className="mx-auto max-w-7xl px-6 lg:px-8">
         <div className="flex flex-col items-center gap-8 sm:flex-row sm:justify-between">
           <Link href="/" className="flex items-center gap-2">
-            <div className="rounded-lg bg-white px-4 py-2">
-              <img src="/taskal-main-logo.png" alt="Taskal AI" className="h-20 w-auto mix-blend-multiply" />
-            </div>
+            <img src="/logo-edushift.png" alt="EduShift" className="h-12 w-auto brightness-0 invert" />
           </Link>
           <nav className="flex flex-wrap justify-center gap-6">
             {footerLinks.map((link) => (

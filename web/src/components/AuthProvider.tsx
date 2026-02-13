@@ -769,6 +769,22 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
   const signUp = async (email: string, password: string) => {
     if (!supabase) return { error: new Error('Supabase is not configured') };
+
+    // エイリアス重複チェック（Gmailの+やドット等を正規化して既存ユーザーと照合）
+    try {
+      const checkRes = await fetch('/api/auth/check-email', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ email }),
+      });
+      if (checkRes.status === 409) {
+        const data = await checkRes.json();
+        return { error: new Error(data.error || 'このメールアドレスは既に登録されています。') };
+      }
+    } catch {
+      // チェック失敗時はサインアップを続行（DB側のUNIQUE制約がフォールバック）
+    }
+
     const { error } = await supabase.auth.signUp({
       email,
       password,

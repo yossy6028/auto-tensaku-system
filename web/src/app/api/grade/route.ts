@@ -301,6 +301,14 @@ export async function POST(req: NextRequest) {
             );
         }
 
+        // メール認証チェック（未確認ユーザーはサービス利用不可）
+        if (!user.email_confirmed_at) {
+            return NextResponse.json(
+                { status: 'error', message: 'メール認証が完了していません。登録時に届いた確認メールのリンクをクリックしてください。' },
+                { status: 403 }
+            );
+        }
+
         // レートリミットチェック（短時間バースト + 分単位）
         const burstLimitResult = checkRateLimit(`${user.id}:burst`, GRADING_BURST_RATE_LIMIT);
         if (!burstLimitResult.success) {

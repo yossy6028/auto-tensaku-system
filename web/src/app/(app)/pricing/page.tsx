@@ -5,6 +5,7 @@ import Link from 'next/link';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { ArrowLeft, Check, Sparkles, Zap, Crown, RefreshCw, HelpCircle, Loader2, CheckCircle, XCircle } from 'lucide-react';
 import { useAuth } from '@/components/AuthProvider';
+import { AuthModal } from '@/components/AuthModal';
 
 const plans = [
   {
@@ -84,9 +85,22 @@ function PricingContent() {
   const searchParams = useSearchParams();
   const [loadingPlan, setLoadingPlan] = useState<string | null>(null);
   const [checkoutStatus, setCheckoutStatus] = useState<'success' | 'cancelled' | null>(null);
+  const [isAuthModalOpen, setIsAuthModalOpen] = useState(false);
+  const [pendingPlan, setPendingPlan] = useState<{ key: string; name: string } | null>(null);
 
   // AuthProviderから認証状態を取得
   const { user, isLoading: authLoading } = useAuth();
+
+  // ログイン成功後にpendingPlanのcheckoutを自動実行
+  useEffect(() => {
+    if (user && pendingPlan) {
+      setIsAuthModalOpen(false);
+      const { key, name } = pendingPlan;
+      setPendingPlan(null);
+      handleSelectPlan(key, name);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [user, pendingPlan]);
 
   // Checkoutの結果をチェック
   useEffect(() => {
@@ -118,11 +132,11 @@ function PricingContent() {
       return;
     }
     
-    // 未ログインの場合はログインモーダルを表示
+    // 未ログインの場合はAuthModalを表示
     if (!user) {
-      console.log('[Pricing] User is null, redirecting to login');
-      // ログインページにリダイレクト（料金ページに戻ってくる）
-      router.push(`/?showAuth=true&redirect=/pricing&plan=${planKey}`);
+      console.log('[Pricing] User is null, showing auth modal');
+      setPendingPlan({ key: planKey, name: planName });
+      setIsAuthModalOpen(true);
       return;
     }
 
@@ -424,6 +438,14 @@ function PricingContent() {
         </div>
 
       </div>
+
+      <AuthModal
+        isOpen={isAuthModalOpen}
+        onClose={() => {
+          setIsAuthModalOpen(false);
+          setPendingPlan(null);
+        }}
+      />
     </main>
   );
 }

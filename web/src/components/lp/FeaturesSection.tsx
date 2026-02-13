@@ -2,7 +2,7 @@
 
 import { motion } from 'framer-motion';
 import { Zap, BarChart3, Camera } from 'lucide-react';
-import { useReducedMotion } from '@/hooks/useMediaQuery';
+import { useReducedMotion, useIsMobile } from '@/hooks/useMediaQuery';
 import type { ComponentType, SVGProps } from 'react';
 
 type Feature = {
@@ -54,15 +54,17 @@ const cardVariants = {
 
 export function FeaturesSection() {
   const reducedMotion = useReducedMotion();
+  const isMobile = useIsMobile();
+  const skipAnimation = reducedMotion || isMobile;
 
   return (
     <section id="features" className="relative bg-es-surface-dark py-24 sm:py-32">
       <div className="mx-auto max-w-7xl px-6 lg:px-8">
         <motion.h2
           className="text-center text-3xl font-bold tracking-tight text-white sm:text-4xl"
-          initial={reducedMotion ? undefined : { opacity: 0, y: 20 }}
+          initial={skipAnimation ? undefined : { opacity: 0, y: 20 }}
           whileInView={{ opacity: 1, y: 0 }}
-          viewport={{ once: true, amount: 0.5 }}
+          viewport={{ once: true }}
           transition={{ duration: 0.5 }}
         >
           3つの特長
@@ -70,21 +72,21 @@ export function FeaturesSection() {
 
         <motion.div
           className="mt-16 grid gap-8 md:grid-cols-3"
-          variants={reducedMotion ? undefined : containerVariants}
-          initial="hidden"
+          variants={skipAnimation ? undefined : containerVariants}
+          initial={skipAnimation ? undefined : "hidden"}
           whileInView="visible"
-          viewport={{ once: true, amount: 0.2 }}
+          viewport={{ once: true }}
         >
           {features.map((feature) => (
             <motion.div
               key={feature.title}
-              variants={reducedMotion ? undefined : cardVariants}
+              variants={skipAnimation ? undefined : cardVariants}
             >
-              <div style={reducedMotion ? undefined : { perspective: 1000 }}>
+              <div style={skipAnimation ? undefined : { perspective: 1000 }}>
                 <motion.div
                   className={`flex flex-col items-center rounded-2xl border border-white/10 bg-white/5 p-8 text-center backdrop-blur-sm ring-1 ${feature.accent}`}
                   whileHover={
-                    reducedMotion
+                    skipAnimation
                       ? undefined
                       : { rotateX: 5, rotateY: 5, scale: 1.05 }
                   }

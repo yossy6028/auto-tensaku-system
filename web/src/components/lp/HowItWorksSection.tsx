@@ -91,15 +91,16 @@ function ConnectingPath() {
 export function HowItWorksSection() {
   const reducedMotion = useReducedMotion();
   const isMobile = useIsMobile();
+  const skipAnimation = reducedMotion || isMobile;
 
   return (
     <section id="how-it-works" className="bg-es-surface-light py-24 sm:py-32">
       <div className="mx-auto max-w-7xl px-6 lg:px-8">
         <motion.h2
           className="text-center text-3xl font-bold tracking-tight text-slate-900 sm:text-4xl"
-          initial={reducedMotion ? undefined : { opacity: 0, y: 20 }}
+          initial={skipAnimation ? undefined : { opacity: 0, y: 20 }}
           whileInView={{ opacity: 1, y: 0 }}
-          viewport={{ once: true, amount: 0.5 }}
+          viewport={{ once: true }}
           transition={{ duration: 0.5 }}
         >
           かんたん3ステップ
@@ -110,16 +111,16 @@ export function HowItWorksSection() {
 
           <motion.div
             className="relative grid gap-12 md:grid-cols-3 md:gap-8"
-            variants={reducedMotion ? undefined : containerVariants}
-            initial="hidden"
+            variants={skipAnimation ? undefined : containerVariants}
+            initial={skipAnimation ? undefined : "hidden"}
             whileInView="visible"
-            viewport={{ once: true, amount: 0.2 }}
+            viewport={{ once: true }}
           >
             {steps.map((step) => (
               <motion.div
                 key={step.number}
                 className="flex flex-col items-center text-center"
-                variants={reducedMotion ? undefined : stepVariants}
+                variants={skipAnimation ? undefined : stepVariants}
               >
                 <div className="relative flex h-32 w-32 items-center justify-center">
                   <div className="absolute inset-0 rounded-full bg-sky-100" />

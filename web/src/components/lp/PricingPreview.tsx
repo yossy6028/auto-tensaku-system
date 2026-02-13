@@ -2,7 +2,7 @@
 
 import { motion } from 'framer-motion';
 import Link from 'next/link';
-import { useReducedMotion } from '@/hooks/useMediaQuery';
+import { useReducedMotion, useIsMobile } from '@/hooks/useMediaQuery';
 
 type Plan = {
   name: string;
@@ -68,6 +68,8 @@ const cardVariants = {
 
 export function PricingPreview() {
   const reducedMotion = useReducedMotion();
+  const isMobile = useIsMobile();
+  const skipAnimation = reducedMotion || isMobile;
 
   return (
     <section
@@ -77,9 +79,9 @@ export function PricingPreview() {
       <div className="mx-auto max-w-7xl px-6 lg:px-8">
         <motion.h2
           className="text-center text-3xl font-bold tracking-tight text-white sm:text-4xl"
-          initial={reducedMotion ? undefined : { opacity: 0, y: 20 }}
+          initial={skipAnimation ? undefined : { opacity: 0, y: 20 }}
           whileInView={{ opacity: 1, y: 0 }}
-          viewport={{ once: true, amount: 0.5 }}
+          viewport={{ once: true }}
           transition={{ duration: 0.5 }}
         >
           シンプルな料金プラン
@@ -87,16 +89,16 @@ export function PricingPreview() {
 
         <motion.div
           className="mt-16 grid items-center gap-8 sm:grid-cols-2 lg:grid-cols-3"
-          variants={reducedMotion ? undefined : containerVariants}
-          initial="hidden"
+          variants={skipAnimation ? undefined : containerVariants}
+          initial={skipAnimation ? undefined : "hidden"}
           whileInView="visible"
-          viewport={{ once: true, amount: 0.2 }}
+          viewport={{ once: true }}
         >
           {plans.map((plan) => (
             <motion.div
               key={plan.name}
-              className={`relative ${plan.recommended ? 'z-10 scale-105' : ''}`}
-              variants={reducedMotion ? undefined : cardVariants}
+              className={`relative ${plan.recommended ? 'z-10 md:scale-105' : ''}`}
+              variants={skipAnimation ? undefined : cardVariants}
             >
               {plan.badge && (
                 <div className="absolute -top-4 left-1/2 z-10 -translate-x-1/2">
@@ -150,7 +152,7 @@ export function PricingPreview() {
 
         <motion.div
           className="mt-12 text-center"
-          initial={reducedMotion ? undefined : { opacity: 0 }}
+          initial={skipAnimation ? undefined : { opacity: 0 }}
           whileInView={{ opacity: 1 }}
           viewport={{ once: true }}
           transition={{ duration: 0.5, delay: 0.4 }}

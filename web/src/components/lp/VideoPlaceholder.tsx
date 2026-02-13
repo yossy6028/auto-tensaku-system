@@ -1,11 +1,21 @@
 'use client';
 
+import { useRef, useState } from 'react';
 import { motion } from 'framer-motion';
 import { Play } from 'lucide-react';
 import { useReducedMotion } from '@/hooks/useMediaQuery';
 
 export function VideoPlaceholder() {
   const reducedMotion = useReducedMotion();
+  const videoRef = useRef<HTMLVideoElement>(null);
+  const [isPlaying, setIsPlaying] = useState(false);
+
+  const handlePlay = () => {
+    if (videoRef.current) {
+      videoRef.current.play();
+      setIsPlaying(true);
+    }
+  };
 
   return (
     <section className="bg-white py-24 sm:py-32">
@@ -18,30 +28,48 @@ export function VideoPlaceholder() {
         >
           {/* Gradient border wrapper */}
           <div className="rounded-2xl bg-gradient-to-br from-es-blue via-es-dark-blue to-es-teal p-[2px] shadow-lg">
-            <div className="flex aspect-video flex-col items-center justify-center rounded-2xl bg-es-surface-dark">
-              <motion.div
-                className="flex h-20 w-20 items-center justify-center rounded-full bg-white/10 backdrop-blur-sm"
-                animate={
-                  reducedMotion
-                    ? undefined
-                    : {
-                        boxShadow: [
-                          '0 0 0 0 rgba(99, 102, 241, 0.4)',
-                          '0 0 0 20px rgba(99, 102, 241, 0)',
-                        ],
-                      }
-                }
-                transition={
-                  reducedMotion
-                    ? undefined
-                    : { duration: 2, repeat: Infinity, ease: 'easeOut' }
-                }
-              >
-                <Play className="ml-1 h-10 w-10 text-white" />
-              </motion.div>
-              <p className="mt-6 text-sm text-slate-400">
-                デモ動画（近日公開）
-              </p>
+            <div className="relative overflow-hidden rounded-2xl bg-es-surface-dark">
+              <video
+                ref={videoRef}
+                src="/taskal-ai-demo.mp4"
+                className="aspect-video w-full"
+                controls={isPlaying}
+                playsInline
+                onPlay={() => setIsPlaying(true)}
+                onPause={() => setIsPlaying(false)}
+                onEnded={() => setIsPlaying(false)}
+              />
+              {/* Play overlay */}
+              {!isPlaying && (
+                <button
+                  onClick={handlePlay}
+                  className="absolute inset-0 flex flex-col items-center justify-center bg-black/30 transition-colors hover:bg-black/20"
+                >
+                  <motion.div
+                    className="flex h-20 w-20 items-center justify-center rounded-full bg-white/20 backdrop-blur-sm"
+                    animate={
+                      reducedMotion
+                        ? undefined
+                        : {
+                            boxShadow: [
+                              '0 0 0 0 rgba(99, 102, 241, 0.4)',
+                              '0 0 0 20px rgba(99, 102, 241, 0)',
+                            ],
+                          }
+                    }
+                    transition={
+                      reducedMotion
+                        ? undefined
+                        : { duration: 2, repeat: Infinity, ease: 'easeOut' }
+                    }
+                  >
+                    <Play className="ml-1 h-10 w-10 text-white" />
+                  </motion.div>
+                  <p className="mt-6 text-sm text-white/80">
+                    デモ動画を再生
+                  </p>
+                </button>
+              )}
             </div>
           </div>
         </motion.div>

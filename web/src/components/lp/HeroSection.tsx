@@ -5,8 +5,6 @@ import { motion, useMotionValue, useSpring, useTransform } from 'framer-motion';
 import { ChevronDown } from 'lucide-react';
 import { useReducedMotion, useIsMobile } from '@/hooks/useMediaQuery';
 import { useMousePosition } from '@/hooks/useMousePosition';
-// FloatingElements removed as it was designed for dark theme
-// import { FloatingElements } from './FloatingElements';
 
 export function HeroSection() {
   const reducedMotion = useReducedMotion();
@@ -24,8 +22,8 @@ export function HeroSection() {
   }
 
   const springConfig = { stiffness: 50, damping: 30 };
-  const parallaxX = useSpring(useTransform(mouseX, [-0.5, 0.5], [-15, 15]), springConfig);
-  const parallaxY = useSpring(useTransform(mouseY, [-0.5, 0.5], [-15, 15]), springConfig);
+  const parallaxX = useSpring(useTransform(mouseX, [-0.5, 0.5], [-10, 10]), springConfig);
+  const parallaxY = useSpring(useTransform(mouseY, [-0.5, 0.5], [-10, 10]), springConfig);
 
   const fadeUp = reducedMotion
     ? {}
@@ -35,87 +33,97 @@ export function HeroSection() {
     };
 
   return (
-    <section className="relative flex min-h-screen items-center justify-center overflow-hidden">
-      {/* Realistic Background with Overlay */}
+    <section className="relative flex min-h-screen items-center justify-center overflow-hidden bg-slate-50">
+      {/* Background Image with Overlay */}
       <div className="absolute inset-0 -z-20">
-        <img
-          src="/bg-office.png"
-          alt="Office Desk Background"
-          className="h-full w-full object-cover"
-        />
-        <div className="absolute inset-0 bg-white/80 backdrop-blur-[2px]" />
+        <motion.div
+          className="absolute inset-0"
+          style={{ x: parallaxX, y: parallaxY, scale: 1.05 }} // Slight parallax and scale to prevent edges showing
+        >
+          <img
+            src="/bg-manuscript-desk.png"
+            alt="Desk with manuscript background"
+            className="h-full w-full object-cover"
+          />
+        </motion.div>
+        {/* Strong overlay for text readability against the busy background */}
+        <div className="absolute inset-0 bg-white/85 backdrop-blur-[2px]" />
       </div>
 
-      {/* Main content */}
-      <div className="relative z-10 mx-auto max-w-7xl px-6 pt-24 pb-12 lg:pt-32">
-        <div className="flex flex-col lg:flex-row items-center gap-12 lg:gap-20">
+      <div className="relative z-10 container mx-auto px-4 sm:px-6 lg:px-8">
+        <div className="flex flex-col items-center text-center max-w-4xl mx-auto">
+          {/* Badge */}
+          <motion.div
+            initial={{ opacity: 0, y: 20 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ duration: 0.5 }}
+            className="mb-8 inline-flex items-center rounded-full bg-blue-50/80 px-4 py-1.5 ring-1 ring-blue-100 backdrop-blur-sm"
+          >
+            <span className="mr-2 inline-block rounded-full bg-[#1565C0] px-2 py-0.5 text-[10px] font-bold text-white">
+              NEW
+            </span>
+            <span className="text-sm font-medium text-[#0D47A1]">
+              生成AIを活用した最新の添削システム
+            </span>
+          </motion.div>
 
-          {/* Text Content */}
-          <div className="flex-1 text-center lg:text-left">
-            <motion.h1
-              className="text-4xl font-extrabold leading-tight tracking-tight text-slate-900 sm:text-5xl md:text-6xl lg:text-7xl"
-              {...fadeUp}
-              transition={{ duration: 0.6 }}
+          {/* Main Title */}
+          <motion.h1
+            initial={{ opacity: 0, y: 20 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ duration: 0.5, delay: 0.1 }}
+            className="mb-6 text-4xl font-extrabold leading-tight tracking-tight text-slate-900 sm:text-5xl md:text-6xl"
+          >
+            <span className="block text-[#1565C0] mb-2">記述・論述指導を、</span>
+            <span className="block">もっと効率的に、効果的に。</span>
+          </motion.h1>
+
+          <motion.p
+            initial={{ opacity: 0, y: 20 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ duration: 0.5, delay: 0.2 }}
+            className="mb-10 max-w-2xl text-lg text-slate-700 sm:text-xl font-medium"
+          >
+            学習塾・学校の先生方向け。<br className="hidden sm:inline" />
+            AIによる高品質な添削サポートで、<br className="hidden sm:inline" />
+            生徒一人ひとりへの指導時間を最大化します。
+          </motion.p>
+
+          <motion.div
+            initial={{ opacity: 0, y: 20 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ duration: 0.5, delay: 0.3 }}
+            className="flex flex-col gap-4 sm:flex-row"
+          >
+            <Link
+              href="/#contact"
+              className="inline-flex items-center justify-center rounded-full bg-[#1565C0] px-8 py-4 text-base font-bold text-white shadow-lg transition-all hover:bg-[#0D47A1] hover:shadow-xl hover:-translate-y-0.5"
             >
-              もう、夜中に
-              <br className="sm:hidden" />
-              <span className="text-indigo-600">赤ペン</span>握らなくていい。
-            </motion.h1>
-
-            <motion.p
-              className="mx-auto mt-6 max-w-2xl text-lg text-slate-700 sm:text-xl lg:mx-0 font-medium"
-              {...fadeUp}
-              transition={{ duration: 0.6, delay: 0.15 }}
+              無料で相談する
+            </Link>
+            <Link
+              href="/#features"
+              className="inline-flex items-center justify-center rounded-full bg-white/80 px-8 py-4 text-base font-bold text-slate-700 shadow-md ring-1 ring-slate-200 backdrop-blur-sm transition-all hover:bg-white hover:text-[#1565C0] hover:shadow-lg hover:-translate-y-0.5"
             >
-              AIが記述問題を自動採点。
-              <br className="hidden sm:inline" />
-              先生は授業準備や生徒対応に集中できる。
-            </motion.p>
-
-            <motion.div
-              className="mt-10 flex flex-col sm:flex-row items-center justify-center lg:justify-start gap-4"
-              {...fadeUp}
-              transition={{ duration: 0.6, delay: 0.3 }}
-            >
-              <Link
-                href="/grading"
-                className="inline-block rounded-full bg-indigo-600 px-8 py-4 text-lg font-bold text-white shadow-lg shadow-indigo-600/30 transition-all hover:scale-105 hover:bg-indigo-700 hover:shadow-indigo-600/40"
-              >
-                無料で試してみる
-              </Link>
-              <p className="text-sm text-slate-600 font-bold">
-                初回3回無料・クレジットカード不要
-              </p>
-            </motion.div>
-          </div>
-
-          {/* Hero Image */}
-          <div className="flex-1 relative">
-            <motion.div
-              initial={{ opacity: 0, scale: 0.9, rotate: 5 }}
-              animate={{ opacity: 1, scale: 1, rotate: 2 }}
-              transition={{ duration: 0.8, delay: 0.2 }}
-              className="relative mx-auto max-w-md lg:max-w-full"
-            >
-              <div className="absolute -inset-4 bg-indigo-600/20 blur-2xl rounded-full"></div>
-              <img
-                src="/hero-correction.png"
-                alt="AI添削のイメージ"
-                className="relative w-full h-auto rounded-3xl shadow-2xl border-4 border-white transform hover:rotate-0 transition-transform duration-500"
-              />
-            </motion.div>
-          </div>
-
+              機能を見る
+            </Link>
+          </motion.div>
         </div>
       </div>
 
-      {/* Scroll indicator */}
+      {/* Scroll Indicator */}
       <motion.div
-        className="absolute bottom-8 left-1/2 -translate-x-1/2"
-        animate={reducedMotion ? {} : { y: [0, 8, 0] }}
-        transition={{ duration: 1.5, repeat: Infinity, ease: 'easeInOut' }}
+        initial={{ opacity: 0 }}
+        animate={{ opacity: 1 }}
+        transition={{ delay: 1, duration: 1 }}
+        className="absolute bottom-10 left-1/2 -translate-x-1/2"
       >
-        <ChevronDown className="h-8 w-8 text-slate-400" />
+        <motion.div
+          animate={{ y: [0, 10, 0] }}
+          transition={{ repeat: Infinity, duration: 1.5, ease: 'easeInOut' }}
+        >
+          <ChevronDown className="h-8 w-8 text-slate-400" />
+        </motion.div>
       </motion.div>
     </section>
   );

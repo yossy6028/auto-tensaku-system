@@ -96,27 +96,40 @@ export async function POST(request: NextRequest) {
       console.warn('[Stripe Sync] Failed to cancel old subscriptions:', updateOldError.message);
     }
 
-    // Supabaseに反映（stripe_subscription_idでupsert）
-    const { error: upsertError } = await supabase
+    // 既存レコードを確認（usage_countを保持するため）
+    const { data: existingSub } = await supabase
       .from('subscriptions')
-      .upsert(
-        {
-          user_id: user.id,
-          plan_id: planId,
-          status,
-          usage_count: 0,
-          usage_limit: usageLimit,
-          price_paid: pricePaid,
-          stripe_subscription_id: subscription.id,
-          stripe_price_id: priceId,
-          current_period_start: currentPeriodStart,
-          current_period_end: currentPeriodEnd,
-          cancel_at_period_end: cancelAtPeriodEnd,
-          purchased_at: currentPeriodStart || new Date().toISOString(),
-          expires_at: currentPeriodEnd,
-        },
-        { onConflict: 'stripe_subscription_id' }
-      );
+      .select('id')
+      .eq('stripe_subscription_id', subscription.id)
+      .maybeSingle();
+
+    const subscriptionPayload = {
+      user_id: user.id,
+      plan_id: planId,
+      status,
+      usage_limit: usageLimit,
+      price_paid: pricePaid,
+      stripe_subscription_id: subscription.id,
+      stripe_price_id: priceId,
+      current_period_start: currentPeriodStart,
+      current_period_end: currentPeriodEnd,
+      cancel_at_period_end: cancelAtPeriodEnd,
+      expires_at: currentPeriodEnd,
+    };
+
+    // Supabaseに反映（既存レコードはusage_countを保持、新規は0で作成）
+    const { error: upsertError } = existingSub
+      ? await supabase
+          .from('subscriptions')
+          .update({ ...subscriptionPayload, updated_at: new Date().toISOString() })
+          .eq('id', existingSub.id)
+      : await supabase
+          .from('subscriptions')
+          .insert({
+            ...subscriptionPayload,
+            usage_count: 0,
+            purchased_at: currentPeriodStart || new Date().toISOString(),
+          });
 
     if (upsertError) {
       return NextResponse.json({ error: 'サブスクリプションの同期に失敗しました' }, { status: 500 });

@@ -273,6 +273,23 @@ export async function POST(request: NextRequest) {
 
   logger.info('Webhook event received:', event.type);
 
+  // イベント重複処理防止（冪等性チェック）
+  const { data: existingEvent } = await supabaseAdmin
+    .from('stripe_events')
+    .select('id')
+    .eq('event_id', event.id)
+    .maybeSingle();
+
+  if (existingEvent) {
+    logger.info('Duplicate event skipped:', event.id);
+    return NextResponse.json({ received: true });
+  }
+
+  // イベントを記録
+  await supabaseAdmin
+    .from('stripe_events')
+    .insert({ event_id: event.id, event_type: event.type, data: event.data });
+
   try {
     switch (event.type) {
       case 'checkout.session.completed': {

@@ -214,7 +214,7 @@ export default function AdminPage() {
           <h1 className="text-2xl font-bold text-slate-800 mb-2">アクセス権限がありません</h1>
           <p className="text-slate-600 mb-6">このページは管理者のみアクセスできます。</p>
           <Link
-            href="/"
+            href="/grading"
             className="inline-flex items-center px-4 py-2 bg-indigo-600 text-white font-bold rounded-xl hover:bg-indigo-700"
           >
             <ArrowLeft className="w-4 h-4 mr-2" />
@@ -319,7 +319,7 @@ export default function AdminPage() {
       {/* Header */}
       <header className="bg-white border-b border-slate-200 sticky top-0 z-40">
         <div className="max-w-6xl mx-auto px-4 py-4 flex items-center justify-between">
-          <Link href="/" className="flex items-center text-slate-600 hover:text-slate-800 transition-colors">
+          <Link href="/grading" className="flex items-center text-slate-600 hover:text-slate-800 transition-colors">
             <ArrowLeft className="w-5 h-5 mr-2" />
             <span className="font-medium">戻る</span>
           </Link>

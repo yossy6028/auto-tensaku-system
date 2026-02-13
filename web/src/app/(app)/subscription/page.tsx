@@ -113,7 +113,7 @@ export default function SubscriptionPage() {
       <div className="max-w-4xl mx-auto py-12 px-4 sm:px-6 lg:px-8 relative z-10">
         {/* Back Link */}
         <Link
-          href="/"
+          href="/grading"
           className="inline-flex items-center text-indigo-600 hover:text-indigo-800 font-medium mb-8 transition-colors group"
         >
           <ArrowLeft className="w-5 h-5 mr-2 group-hover:-translate-x-1 transition-transform" />
@@ -471,7 +471,7 @@ export default function SubscriptionPage() {
         {/* Footer */}
         <div className="text-center mt-12">
           <Link
-            href="/"
+            href="/grading"
             className="inline-flex items-center text-indigo-600 hover:text-indigo-800 font-medium transition-colors px-6 py-3 rounded-full bg-white border border-slate-200 hover:bg-slate-50 shadow-sm"
           >
             トップページに戻る

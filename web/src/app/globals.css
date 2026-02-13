@@ -3,6 +3,9 @@
 :root {
   --background: #ffffff;
   --foreground: #171717;
+  --es-teal: #2DB3A0;
+  --es-blue: #1565C0;
+  --es-dark-blue: #0D47A1;
 }
 
 @theme inline {
@@ -10,6 +13,9 @@
   --color-foreground: var(--foreground);
   --font-sans: var(--font-geist-sans);
   --font-mono: var(--font-geist-mono);
+  --color-es-teal: var(--es-teal);
+  --color-es-blue: var(--es-blue);
+  --color-es-dark-blue: var(--es-dark-blue);
 }
 
 @media (prefers-color-scheme: dark) {
@@ -81,5 +87,38 @@ body {
 
   .avoid-page-break {
     page-break-inside: avoid !important;
+  }
+}
+
+/* Anti-gravity animations */
+@keyframes float {
+  0%, 100% { transform: translateY(0); }
+  50% { transform: translateY(-20px); }
+}
+
+@keyframes pulse-glow {
+  0%, 100% { box-shadow: 0 0 20px rgba(45, 179, 160, 0.5); }
+  50% { box-shadow: 0 0 40px rgba(45, 179, 160, 0.8); }
+}
+
+@keyframes float-particle {
+  0% { transform: translateY(0); opacity: 0; }
+  10% { opacity: 1; }
+  90% { opacity: 1; }
+  100% { transform: translateY(-100vh); opacity: 0; }
+}
+
+.animate-float {
+  animation: float 4s ease-in-out infinite;
+}
+
+.animate-pulse-glow {
+  animation: pulse-glow 3s ease-in-out infinite;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .animate-float,
+  .animate-pulse-glow {
+    animation: none !important;
   }
 }

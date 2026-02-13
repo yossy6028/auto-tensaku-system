@@ -223,7 +223,7 @@ function ResetPasswordContent() {
                   パスワードリセットリンクが無効または期限切れです。
                 </p>
                 <Link
-                  href="/"
+                  href="/grading"
                   className="inline-block px-6 py-3 bg-gradient-to-r from-indigo-600 to-violet-600 text-white font-bold rounded-xl shadow-lg hover:shadow-xl transition-all"
                 >
                   トップページに戻る
@@ -234,7 +234,7 @@ function ResetPasswordContent() {
             <div className="mt-6 pt-6 border-t border-slate-200">
               <p className="text-center text-sm text-slate-600">
                 <Link
-                  href="/"
+                  href="/grading"
                   className="text-indigo-600 hover:text-indigo-800 font-medium"
                 >
                   ログインページに戻る

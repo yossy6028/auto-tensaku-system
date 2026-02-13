@@ -6,7 +6,7 @@ import type { NextRequest } from 'next/server';
 export async function GET(request: NextRequest) {
   const { searchParams, origin } = new URL(request.url);
   const code = searchParams.get('code');
-  const next = searchParams.get('next') ?? '/';
+  const next = searchParams.get('next') ?? '/grading';
 
   if (code) {
     const cookieStore = await cookies();
@@ -40,6 +40,6 @@ export async function GET(request: NextRequest) {
   }
 
   // エラーの場合はホームにリダイレクト
-  return NextResponse.redirect(`${origin}/?error=auth_callback_error`);
+  return NextResponse.redirect(`${origin}/grading?error=auth_callback_error`);
 }
 

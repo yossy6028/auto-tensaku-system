@@ -16,6 +16,7 @@
     "browser-image-compression": "^2.0.2",
     "clsx": "^2.1.1",
     "dotenv": "^17.2.3",
+    "framer-motion": "^12.34.0",
     "heic2any": "^0.0.4",
     "html2canvas": "^1.4.1",
     "jspdf": "^3.0.4",
@@ -31,7 +32,7 @@
     "tailwind-merge": "^3.4.0"
   },
   "devDependencies": {
-    "@tailwindcss/postcss": "^4",
+    "@tailwindcss/postcss": "^4.1.18",
     "@types/node": "^20",
     "@types/react": "^19",
     "@types/react-dom": "^19",

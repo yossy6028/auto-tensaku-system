@@ -69,7 +69,9 @@ export async function POST(request: NextRequest) {
       .select('*')
       .eq('user_id', user.id)
       .eq('status', 'active')
-      .single();
+      .order('created_at', { ascending: false })
+      .limit(1)
+      .maybeSingle();
 
     // 既にアクティブなサブスクリプションがある場合
     // eslint-disable-next-line @typescript-eslint/no-explicit-any

@@ -42,7 +42,7 @@ export async function POST(request: NextRequest) {
     });
 
     return NextResponse.json({
-      url: portalSession.url,
+      redirectUrl: portalSession.url,
     });
   } catch (error) {
     console.error('Portal session creation error:', error);

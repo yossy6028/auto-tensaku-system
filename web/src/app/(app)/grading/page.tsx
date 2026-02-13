@@ -3496,8 +3496,8 @@ export default function Home() {
             {/* ホーム画面に追加する案内 */}
             <div className="bg-sky-50/80 backdrop-blur-sm border-2 border-sky-200 rounded-2xl p-6 shadow-lg">
               <div className="flex items-start">
-                <div className="w-10 h-10 bg-white rounded-xl flex items-center justify-center mr-3 flex-shrink-0 shadow-sm border border-sky-100">
-                  <img src="/taskal-main-logo.png" alt="Taskal AI" className="w-8 h-auto mix-blend-multiply" />
+                <div className="w-12 h-12 bg-white rounded-xl flex items-center justify-center mr-3 flex-shrink-0 shadow-sm border border-sky-100">
+                  <img src="/icons/icon-192.png" alt="Taskal AI" className="w-10 h-10 rounded-lg" />
                 </div>
                 <div className="flex-1">
                   <h3 className="text-sm font-bold text-sky-900 mb-2">ホーム画面に追加</h3>

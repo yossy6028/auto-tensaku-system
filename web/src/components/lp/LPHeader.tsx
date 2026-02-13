@@ -25,11 +25,12 @@ export function LPHeader() {
 
   return (
     <header
-      className={`fixed top-0 left-0 right-0 z-50 transition-colors duration-300 ${
-        scrolled ? 'bg-slate-900/90 backdrop-blur-lg shadow-lg' : 'bg-transparent'
-      }`}
+      className={`fixed top-0 left-0 right-0 z-50 transition-all duration-300 ${scrolled
+          ? 'bg-white/90 backdrop-blur-lg shadow-sm py-3'
+          : 'bg-transparent py-5'
+        }`}
     >
-      <nav className="mx-auto flex max-w-7xl items-center justify-between px-6 py-3">
+      <nav className="mx-auto flex max-w-7xl items-center justify-between px-6">
         {/* Logo */}
         <Link href="/" className="flex items-center gap-2">
           <img src="/logo-edushift.png" alt="EduShift" className="h-9 w-auto" />
@@ -41,14 +42,15 @@ export function LPHeader() {
             <a
               key={link.href}
               href={link.href}
-              className="text-sm text-slate-300 transition-colors hover:text-white"
+              className={`text-sm font-medium transition-colors hover:text-indigo-600 ${scrolled ? 'text-slate-600' : 'text-slate-700'
+                }`}
             >
               {link.label}
             </a>
           ))}
           <Link
             href="/grading"
-            className="rounded-full bg-es-teal px-5 py-2 text-sm font-semibold text-white transition-opacity hover:opacity-90"
+            className="rounded-full bg-indigo-600 px-5 py-2.5 text-sm font-bold text-white shadow-lg shadow-indigo-600/20 transition-all hover:bg-indigo-700 hover:scale-105"
           >
             無料で試す
           </Link>
@@ -56,7 +58,7 @@ export function LPHeader() {
 
         {/* Mobile hamburger */}
         <button
-          className="text-white md:hidden"
+          className="text-slate-700 md:hidden"
           onClick={() => setMobileOpen((prev) => !prev)}
           aria-label={mobileOpen ? 'メニューを閉じる' : 'メニューを開く'}
         >
@@ -72,14 +74,14 @@ export function LPHeader() {
             animate={{ opacity: 1, height: 'auto' }}
             exit={reducedMotion ? { opacity: 0 } : { opacity: 0, height: 0 }}
             transition={{ duration: 0.2 }}
-            className="overflow-hidden bg-slate-900/95 backdrop-blur-lg md:hidden"
+            className="overflow-hidden bg-white/95 backdrop-blur-lg md:hidden border-t border-slate-100"
           >
-            <div className="flex flex-col gap-4 px-6 py-4">
+            <div className="flex flex-col gap-4 px-6 py-6">
               {navLinks.map((link) => (
                 <a
                   key={link.href}
                   href={link.href}
-                  className="text-slate-300 transition-colors hover:text-white"
+                  className="text-slate-600 font-medium transition-colors hover:text-indigo-600"
                   onClick={() => setMobileOpen(false)}
                 >
                   {link.label}
@@ -87,7 +89,7 @@ export function LPHeader() {
               ))}
               <Link
                 href="/grading"
-                className="rounded-full bg-es-teal px-5 py-2 text-center text-sm font-semibold text-white"
+                className="rounded-full bg-indigo-600 px-5 py-3 text-center text-sm font-bold text-white shadow-md"
                 onClick={() => setMobileOpen(false)}
               >
                 無料で試す

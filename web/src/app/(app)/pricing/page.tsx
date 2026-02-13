@@ -10,7 +10,7 @@ const plans = [
   {
     name: 'ライト',
     originalPrice: 1480,
-    price: 980,
+    price: 780,
     period: '月額',
     description: '気軽に始めたい方向け',
     features: [
@@ -33,7 +33,7 @@ const plans = [
   {
     name: 'スタンダード',
     originalPrice: 3980,
-    price: 2980,
+    price: 1980,
     period: '月額',
     description: '定期的に学習したい方に',
     features: [
@@ -56,7 +56,7 @@ const plans = [
   {
     name: '無制限',
     originalPrice: 9800,
-    price: 5980,
+    price: 4980,
     period: '月額',
     description: '塾・講師向け（2デバイスでのみ使用可）',
     features: [

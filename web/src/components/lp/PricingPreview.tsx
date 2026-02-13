@@ -18,7 +18,7 @@ type Plan = {
 const plans: Plan[] = [
   {
     name: 'ライト',
-    price: '¥980',
+    price: '¥780',
     frequency: '月10回',
     features: ['AI自動添削', '3軸評価', '写真アップロード'],
     accent: 'text-es-teal',
@@ -26,7 +26,7 @@ const plans: Plan[] = [
   },
   {
     name: 'スタンダード',
-    price: '¥2,980',
+    price: '¥1,980',
     frequency: '月30回',
     features: ['AI自動添削', '3軸評価', '写真アップロード', '一括添削'],
     accent: 'text-es-blue',
@@ -36,7 +36,7 @@ const plans: Plan[] = [
   },
   {
     name: '無制限',
-    price: '¥5,980',
+    price: '¥4,980',
     frequency: '回数無制限',
     features: [
       'AI自動添削',

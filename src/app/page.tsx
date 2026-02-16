@@ -187,9 +187,9 @@ export default function Home() {
           </div>
 
           <h1 className="text-5xl md:text-7xl font-black text-slate-800 tracking-tight mb-6 leading-tight drop-shadow-sm">
-            国語記述式問題<br className="hidden md:block" />
+            国語記述問題<br className="hidden md:block" />
             <span className="text-transparent bg-clip-text bg-gradient-to-r from-indigo-700 via-violet-700 to-blue-700 animate-gradient-x">
-              自動添削システム
+              AI自動添削システム
             </span>
           </h1>
           <p className="text-lg md:text-xl text-slate-700 max-w-2xl mx-auto leading-relaxed font-bold bg-white/40 backdrop-blur-sm p-4 rounded-xl shadow-sm">

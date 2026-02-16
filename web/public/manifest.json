@@ -1,7 +1,7 @@
 {
   "name": "Taskal AI",
   "short_name": "Taskal AI",
-  "description": "中学・高校受験 国語AI自動添削システム",
+  "description": "国語記述問題AI自動添削システム",
   "start_url": "/",
   "display": "standalone",
   "background_color": "#f8fafc",

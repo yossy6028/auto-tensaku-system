@@ -66,7 +66,7 @@ export function HeroSection() {
             >
               <img
                 src="/taskal-main-logo.png"
-                alt="Taskal AI - 中学高校受験国語記述添削システム"
+                alt="Taskal AI - 国語記述問題AI自動添削システム"
                 className="h-auto w-full max-w-lg object-contain mix-blend-multiply"
               />
             </motion.div>

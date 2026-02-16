@@ -123,7 +123,7 @@ function TermsContent() {
 
 4. 契約期間の途中で解約した場合、既に支払済みの利用料金の日割り計算による返金は行いません。ただし、当社の責めに帰すべき事由による場合はこの限りではありません。
 
-5. 解約後、ユーザーの答案データおよび添削結果は、解約日から90日間保持されます。当該期間中、ユーザーはデータのエクスポートを請求することができます。90日経過後、当社はデータを完全に削除します。`}
+5. 本サービスでは、答案データおよび添削結果はサーバーに保存されません。採点処理の完了後、これらのデータは即時破棄されます。ユーザーは、採点結果が画面に表示されている間に、自身の責任でデータを保存してください。解約後、アカウント情報は90日間保持された後、完全に削除されます。`}
         </div>
       </section>
 
@@ -140,7 +140,7 @@ function TermsContent() {
 
 3. 添削結果に関する著作権は当社に帰属します。当社は、ユーザーに対し、添削結果を個人の学習目的（法人ユーザーの場合は、当該法人が運営する教育事業の目的）で利用する非独占的かつ譲渡不能な権利を許諾します。
 
-4. ユーザーは、当社に対し、本サービスの品質向上、AI学習モデルの改善および新機能の開発を目的として、答案データおよび添削結果を匿名化・統計化したうえで利用することを許諾するものとします。ただし、個人を特定できる形態での利用は行いません。
+4. 当社は、本サービスの品質向上および改善を目的として、利用回数・利用日時等の統計情報を収集・分析することがあります。なお、答案データおよび添削結果はサーバーに保存されないため、これらを用いた分析やAI学習は行いません。
 
 5. ユーザーは、本サービスに出題文・問題文を入力する場合、当該出題文・問題文に関する著作権その他の第三者の権利を侵害しないことを保証するものとします。`}
         </div>
@@ -178,7 +178,7 @@ function TermsContent() {
   (4) 利用するLLMプロバイダーのサービスが中断した場合
   (5) その他、運用上または技術上の理由により中断が必要な場合
 
-3. 当社は、90日前までにユーザーに通知することにより、本サービスの全部を終了することができるものとします。この場合、当社はユーザーが答案データおよび添削結果をエクスポートするための合理的な期間（最低30日間）を設けるものとします。`}
+3. 当社は、90日前までにユーザーに通知することにより、本サービスの全部を終了することができるものとします。なお、本サービスでは答案データおよび添削結果はサーバーに保存されないため、サービス終了時のデータエクスポートの対象外となります。`}
         </div>
       </section>
 
@@ -301,7 +301,7 @@ function PrivacyContent() {
               </tr>
               <tr>
                 <td className="py-3 px-4 border border-slate-200 text-slate-800 font-medium whitespace-nowrap align-top">利用データ</td>
-                <td className="py-3 px-4 border border-slate-200 text-slate-700">答案データ、添削結果、利用履歴（回数・日時・機能）</td>
+                <td className="py-3 px-4 border border-slate-200 text-slate-700">利用履歴（回数・日時・機能）<br />※答案データおよび添削結果はサーバーに保存されません（処理完了後に即時破棄）</td>
               </tr>
               <tr className="bg-slate-50">
                 <td className="py-3 px-4 border border-slate-200 text-slate-800 font-medium whitespace-nowrap align-top">技術情報</td>
@@ -460,12 +460,8 @@ function PrivacyContent() {
                 <td className="py-3 px-4 border border-slate-200 text-slate-700">同意取得日から5年間</td>
               </tr>
               <tr>
-                <td className="py-3 px-4 border border-slate-200 text-slate-800 font-medium whitespace-nowrap">答案データ</td>
-                <td className="py-3 px-4 border border-slate-200 text-slate-700">最終利用日から1年間（または解約後90日のいずれか短い方）</td>
-              </tr>
-              <tr className="bg-slate-50">
-                <td className="py-3 px-4 border border-slate-200 text-slate-800 font-medium whitespace-nowrap">添削結果</td>
-                <td className="py-3 px-4 border border-slate-200 text-slate-700">最終利用日から1年間（または解約後90日のいずれか短い方）</td>
+                <td className="py-3 px-4 border border-slate-200 text-slate-800 font-medium whitespace-nowrap">答案データ・添削結果</td>
+                <td className="py-3 px-4 border border-slate-200 text-slate-700">保存しません（採点処理完了後、サーバーから即時破棄されます。結果はブラウザ上にのみ表示され、ページを離れると消去されます）</td>
               </tr>
               <tr>
                 <td className="py-3 px-4 border border-slate-200 text-slate-800 font-medium whitespace-nowrap">決済情報</td>

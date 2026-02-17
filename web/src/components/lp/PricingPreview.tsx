@@ -8,6 +8,7 @@ type Plan = {
   name: string;
   price: string;
   frequency: string;
+  description: string;
   features: string[];
   accent: string;
   accentBorder: string;
@@ -20,7 +21,8 @@ const plans: Plan[] = [
     name: 'ライト',
     price: '¥980',
     frequency: '月10回',
-    features: ['AI自動添削', '3軸評価', '写真アップロード'],
+    description: '個人向け',
+    features: ['AI自動添削', '3軸評価', '写真アップロード', '一括添削'],
     accent: 'text-es-teal',
     accentBorder: 'border-es-teal/30',
   },
@@ -28,6 +30,7 @@ const plans: Plan[] = [
     name: 'スタンダード',
     price: '¥1,980',
     frequency: '月30回',
+    description: '中小規模の個人塾・フリーランス講師向け',
     features: ['AI自動添削', '3軸評価', '写真アップロード', '一括添削'],
     accent: 'text-es-blue',
     accentBorder: 'border-es-blue/30',
@@ -38,13 +41,8 @@ const plans: Plan[] = [
     name: '無制限',
     price: '¥4,980',
     frequency: '回数無制限',
-    features: [
-      'AI自動添削',
-      '3軸評価',
-      '写真アップロード',
-      '一括添削',
-      '優先サポート',
-    ],
+    description: '中規模・大規模の集団塾向け',
+    features: ['AI自動添削', '3軸評価', '写真アップロード', '一括添削'],
     accent: 'text-es-dark-blue',
     accentBorder: 'border-es-dark-blue/30',
   },
@@ -118,6 +116,7 @@ export function PricingPreview() {
                 <h3 className={`text-lg font-semibold ${plan.accent}`}>
                   {plan.name}
                 </h3>
+                <p className="mt-1 text-sm text-slate-400">{plan.description}</p>
                 <div className="mt-4 flex items-baseline">
                   <span className="text-4xl font-bold text-white">
                     {plan.price}

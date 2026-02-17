@@ -26,22 +26,17 @@ export function PricingPlans({ onSelectPlan, showCurrent = true }: PricingPlansP
 
   const getFeatures = (plan: PricingPlan) => {
     const features = [];
-    
+
     if (plan.usage_limit === null) {
       features.push('無制限で利用可能');
     } else {
       features.push(`${plan.usage_limit}回まで採点可能`);
     }
-    
+
     features.push('AIによる詳細フィードバック');
     features.push('改善アドバイス付き');
     features.push('模範解答の提示');
-    
-    // メールサポートは無制限プランのみ
-    if (plan.usage_limit === null) {
-      features.push('メールサポート');
-    }
-    
+
     return features;
   };
 

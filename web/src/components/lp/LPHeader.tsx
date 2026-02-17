@@ -33,7 +33,7 @@ export function LPHeader() {
       <nav className="mx-auto flex max-w-7xl items-center justify-between px-6">
         {/* Logo */}
         <Link href="/" className="flex items-center gap-2">
-          <img src="/taskal-main-logo.png" alt="Taskal AI" className="h-10 w-auto mix-blend-multiply" />
+          <img src="/logo-edushift.png" alt="EduShift" className="h-10 w-auto" />
         </Link>
 
         {/* Desktop nav */}

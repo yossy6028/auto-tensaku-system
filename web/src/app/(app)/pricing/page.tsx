@@ -13,7 +13,7 @@ const plans = [
     originalPrice: 1480,
     price: 980,
     period: '月額',
-    description: '個人向け',
+    description: '家庭での自己採点向け',
     features: [
       'AI自動添削',
       '詳細なフィードバック',

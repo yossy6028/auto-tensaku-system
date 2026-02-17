@@ -6,7 +6,9 @@ import type { NextRequest } from 'next/server';
 export async function GET(request: NextRequest) {
   const { searchParams, origin } = new URL(request.url);
   const code = searchParams.get('code');
-  const next = searchParams.get('next') ?? '/grading';
+  const rawNext = searchParams.get('next') ?? '/grading';
+  // Open redirect 防止: パスが / で始まり、// を含まないことを検証
+  const next = (rawNext.startsWith('/') && !rawNext.startsWith('//')) ? rawNext : '/grading';
 
   if (code) {
     const cookieStore = await cookies();

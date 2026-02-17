@@ -1,5 +1,9 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { createClient } from '@supabase/supabase-js';
+import { checkRateLimit } from '@/lib/security/rateLimit';
+
+// check-email 用レート制限（IPベース: 10リクエスト/分）
+const CHECK_EMAIL_RATE_LIMIT = { maxRequests: 10, windowMs: 60_000 } as const;
 
 // 遅延初期化 — ビルド時にはenv未設定のためランタイムで生成
 function getSupabaseAdmin() {
@@ -39,6 +43,18 @@ function normalizeEmail(email: string): string {
 
 export async function POST(request: NextRequest) {
   try {
+    // レート制限（IP ベース — ユーザー列挙攻撃の防止）
+    const ip = request.headers.get('x-forwarded-for')?.split(',')[0]?.trim()
+      || request.headers.get('x-real-ip')
+      || 'unknown';
+    const rateLimitResult = checkRateLimit(`check-email:${ip}`, CHECK_EMAIL_RATE_LIMIT);
+    if (!rateLimitResult.success) {
+      return NextResponse.json(
+        { error: 'リクエストが多すぎます。しばらくしてから再度お試しください。' },
+        { status: 429, headers: { 'Retry-After': String(rateLimitResult.retryAfter) } }
+      );
+    }
+
     const { email } = await request.json();
 
     if (!email || typeof email !== 'string') {

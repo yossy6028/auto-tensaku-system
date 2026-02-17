@@ -29,6 +29,7 @@ type UploadedFilePart = {
 };
 
 type CanUseServiceResult = Database['public']['Functions']['can_use_service']['Returns'][number];
+type ReserveUsageResult = Database['public']['Functions']['reserve_usage']['Returns'][number];
 
 type SupabaseRpcClient = {
     rpc: (fn: string, args: Record<string, unknown>) => Promise<{ data: unknown; error: { message?: string } | null }>;
@@ -451,7 +452,15 @@ export async function POST(req: NextRequest) {
             );
         }
 
-        const targetLabels = JSON.parse(targetLabelsJson) as string[];
+        let targetLabels: string[];
+        try {
+            targetLabels = JSON.parse(targetLabelsJson) as string[];
+        } catch {
+            return NextResponse.json(
+                { status: 'error', message: '不正なリクエスト形式です。' },
+                { status: 400 }
+            );
+        }
 
         // PDFページ番号情報を解析
         let pdfPageInfo: { answerPage?: string; problemPage?: string; modelAnswerPage?: string } | null = null;
@@ -528,32 +537,35 @@ export async function POST(req: NextRequest) {
             logger.warn('[API] REGRADE_TOKEN_SECRET is not set. Regrade tokens will be ignored.');
         }
 
-        const requiresPaidUsage = sanitizedLabels.some((label) => !freeRegradeByLabel.has(label));
+        const paidLabels = sanitizedLabels.filter((label) => !freeRegradeByLabel.has(label));
+        const requiresPaidUsage = paidLabels.length > 0;
+        let reservedCount = 0;
 
-        // 利用可否チェック（無料再採点のみの場合はスキップ）
+        // 利用枠をアトミックに予約（無料再採点のみの場合はスキップ）
         if (requiresPaidUsage) {
-            const { data: usageData, error: usageError } = await supabaseRpc
-                .rpc('can_use_service', { p_user_id: user.id });
-            const usageRows = usageData as CanUseServiceResult[] | null;
+            const { data: reserveData, error: reserveError } = await supabaseRpc
+                .rpc('reserve_usage', { p_user_id: user.id, p_count: paidLabels.length });
+            const reserveRows = reserveData as ReserveUsageResult[] | null;
 
-            if (usageError) {
-                logger.error('Usage check error:', usageError);
+            if (reserveError) {
+                logger.error('Usage reservation error:', reserveError);
                 return NextResponse.json(
                     { status: 'error', message: '利用状況の確認中にエラーが発生しました。' },
                     { status: 500 }
                 );
             }
 
-            if (!usageRows || usageRows.length === 0 || !usageRows[0].can_use) {
+            if (!reserveRows || reserveRows.length === 0 || !reserveRows[0].success) {
                 return NextResponse.json(
                     {
                         status: 'error',
-                        message: usageRows?.[0]?.message || '利用可能なプランがありません。プランを購入してください。',
+                        message: reserveRows?.[0]?.message || '利用可能なプランがありません。プランを購入してください。',
                         requirePlan: true
                     },
                     { status: 403 }
                 );
             }
+            reservedCount = paidLabels.length;
         }
 
         // ファイルをバッファに変換（役割情報を付与）
@@ -658,29 +670,29 @@ export async function POST(req: NextRequest) {
 
                 logger.info(`[API] 並列処理完了: ${results.filter(r => r.result && !r.error).length}/${results.length}問成功`);
 
-                // 採点成功時に利用回数をインクリメント（不完全な採点は除外）
+                // 採点結果から有料成功数を算出し、予約した枠との差分を解放
                 const successfulGradings = results.filter(r => r.result && !r.error && !r.incompleteGrading);
+                const successfulPaidCount = successfulGradings.filter(
+                    r => !freeRegradeByLabel.has(r.label)
+                ).length;
 
-
-                for (const grading of successfulGradings) {
-                    // 無料再採点の場合は消費しない
-                    if (freeRegradeByLabel.has(grading.label)) {
-                        continue;
+                // 失敗分の枠を解放（予約した数 - 実際に成功した有料採点数）
+                const releaseCount = reservedCount - successfulPaidCount;
+                if (releaseCount > 0) {
+                    const { error: releaseError } = await supabaseRpc
+                        .rpc('release_usage', { p_user_id: user.id, p_count: releaseCount });
+                    if (releaseError) {
+                        logger.error('Failed to release unused usage slots:', releaseError);
+                    } else {
+                        logger.info(`[API] Released ${releaseCount} unused usage slot(s)`);
                     }
-                    const { error: incrementError } = await supabaseRpc
-                        .rpc('increment_usage', {
-                            p_user_id: user.id,
-                            p_metadata: {
-                                label: grading.label,
-                                strictness,
-                                timestamp: new Date().toISOString()
-                            }
-                        });
+                }
 
-
-                    if (incrementError) {
-                        logger.error('Failed to increment usage:', incrementError);
-                    }
+                // 成功した採点のラベルをログに記録
+                if (successfulPaidCount > 0) {
+                    logger.info(`[API] Usage reserved: ${reservedCount}, successful paid: ${successfulPaidCount}, labels: ${
+                        successfulGradings.filter(r => !freeRegradeByLabel.has(r.label)).map(r => r.label).join(', ')
+                    }`);
                 }
 
                 // 更新後の利用情報を取得
@@ -689,7 +701,7 @@ export async function POST(req: NextRequest) {
                     const { data: updatedUsageData } = await supabaseRpc
                         .rpc('can_use_service', { p_user_id: user.id });
                     updatedUsageRows = updatedUsageData as CanUseServiceResult[] | null;
-                } catch (error) {
+                } catch {
                     // 無視（無料再採点のみでプランが無い等の場合に備える）
                 }
 

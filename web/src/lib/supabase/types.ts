@@ -242,6 +242,25 @@ export interface Database {
           remaining_count: number | null;
         }[];
       };
+      reserve_usage: {
+        Args: { p_user_id: string; p_count?: number };
+        Returns: {
+          success: boolean;
+          message: string;
+          subscription_id: string | null;
+          usage_count: number | null;
+          usage_limit: number | null;
+          remaining_count: number | null;
+          plan_name: string | null;
+        }[];
+      };
+      release_usage: {
+        Args: { p_user_id: string; p_count?: number };
+        Returns: {
+          success: boolean;
+          message: string;
+        }[];
+      };
       get_active_subscription: {
         Args: { p_user_id: string };
         Returns: {

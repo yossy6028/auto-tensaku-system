@@ -350,8 +350,7 @@ function PrivacyContent() {
           <div className="space-y-2 text-sm">
             <p className="text-blue-800 font-medium">委託先：</p>
             <ul className="space-y-1 text-blue-700 ml-4">
-              <li>&#8226; OpenAI, Inc.（米国）</li>
-              <li>&#8226; Anthropic, PBC（米国）</li>
+              <li>&#8226; Google LLC（米国）- Gemini API</li>
             </ul>
             <p className="text-blue-600 text-xs mt-2">※利用プロバイダーは変更される場合があり、変更時には本ポリシーを更新します。</p>
           </div>

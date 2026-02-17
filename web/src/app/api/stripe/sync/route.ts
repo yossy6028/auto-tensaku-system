@@ -22,9 +22,9 @@ const mapStripeStatus = (stripeStatus?: string | null): SubscriptionStatus => {
   return 'past_due';
 };
 
-export async function POST(request: NextRequest) {
+export async function POST(_request: NextRequest) {
   try {
-    // 型衝突を避けるためゆるくキャスト
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any -- Supabase client型の互換性問題を回避
     const supabase = (await createClient()) as any;
     const {
       data: { user },

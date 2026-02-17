@@ -10,7 +10,10 @@ const notoSansJP = Noto_Sans_JP({
   variable: "--font-noto-sans-jp",
 });
 
+const BASE_URL = process.env.NEXT_PUBLIC_APP_URL || 'https://auto-tensaku-system.vercel.app';
+
 export const metadata: Metadata = {
+  metadataBase: new URL(BASE_URL),
   title: "Taskal AI — 国語記述問題の自動添削",
   description: "指導歴20年超のベテラン国語講師のノウハウとAIによる解析で、あなたの思考に寄り添うフィードバックを提供する自動添削システムです。",
   keywords: ["国語", "添削", "AI", "自動採点", "記述式", "受験", "教育"],
@@ -26,9 +29,18 @@ export const metadata: Metadata = {
     description: "指導歴20年超のベテラン国語講師のノウハウとAIによる解析で、あなたの思考に寄り添うフィードバックを提供します。",
     type: "website",
     locale: "ja_JP",
+    siteName: "Taskal AI",
+  },
+  twitter: {
+    card: "summary_large_image",
+    title: "Taskal AI — 国語記述問題の自動添削",
+    description: "指導歴20年超のベテラン国語講師のノウハウとAIによる解析で、あなたの思考に寄り添うフィードバックを提供します。",
   },
   icons: {
     apple: "/icons/apple-touch-icon.png",
+  },
+  alternates: {
+    canonical: '/',
   },
 };
 

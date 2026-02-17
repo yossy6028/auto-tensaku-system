@@ -337,7 +337,11 @@ export async function POST(req: NextRequest) {
 
     } catch (error: unknown) {
         logger.error('OCR API Error:', error);
-        const message = error instanceof Error ? error.message : 'OCRエラーが発生しました。';
+        // 本番環境ではエラー詳細を隠す
+        const isDev = process.env.NODE_ENV === 'development';
+        const message = isDev
+            ? (error instanceof Error ? error.message : 'OCRエラーが発生しました。')
+            : 'OCR処理中にエラーが発生しました。しばらく時間をおいてから再度お試しください。';
         return NextResponse.json(
             { status: 'error', message },
             { status: 500 }

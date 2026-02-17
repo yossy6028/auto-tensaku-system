@@ -10,7 +10,7 @@ export default function AccountPage() {
   const [mounted, setMounted] = useState(false);
 
   useEffect(() => {
-    setMounted(true);
+    setMounted(true); // eslint-disable-line react-hooks/set-state-in-effect -- hydration guard pattern
   }, []);
 
   if (!mounted || isLoading) {

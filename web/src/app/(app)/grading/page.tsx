@@ -2903,18 +2903,6 @@ export default function Home() {
           setRequirePlan(true);
         }
       } else {
-        console.log('[Page] Grading successful, setting results...');
-        console.log('[Page] Results detail:', JSON.stringify(data.results, null, 2));
-        // 各結果の構造を確認
-        data.results.forEach((r: { label: string; result?: unknown; error?: string }, idx: number) => {
-          console.log(`[Page] Result ${idx}:`, {
-            label: r.label,
-            hasResult: !!r.result,
-            resultKeys: r.result ? Object.keys(r.result as object) : [],
-            hasGradingResult: !!(r.result as Record<string, unknown>)?.grading_result,
-            error: r.error
-          });
-        });
         // 既存の結果とマージ: 同じラベルの問題は新しい結果で上書き
         setResults((prev) => {
           const newItems = Array.isArray(data.results) ? data.results : [];
@@ -2927,20 +2915,12 @@ export default function Home() {
 
         // 回数消費情報をログ出力・保存
         if (data.usageInfo) {
-          console.log('[Page] Usage info from API:', data.usageInfo);
-          console.log('[DEBUG] usageInfo details:', {
-            remainingCount: data.usageInfo.remainingCount,
-            usageCount: data.usageInfo.usageCount,
-            usageLimit: data.usageInfo.usageLimit
-          });
           // 現在の使用回数を保存（APIから返された最新情報）
           setUsageConsumed({
             consumed: true,
             previousCount: usageInfo?.usageCount ?? null,
             currentCount: data.usageInfo.usageCount ?? null,
           });
-        } else {
-          console.warn('[Page] No usageInfo returned from API');
         }
 
         // 利用情報を更新（エラーが発生しても続行、非同期で実行）

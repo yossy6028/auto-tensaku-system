@@ -39,12 +39,14 @@ SET normalized_email = normalize_email(email)
 WHERE normalized_email IS NULL AND email IS NOT NULL;
 
 -- 4. 自動正規化トリガー（INSERT / UPDATE of email 時に発火）
+-- GoTrue (supabase_auth_admin) のコンテキストでも normalize_email() を
+-- 解決できるよう、search_path を明示的に設定する。
 CREATE OR REPLACE FUNCTION set_normalized_email() RETURNS TRIGGER AS $$
 BEGIN
-  NEW.normalized_email := normalize_email(NEW.email);
+  NEW.normalized_email := public.normalize_email(NEW.email);
   RETURN NEW;
 END;
-$$ LANGUAGE plpgsql;
+$$ LANGUAGE plpgsql SET search_path = public;
 
 DROP TRIGGER IF EXISTS trg_set_normalized_email ON user_profiles;
 CREATE TRIGGER trg_set_normalized_email

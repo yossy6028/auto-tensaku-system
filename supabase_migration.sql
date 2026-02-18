@@ -169,15 +169,17 @@ BEGIN
         display_name = COALESCE(user_profiles.display_name, EXCLUDED.display_name);
     RETURN NEW;
 EXCEPTION
-    WHEN unique_violation THEN
-        -- normalized_email の UNIQUE 制約違反。trg_set_normalized_email が BEFORE INSERT で
-        -- normalized_email を上書きするため、ここで再INSERT しても同じ違反が起きる。
-        -- auth.users の作成は成功させ、プロファイル欠如はアプリ層（check-email の
-        -- resend フロー）で対処する。
-        RAISE WARNING 'handle_new_user: normalized_email unique_violation for user % (email: %). Profile not created.', NEW.id, NEW.email;
+    WHEN OTHERS THEN
+        -- GoTrue の実行コンテキスト (supabase_auth_admin) では search_path に public が
+        -- 含まれない場合があり、trg_set_normalized_email 経由の normalize_email() が
+        -- 見つからないなどのエラーが発生し得る。全エラーをキャッチしてログに記録し、
+        -- auth.users の作成は成功させる。プロファイル欠如はアプリ層の
+        -- ensure-profile API で自動復旧される。
+        RAISE WARNING 'handle_new_user: error for user % (email: %): % [sqlstate=%]',
+            NEW.id, NEW.email, SQLERRM, SQLSTATE;
         RETURN NEW;
 END;
-$$ LANGUAGE plpgsql SECURITY DEFINER;
+$$ LANGUAGE plpgsql SECURITY DEFINER SET search_path = public;
 
 DROP TRIGGER IF EXISTS on_auth_user_created ON auth.users;
 CREATE TRIGGER on_auth_user_created

@@ -1,0 +1,238 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=1200, height=630">
+  <title>OGP Template</title>
+  <link href="https://fonts.googleapis.com/css2?family=Noto+Sans+JP:wght@400;700;900&family=Inter:wght@700;900&display=swap" rel="stylesheet">
+  <style>
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+
+    body {
+      width: 1200px;
+      height: 630px;
+      overflow: hidden;
+      position: relative;
+      /* Taskal AI brand gradient — matches the brand banner */
+      background: linear-gradient(140deg, #12C5A3 0%, #0A8ED6 55%, #0050B8 100%);
+      font-family: 'Noto Sans JP', sans-serif;
+    }
+
+    /* ── Decorative circles (right side) ── */
+    .deco-circle {
+      position: absolute;
+      border-radius: 50%;
+      background: rgba(255, 255, 255, 0.07);
+    }
+    .c1 { width: 520px; height: 520px; top: -120px; right: -100px; }
+    .c2 { width: 320px; height: 320px; top:   80px; right:  200px; background: rgba(255,255,255,0.05); }
+    .c3 { width: 200px; height: 200px; bottom: -50px; right:  80px; background: rgba(255,255,255,0.06); }
+
+    /* ── Grid texture (right half) ── */
+    .deco-grid {
+      position: absolute;
+      right: 0; top: 0;
+      width: 480px; height: 630px;
+      background-image:
+        linear-gradient(rgba(255,255,255,0.07) 1px, transparent 1px),
+        linear-gradient(90deg, rgba(255,255,255,0.07) 1px, transparent 1px);
+      background-size: 44px 44px;
+      -webkit-mask-image: linear-gradient(to left, rgba(255,255,255,0.6), transparent);
+      mask-image: linear-gradient(to left, rgba(255,255,255,0.6), transparent);
+    }
+
+    /* ── EduShift logo — top left ── */
+    .logo-edushift {
+      position: absolute;
+      top: 44px; left: 72px;
+      z-index: 3;
+    }
+    .logo-edushift img {
+      height: 44px;
+      object-fit: contain;
+      /* colored logo → white on gradient background */
+      filter: brightness(0) invert(1);
+      opacity: 0.90;
+    }
+
+    /* ── Main content ── */
+    .content {
+      position: relative;
+      z-index: 2;
+      width: 100%;
+      height: 100%;
+      display: flex;
+      flex-direction: column;
+      justify-content: center;
+      padding: 0 72px;
+      padding-top: 20px; /* nudge down from logo */
+    }
+
+    /* Badge */
+    .badge {
+      display: inline-flex;
+      align-items: center;
+      gap: 10px;
+      background: rgba(255, 255, 255, 0.15);
+      border: 1.5px solid rgba(255, 255, 255, 0.30);
+      color: rgba(255, 255, 255, 0.95);
+      padding: 9px 22px;
+      border-radius: 100px;
+      font-size: 15px;
+      font-weight: 700;
+      letter-spacing: 1.5px;
+      width: fit-content;
+      margin-bottom: 28px;
+    }
+    .badge::before {
+      content: "";
+      width: 7px; height: 7px;
+      background: white;
+      border-radius: 50%;
+      flex-shrink: 0;
+    }
+
+    /* Main title */
+    .main-title {
+      color: #fff;
+      font-size: 70px;
+      font-weight: 900;
+      line-height: 1.22;
+      letter-spacing: -0.5px;
+      text-shadow: 0 3px 28px rgba(0, 40, 100, 0.25);
+      margin-bottom: 22px;
+      max-width: 700px;
+    }
+
+    /* Subtitle */
+    .subtitle {
+      color: rgba(255, 255, 255, 0.78);
+      font-size: 21px;
+      font-weight: 400;
+      letter-spacing: 1px;
+    }
+
+    /* ── Bottom: stats (left) + wordmark (right) ── */
+    .bottom-bar {
+      position: absolute;
+      bottom: 44px;
+      left: 72px; right: 72px;
+      z-index: 3;
+      display: flex;
+      align-items: flex-end;
+      justify-content: space-between;
+    }
+
+    .stats {
+      display: flex;
+      gap: 14px;
+    }
+    .stat-pill {
+      background: rgba(255, 255, 255, 0.14);
+      border: 1px solid rgba(255, 255, 255, 0.22);
+      border-radius: 10px;
+      padding: 10px 20px;
+      text-align: center;
+    }
+    .stat-value {
+      font-family: 'Inter', sans-serif;
+      font-size: 22px;
+      font-weight: 900;
+      color: #fff;
+      line-height: 1.1;
+    }
+    .stat-label {
+      font-size: 11px;
+      color: rgba(255, 255, 255, 0.70);
+      margin-top: 3px;
+      letter-spacing: 0.5px;
+    }
+
+    /* Taskal AI wordmark */
+    .wordmark {
+      display: flex;
+      align-items: baseline;
+      gap: 0;
+      line-height: 1;
+    }
+    .wordmark .taskal {
+      font-family: 'Inter', sans-serif;
+      font-size: 36px;
+      font-weight: 900;
+      color: #fff;
+      letter-spacing: -1px;
+    }
+    .wordmark .ai {
+      font-family: 'Inter', sans-serif;
+      font-size: 36px;
+      font-weight: 900;
+      /* subtle tint to mimic the logo color variation */
+      color: rgba(200, 240, 255, 0.90);
+      letter-spacing: -1px;
+    }
+    .wordmark .tagline {
+      display: block;
+      font-size: 11px;
+      color: rgba(255,255,255,0.55);
+      letter-spacing: 1px;
+      text-align: right;
+      margin-top: 4px;
+    }
+    .wordmark-wrap {
+      display: flex;
+      flex-direction: column;
+      align-items: flex-end;
+    }
+  </style>
+</head>
+<body>
+
+  <!-- Decorative elements -->
+  <div class="deco-circle c1"></div>
+  <div class="deco-circle c2"></div>
+  <div class="deco-circle c3"></div>
+  <div class="deco-grid"></div>
+
+  <!-- EduShift logo -->
+  <div class="logo-edushift">
+    <img src="logo-edushift.png" alt="EduShift">
+  </div>
+
+  <!-- Main content -->
+  <div class="content">
+    <div class="badge">AI × 国語教育</div>
+    <h1 class="main-title">
+      国語記述問題の<br>自動添削システム
+    </h1>
+    <p class="subtitle">指導歴20年超の国語講師ノウハウ × AI分析</p>
+  </div>
+
+  <!-- Bottom bar -->
+  <div class="bottom-bar">
+    <div class="stats">
+      <div class="stat-pill">
+        <div class="stat-value">20年+</div>
+        <div class="stat-label">指導実績</div>
+      </div>
+      <div class="stat-pill">
+        <div class="stat-value">即時</div>
+        <div class="stat-label">AIフィードバック</div>
+      </div>
+      <div class="stat-pill">
+        <div class="stat-value">記述式</div>
+        <div class="stat-label">採点対応</div>
+      </div>
+    </div>
+
+    <div class="wordmark-wrap">
+      <div class="wordmark">
+        <span class="taskal">Taskal&nbsp;</span><span class="ai">AI</span>
+      </div>
+      <span class="wordmark-wrap tagline" style="font-size:11px;color:rgba(255,255,255,0.50);letter-spacing:1px;margin-top:4px;">
+        Powered by EduShift
+      </span>
+    </div>
+  </div>
+
+</body>
+</html>

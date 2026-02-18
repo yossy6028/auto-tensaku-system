@@ -30,11 +30,20 @@ export const metadata: Metadata = {
     type: "website",
     locale: "ja_JP",
     siteName: "Taskal AI",
+    images: [
+      {
+        url: "/ogp.png",
+        width: 1200,
+        height: 630,
+        alt: "Taskal AI — 国語記述問題の自動添削システム",
+      },
+    ],
   },
   twitter: {
     card: "summary_large_image",
     title: "Taskal AI — 国語記述問題の自動添削",
     description: "指導歴20年超のベテラン国語講師のノウハウとAIによる解析で、あなたの思考に寄り添うフィードバックを提供します。",
+    images: ["/ogp.png"],
   },
   icons: {
     apple: "/icons/apple-touch-icon.png",

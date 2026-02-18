@@ -74,7 +74,11 @@ export async function POST(request: NextRequest) {
 
     if (error) {
       console.error('[check-email] DB query error:', error);
-      return NextResponse.json({ ok: true });
+      // DBエラー時は500を返す（サインアップ側のcatchで続行される）
+      return NextResponse.json(
+        { error: 'メールアドレスの確認に失敗しました' },
+        { status: 500 }
+      );
     }
 
     if (data) {

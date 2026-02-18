@@ -164,8 +164,15 @@ BEGIN
         COALESCE(NEW.raw_user_meta_data->>'display_name', split_part(NEW.email, '@', 1)),
         NOW()
     )
-    ON CONFLICT (id) DO NOTHING;
+    ON CONFLICT (id) DO UPDATE SET
+        email = EXCLUDED.email,
+        display_name = COALESCE(user_profiles.display_name, EXCLUDED.display_name);
     RETURN NEW;
+EXCEPTION
+    WHEN unique_violation THEN
+        -- normalized_email の UNIQUE 制約違反時もユーザー作成自体は失敗させない
+        RAISE WARNING 'handle_new_user: unique_violation for user % (email: %)', NEW.id, NEW.email;
+        RETURN NEW;
 END;
 $$ LANGUAGE plpgsql SECURITY DEFINER;
 

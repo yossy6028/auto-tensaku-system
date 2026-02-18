@@ -785,11 +785,22 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       // チェック失敗時はサインアップを続行（DB側のUNIQUE制約がフォールバック）
     }
 
-    const { error } = await supabase.auth.signUp({
+    const { data, error } = await supabase.auth.signUp({
       email,
       password,
       options: { emailRedirectTo: `${window.location.origin}/auth/callback` },
     });
+
+    // Supabase は既存の未確認ユーザーに対して error=null を返すが確認メールを再送しない。
+    // identities が空配列の場合、既存ユーザーと判断し明示的に確認メールを再送する。
+    if (!error && data?.user?.identities?.length === 0) {
+      try {
+        await supabase.auth.resend({ type: 'signup', email });
+      } catch {
+        // resend 失敗でもユーザー列挙防止のため成功として扱う
+      }
+    }
+
     return { error };
   };
 

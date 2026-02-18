@@ -170,18 +170,11 @@ BEGIN
     RETURN NEW;
 EXCEPTION
     WHEN unique_violation THEN
-        -- normalized_email の UNIQUE 制約違反でもプロファイルは必ず作成する。
-        -- normalized_email を NULL にして再試行し、孤立ユーザーを防ぐ。
-        RAISE WARNING 'handle_new_user: unique_violation for user % (email: %), retrying without normalized_email', NEW.id, NEW.email;
-        INSERT INTO public.user_profiles (id, email, display_name, free_trial_started_at, normalized_email)
-        VALUES (
-            NEW.id,
-            NEW.email,
-            COALESCE(NEW.raw_user_meta_data->>'display_name', split_part(NEW.email, '@', 1)),
-            NOW(),
-            NULL
-        )
-        ON CONFLICT (id) DO NOTHING;
+        -- normalized_email の UNIQUE 制約違反。trg_set_normalized_email が BEFORE INSERT で
+        -- normalized_email を上書きするため、ここで再INSERT しても同じ違反が起きる。
+        -- auth.users の作成は成功させ、プロファイル欠如はアプリ層（check-email の
+        -- resend フロー）で対処する。
+        RAISE WARNING 'handle_new_user: normalized_email unique_violation for user % (email: %). Profile not created.', NEW.id, NEW.email;
         RETURN NEW;
 END;
 $$ LANGUAGE plpgsql SECURITY DEFINER;

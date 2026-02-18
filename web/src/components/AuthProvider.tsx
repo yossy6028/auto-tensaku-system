@@ -771,6 +771,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     if (!supabase) return { error: new Error('Supabase is not configured') };
 
     // エイリアス重複チェック（Gmailの+やドット等を正規化して既存ユーザーと照合）
+    let emailBlocked = false;
     try {
       const checkRes = await fetch('/api/auth/check-email', {
         method: 'POST',
@@ -778,11 +779,29 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         body: JSON.stringify({ email }),
       });
       if (checkRes.status === 409) {
-        const data = await checkRes.json();
-        return { error: new Error(data.error || 'このメールアドレスは既に登録されています。') };
+        emailBlocked = true;
       }
     } catch {
       // チェック失敗時はサインアップを続行（DB側のUNIQUE制約がフォールバック）
+    }
+
+    if (emailBlocked) {
+      // プロファイルは存在するが、未確認ユーザーかもしれない。
+      // resend を試み、成功すれば確認メールを再送。失敗なら本当に重複。
+      try {
+        const { error: resendError } = await supabase.auth.resend({
+          type: 'signup',
+          email,
+          options: { emailRedirectTo: `${window.location.origin}/auth/callback` },
+        });
+        if (!resendError) {
+          // 未確認ユーザーへの確認メール再送に成功
+          return { error: null };
+        }
+      } catch {
+        // resend 自体の通信エラー — フォールスルーしてエラー表示
+      }
+      return { error: new Error('このメールアドレスは既に登録されています。ログインをお試しください。') };
     }
 
     const { data, error } = await supabase.auth.signUp({
@@ -791,8 +810,8 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       options: { emailRedirectTo: `${window.location.origin}/auth/callback` },
     });
 
-    // Supabase は既存の未確認ユーザーに対して error=null を返すが確認メールを再送しない。
-    // identities が空配列の場合、既存ユーザーと判断し明示的に確認メールを再送する。
+    // Supabase は既存の未確認ユーザー（プロファイルなし）に対して error=null を返すが
+    // 確認メールを再送しない。identities が空配列の場合に明示的に再送する。
     if (!error && data?.user?.identities?.length === 0) {
       try {
         await supabase.auth.resend({

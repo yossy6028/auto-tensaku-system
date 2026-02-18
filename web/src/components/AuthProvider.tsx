@@ -795,7 +795,11 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     // identities が空配列の場合、既存ユーザーと判断し明示的に確認メールを再送する。
     if (!error && data?.user?.identities?.length === 0) {
       try {
-        await supabase.auth.resend({ type: 'signup', email });
+        await supabase.auth.resend({
+          type: 'signup',
+          email,
+          options: { emailRedirectTo: `${window.location.origin}/auth/callback` },
+        });
       } catch {
         // resend 失敗でもユーザー列挙防止のため成功として扱う
       }

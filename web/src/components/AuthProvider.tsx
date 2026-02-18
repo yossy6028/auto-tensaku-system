@@ -197,7 +197,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     }
   }, [supabaseClient]);
 
-  // ユーザープロファイルを取得
+  // ユーザープロファイルを取得（孤立ユーザーの自動復旧付き）
   const fetchProfile = useCallback(async (userId: string) => {
     if (!supabaseClient) return;
 
@@ -207,6 +207,34 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         .select('*')
         .eq('id', userId)
         .single();
+
+      if (error && error.code === 'PGRST116') {
+        // PGRST116 = "JSON object requested, multiple (or no) rows returned"
+        // → プロファイルが存在しない孤立ユーザー。自動作成を試みる。
+        console.warn('[AuthProvider] Profile not found for user %s. Attempting auto-creation...', userId);
+        try {
+          const res = await fetch('/api/auth/ensure-profile', { method: 'POST' });
+          if (res.ok) {
+            const result = await res.json();
+            if (result.created) {
+              // 作成成功 → 再取得
+              const { data: retryData } = await supabaseClient
+                .from('user_profiles')
+                .select('*')
+                .eq('id', userId)
+                .single();
+              if (retryData) {
+                setProfile(retryData as UserProfile);
+                return;
+              }
+            }
+          }
+        } catch {
+          // ensure-profile の通信エラー — フォールスルー
+        }
+        setProfile(null);
+        return;
+      }
 
       if (error) {
         console.warn('[AuthProvider] Failed to fetch user profile:', error.message);

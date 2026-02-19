@@ -555,6 +555,13 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
       if (data && Array.isArray(data) && data.length > 0) {
         const info = data[0];
+        // can_use_service は access_type カラムを返さないため、plan_name から推定する
+        // plan_name の値: 'trial'（トライアル経由）, '無料体験'（直接判定）, 'admin', 実際のプラン名
+        const derivedAccessType = info.access_type
+          || (info.plan_name === 'trial' || info.plan_name === '無料体験' || info.plan_name === 'free_trial' ? 'trial'
+            : info.plan_name === 'admin' ? 'admin'
+            : info.plan_name === 'free_trial_expired' ? 'expired'
+            : 'none');
         setUsageInfo({
           canUse: info.can_use,
           message: info.message,
@@ -562,11 +569,11 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
           usageLimit: info.usage_limit,
           remainingCount: info.remaining_count,
           planName: info.plan_name,
-          accessType: info.access_type || 'none',
+          accessType: derivedAccessType,
         });
 
         // 無料体験終了チェック
-        if (!info.can_use && info.access_type === 'none') {
+        if (!info.can_use && derivedAccessType === 'none') {
           await fetchFreeAccessInfo(targetUser.id).catch(() => {});
         }
       } else {

@@ -2528,9 +2528,13 @@ export default function Home() {
         };
 
         // 初期値として確認済みテキストにも設定
+        // ただしプレースホルダーテキスト（OCR失敗）の場合は空文字にして
+        // ユーザーに手動入力を促す
+        const ocrText = data.ocrResult!.text;
+        const isPlaceholder = /読み取れませんでした|取得できませんでした|判読不能|認識できません/.test(ocrText);
         setConfirmedTexts(prev => ({
           ...prev,
-          [label]: data.ocrResult!.text
+          [label]: isPlaceholder ? '' : ocrText
         }));
       } catch (err) {
         console.error('OCR error:', err);
@@ -2566,6 +2570,18 @@ export default function Home() {
       console.log('[Page] No confirmedTexts');
       setError('読み取り結果がありません。');
       setOcrFlowStep('idle');
+      return;
+    }
+
+    // 全ての確認済みテキストが空またはプレースホルダーの場合
+    const placeholderRe = /読み取れませんでした|取得できませんでした|判読不能|認識できません/;
+    const hasValidText = Object.values(confirmedTexts).some(
+      text => text.trim().length > 0 && !placeholderRe.test(text)
+    );
+    if (!hasValidText) {
+      console.log('[Page] All confirmedTexts are empty or placeholders');
+      setError('読み取り結果が空です。答案テキストを手動で入力してください。');
+      setOcrFlowStep('confirm');
       return;
     }
 
@@ -4560,6 +4576,11 @@ export default function Home() {
                           className="w-full h-40 p-4 border border-slate-300 rounded-xl focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 font-mono text-sm leading-relaxed resize-y"
                           placeholder="読み取り結果がここに表示されます"
                         />
+                        {/読み取れませんでした|取得できませんでした|判読不能|認識できません/.test(result.text || '') && (
+                          <p className="mt-1 text-xs text-red-500">
+                            ⚠️ 読み取りに失敗しました。手動で入力してください。
+                          </p>
+                        )}
                         {result.charCount !== (confirmedTexts[label]?.length || 0) && (
                           <p className="mt-1 text-xs text-amber-600">
                             ※ 元の読み取り: {result.charCount}文字 → 修正後: {confirmedTexts[label]?.length || 0}文字
@@ -5118,9 +5139,9 @@ export default function Home() {
                                   }}
                                   rows={3}
                                   className="w-full px-3 py-2 border-2 border-slate-200 rounded-lg focus:border-amber-400 focus:outline-none font-mono text-sm resize-none"
-                                  placeholder={ocrResult?.text ? '読み取り結果を編集...' : '答案テキストを入力...'}
+                                  placeholder={ocrResult?.text && !/読み取れませんでした|取得できませんでした|判読不能|認識できません/.test(ocrResult.text) ? '読み取り結果を編集...' : '答案テキストを入力...'}
                                 />
-                                {!ocrResult?.text && (
+                                {(!ocrResult?.text || /読み取れませんでした|取得できませんでした|判読不能|認識できません/.test(ocrResult.text)) && (
                                   <p className="text-xs text-red-500 mt-1">⚠️ 読み取りに失敗しました。手動で入力してください。</p>
                                 )}
                               </div>

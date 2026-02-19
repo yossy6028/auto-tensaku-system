@@ -262,6 +262,12 @@ type QualityValidationResult = {
     warnings: string[];
 };
 
+// OCRプレースホルダー検出パターン（統一定義）
+// OCRが失敗した場合のフォールバックテキストや、AIが生成する「読み取れなかった」系の文言を検出する
+// 注意: このパターンを変更する場合は、isOcrFailure(), validateAndEnhanceGrading(),
+//       validateGradingQuality(), executeTwoStageGrading() の全てに影響する
+const OCR_PLACEHOLDER_PATTERN = /読み取れませんでした|読めません|判読不能|不鮮明|見つかりません|認識できません|空です|〓{3,}|取得できませんでした|回答テキストを取得できませんでした/;
+
 // ファイル分類用の正規表現パターン
 const FILE_PATTERNS = {
     answer: /(answer|ans|student|解答|答案|生徒)/i,
@@ -915,7 +921,7 @@ ${hasAllRole ? `手書きの答案部分のみ読み取り。印刷文字は無�
     private isOcrFailure(text: string): boolean {
         const normalized = text.replace(/\s+/g, "");
         if (!normalized) return true;
-        return /読み取れませんでした|読めません|判読不能|不鮮明|見つかりません|認識できません|空です/.test(text);
+        return OCR_PLACEHOLDER_PATTERN.test(text);
     }
 
     /**
@@ -1613,11 +1619,10 @@ JSONのみ出力してください。`;
         const gradingResult = parsed.grading_result as GradingResult | undefined;
         if (!gradingResult) return parsed;
 
-        // recognized_text の検証と復元
-        const placeholderPattern = /読み取れませんでした|画像が不鮮明|見つかりません|〓{3,}|取得できませんでした/;
+        // recognized_text の検証と復元（統一プレースホルダーパターンを使用）
         const currentText = String(gradingResult.recognized_text || "").trim();
         const currentLength = currentText.replace(/\s+/g, "").length;
-        const needsRecovery = !currentText || placeholderPattern.test(currentText);
+        const needsRecovery = !currentText || OCR_PLACEHOLDER_PATTERN.test(currentText);
 
         // ocr_debug から最適なテキストを探す
         if (parsed.ocr_debug) {
@@ -1633,7 +1638,7 @@ JSONのみ出力してください。`;
             // 1. corrected_text（AIが修正したテキスト）
             if (ocrDebug?.corrected_text && typeof ocrDebug.corrected_text === 'string') {
                 const text = ocrDebug.corrected_text.trim();
-                if (text && !placeholderPattern.test(text)) {
+                if (text && !OCR_PLACEHOLDER_PATTERN.test(text)) {
                     candidates.push({ source: "corrected_text", text, length: text.replace(/\s+/g, "").length });
                 }
             }
@@ -1641,13 +1646,13 @@ JSONのみ出力してください。`;
             // 2. column_readings の連結
             if (ocrDebug?.column_readings && Array.isArray(ocrDebug.column_readings)) {
                 const rebuilt = ocrDebug.column_readings.join("");
-                if (rebuilt.trim() && !placeholderPattern.test(rebuilt)) {
+                if (rebuilt.trim() && !OCR_PLACEHOLDER_PATTERN.test(rebuilt)) {
                     candidates.push({ source: "column_readings", text: rebuilt.trim(), length: rebuilt.replace(/\s+/g, "").length });
                 }
             }
 
             // 3. 現在のテキスト（プレースホルダーでない場合）
-            if (currentText && !placeholderPattern.test(currentText)) {
+            if (currentText && !OCR_PLACEHOLDER_PATTERN.test(currentText)) {
                 candidates.push({ source: "current", text: currentText, length: currentLength });
             }
 
@@ -1781,11 +1786,10 @@ JSONのみ出力してください。`;
         }
 
         // 必須フィールドのチェック
-        // 1. recognized_text（OCR結果）
+        // 1. recognized_text（OCR結果）- 統一プレースホルダーパターンを使用
         const recognizedText = String(gradingResult.recognized_text || "").trim();
-        const placeholderPattern = /読み取れませんでした|画像が不鮮明|見つかりません|〓{5,}|取得できませんでした|回答テキストを取得できませんでした/;
 
-        if (!recognizedText || placeholderPattern.test(recognizedText)) {
+        if (!recognizedText || OCR_PLACEHOLDER_PATTERN.test(recognizedText)) {
             missingFields.push("recognized_text（生徒の解答）");
         } else if (recognizedText.length < 5) {
             warnings.push("recognized_textが極端に短い（5文字未満）");
@@ -2393,8 +2397,8 @@ ${layout ? '- 【重要】上記のレイアウト情報を信頼し、字下げ
             }
         }
 
-        // OCR結果がプレースホルダーかどうかを判定
-        const ocrIsPlaceholder = /読み取れませんでした|画像が不鮮明|見つかりません/.test(ocrText);
+        // OCR結果がプレースホルダーかどうかを判定（統一パターンを使用）
+        const ocrIsPlaceholder = OCR_PLACEHOLDER_PATTERN.test(ocrText);
         const ocrCharCount = ocrText.replace(/\s+/g, "").length;
 
         // Stage 2用プロンプト
@@ -2526,15 +2530,12 @@ System Instructionに定義された以下のルールを厳密に適用して�
                 ? parsed.grading_result as Record<string, unknown>
                 : (parsed.grading_result = {} as Record<string, unknown>);
 
-            // プレースホルダーパターン（これにマッチするテキストは「読み取り失敗」とみなす）
-            const placeholderPattern = /読み取れませんでした|画像が不鮮明|見つかりません|〓{3,}/;
-
-            // 候補テキストを収集（優先順）
+            // 候補テキストを収集（優先順）- 統一プレースホルダーパターンを使用
             const candidates: { source: string; text: string }[] = [];
 
             // 1. AIが返したrecognized_text（検証・修正済みの可能性）
             const aiRecognized = String(gradingResultObj.recognized_text || "").trim();
-            if (aiRecognized && !placeholderPattern.test(aiRecognized)) {
+            if (aiRecognized && !OCR_PLACEHOLDER_PATTERN.test(aiRecognized)) {
                 candidates.push({ source: "ai_response", text: aiRecognized });
             }
 
@@ -2542,20 +2543,20 @@ System Instructionに定義された以下のルールを厳密に適用して�
             const ocrDebug = parsed.ocr_debug as { column_readings?: string[] } | undefined;
             if (ocrDebug?.column_readings && Array.isArray(ocrDebug.column_readings)) {
                 const rebuilt = ocrDebug.column_readings.join("");
-                if (rebuilt.trim() && !placeholderPattern.test(rebuilt)) {
+                if (rebuilt.trim() && !OCR_PLACEHOLDER_PATTERN.test(rebuilt)) {
                     candidates.push({ source: "column_readings", text: rebuilt.trim() });
                 }
             }
 
             // 3. Stage 1のOCR結果（fullText優先）
             const normalizedFull = (ocrResult.fullText || "").trim();
-            if (normalizedFull && !placeholderPattern.test(normalizedFull)) {
+            if (normalizedFull && !OCR_PLACEHOLDER_PATTERN.test(normalizedFull)) {
                 candidates.push({ source: "ocr_fullText", text: normalizedFull });
             }
 
             // 4. Stage 1のOCR結果（ターゲット抽出済み）
             const normalizedText = (ocrText || "").trim();
-            if (normalizedText && !placeholderPattern.test(normalizedText)) {
+            if (normalizedText && !OCR_PLACEHOLDER_PATTERN.test(normalizedText)) {
                 candidates.push({ source: "ocr_text", text: normalizedText });
             }
 

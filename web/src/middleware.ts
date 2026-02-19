@@ -2,12 +2,20 @@ import { createServerClient } from '@supabase/ssr';
 import { NextResponse, type NextRequest } from 'next/server';
 
 export async function middleware(request: NextRequest) {
-  // マジックリンク等で code パラメータがルートに届いた場合、/auth/callback に転送
-  const code = request.nextUrl.searchParams.get('code');
-  if (code && request.nextUrl.pathname === '/') {
-    const callbackUrl = request.nextUrl.clone();
-    callbackUrl.pathname = '/auth/callback';
-    return NextResponse.redirect(callbackUrl);
+  // マジックリンク等で code/error パラメータがルートに届いた場合に転送
+  if (request.nextUrl.pathname === '/') {
+    const code = request.nextUrl.searchParams.get('code');
+    if (code) {
+      const callbackUrl = request.nextUrl.clone();
+      callbackUrl.pathname = '/auth/callback';
+      return NextResponse.redirect(callbackUrl);
+    }
+    const error = request.nextUrl.searchParams.get('error');
+    if (error) {
+      const gradingUrl = request.nextUrl.clone();
+      gradingUrl.pathname = '/grading';
+      return NextResponse.redirect(gradingUrl);
+    }
   }
 
   let supabaseResponse = NextResponse.next({

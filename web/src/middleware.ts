@@ -2,6 +2,14 @@ import { createServerClient } from '@supabase/ssr';
 import { NextResponse, type NextRequest } from 'next/server';
 
 export async function middleware(request: NextRequest) {
+  // マジックリンク等で code パラメータがルートに届いた場合、/auth/callback に転送
+  const code = request.nextUrl.searchParams.get('code');
+  if (code && request.nextUrl.pathname === '/') {
+    const callbackUrl = request.nextUrl.clone();
+    callbackUrl.pathname = '/auth/callback';
+    return NextResponse.redirect(callbackUrl);
+  }
+
   let supabaseResponse = NextResponse.next({
     request,
   });

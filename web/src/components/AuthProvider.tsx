@@ -6,6 +6,9 @@ import { createClient } from '@/lib/supabase/client';
 import type { UserProfile, Subscription, PricingPlan, Database, DeviceInfo, DeviceRegistrationResult } from '@/lib/supabase/types';
 import { getDeviceInfo, markDeviceAsRegistered, clearDeviceRegistration } from '@/lib/utils/deviceFingerprint';
 
+// Auth リダイレクト用ベースURL（NEXT_PUBLIC_APP_URL が設定済みならそちらを優先）
+const SITE_URL = process.env.NEXT_PUBLIC_APP_URL || (typeof window !== 'undefined' ? window.location.origin : '');
+
 // デバイス情報の型（RPC関数の戻り値）
 type UserDeviceInfo = Database['public']['Functions']['get_user_devices']['Returns'][0];
 
@@ -763,7 +766,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     if (!supabase) return { error: new Error('Supabase is not configured') };
     const { error } = await supabase.auth.signInWithOtp({
       email,
-      options: { emailRedirectTo: `${window.location.origin}/auth/callback` },
+      options: { emailRedirectTo: `${SITE_URL}/auth/callback` },
     });
     return { error };
   };
@@ -820,7 +823,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         const { error: resendError } = await supabase.auth.resend({
           type: 'signup',
           email,
-          options: { emailRedirectTo: `${window.location.origin}/auth/callback` },
+          options: { emailRedirectTo: `${SITE_URL}/auth/callback` },
         });
         if (!resendError) {
           // 未確認ユーザーへの確認メール再送に成功
@@ -835,7 +838,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     const { data, error } = await supabase.auth.signUp({
       email,
       password,
-      options: { emailRedirectTo: `${window.location.origin}/auth/callback` },
+      options: { emailRedirectTo: `${SITE_URL}/auth/callback` },
     });
 
     // Supabase は既存の未確認ユーザー（プロファイルなし）に対して error=null を返すが
@@ -845,7 +848,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         await supabase.auth.resend({
           type: 'signup',
           email,
-          options: { emailRedirectTo: `${window.location.origin}/auth/callback` },
+          options: { emailRedirectTo: `${SITE_URL}/auth/callback` },
         });
       } catch {
         // resend 失敗でもユーザー列挙防止のため成功として扱う
@@ -858,7 +861,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const resetPassword = async (email: string) => {
     if (!supabase) return { error: new Error('Supabase is not configured') };
     const { error } = await supabase.auth.resetPasswordForEmail(email, {
-      redirectTo: `${window.location.origin}/auth/reset-password`,
+      redirectTo: `${SITE_URL}/auth/reset-password`,
     });
     return { error };
   };

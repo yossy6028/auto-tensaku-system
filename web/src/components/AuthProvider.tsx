@@ -7,7 +7,7 @@ import type { UserProfile, Subscription, PricingPlan, Database, DeviceInfo, Devi
 import { getDeviceInfo, markDeviceAsRegistered, clearDeviceRegistration } from '@/lib/utils/deviceFingerprint';
 
 // Auth リダイレクト用ベースURL（NEXT_PUBLIC_APP_URL が設定済みならそちらを優先）
-const SITE_URL = process.env.NEXT_PUBLIC_APP_URL || (typeof window !== 'undefined' ? window.location.origin : '');
+const SITE_URL = (process.env.NEXT_PUBLIC_APP_URL || (typeof window !== 'undefined' ? window.location.origin : '')).trim();
 
 // デバイス情報の型（RPC関数の戻り値）
 type UserDeviceInfo = Database['public']['Functions']['get_user_devices']['Returns'][0];

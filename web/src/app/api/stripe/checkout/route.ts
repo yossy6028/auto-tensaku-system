@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { createClient } from '@/lib/supabase/server';
-import { stripe, getStripePriceId } from '@/lib/stripe/config';
+import { getStripe, getStripePriceId } from '@/lib/stripe/config';
 
 export const dynamic = 'force-dynamic';
 
@@ -25,6 +25,14 @@ interface CheckoutRequestBody {
 
 export async function POST(request: NextRequest) {
   try {
+    if (!process.env.NEXT_PUBLIC_SUPABASE_URL || !process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY) {
+      return NextResponse.json({ error: 'Supabase設定が不足しています' }, { status: 503 });
+    }
+
+    if (!process.env.STRIPE_SECRET_KEY) {
+      return NextResponse.json({ error: 'Stripe設定が不足しています' }, { status: 503 });
+    }
+
     const supabase = await createClient();
 
     // 認証チェック
@@ -38,6 +46,8 @@ export async function POST(request: NextRequest) {
 
     const body: CheckoutRequestBody = await request.json();
     const { planName } = body;
+
+    const stripe = getStripe();
 
     // プラン名からStripe Price IDを取得
     const priceId = getStripePriceId(planName);

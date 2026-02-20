@@ -12,11 +12,31 @@ interface AuthModalProps {
 
 type AuthMode = 'signin' | 'signup' | 'magic' | 'reset';
 
+/** Supabase GoTrue の英語エラーメッセージを日本語に変換 */
+function translateAuthError(message: string): string {
+  const translations: Record<string, string> = {
+    'Error sending confirmation email': '確認メールの送信に失敗しました。しばらくしてからお試しください。',
+    'Unable to validate email address: invalid format': 'メールアドレスの形式が正しくありません。',
+    'User already registered': 'このメールアドレスは既に登録されています。',
+    'Invalid login credentials': 'メールアドレスまたはパスワードが正しくありません。',
+    'Email rate limit exceeded': 'メール送信の制限に達しました。しばらくしてからお試しください。',
+    'Password should be at least 6 characters': 'パスワードは6文字以上で入力してください。',
+    'Signups not allowed for this instance': '現在新規登録を受け付けていません。',
+    'Email link is invalid or has expired': 'メールリンクが無効または期限切れです。再度お試しください。',
+    'For security purposes, you can only request this after 60 seconds': 'セキュリティのため、60秒後に再度お試しください。',
+  };
+  for (const [eng, jpn] of Object.entries(translations)) {
+    if (message.includes(eng)) return jpn;
+  }
+  return message;
+}
+
 export function AuthModal({ isOpen, onClose, initialMode = 'signin' }: AuthModalProps) {
   const { signInWithEmail, signInWithPassword, signUp, resetPassword, user } = useAuth();
   const [mode, setMode] = useState<AuthMode>(initialMode);
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
+  const [confirmPassword, setConfirmPassword] = useState('');
   const [isLoading, setIsLoading] = useState(false);
   const [message, setMessage] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
 
@@ -38,6 +58,7 @@ export function AuthModal({ isOpen, onClose, initialMode = 'signin' }: AuthModal
       setMessage(null);
       setEmail('');
       setPassword('');
+      setConfirmPassword('');
     }
   }, [isOpen, initialMode]);
 
@@ -60,6 +81,12 @@ export function AuthModal({ isOpen, onClose, initialMode = 'signin' }: AuthModal
     e.preventDefault();
     setIsLoading(true);
     setMessage(null);
+
+    if (mode === 'signup' && password !== confirmPassword) {
+      setMessage({ type: 'error', text: 'パスワードが一致しません。' });
+      setIsLoading(false);
+      return;
+    }
 
     try {
       let result;
@@ -85,11 +112,12 @@ export function AuthModal({ isOpen, onClose, initialMode = 'signin' }: AuthModal
           setMessage({ type: 'success', text: '確認メールを送信しました。メールをご確認ください。' });
           setEmail('');
           setPassword('');
+          setConfirmPassword('');
         }
       }
 
       if (result?.error) {
-        setMessage({ type: 'error', text: result.error.message });
+        setMessage({ type: 'error', text: translateAuthError(result.error.message) });
       }
     } catch (err: unknown) {
       const message = err instanceof Error ? err.message : 'エラーが発生しました';
@@ -183,6 +211,33 @@ export function AuthModal({ isOpen, onClose, initialMode = 'signin' }: AuthModal
                     className="w-full pl-10 pr-4 py-3 border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-transparent"
                   />
                 </div>
+              </div>
+            )}
+
+            {mode === 'signup' && (
+              <div>
+                <label className="block text-sm font-medium text-slate-700 mb-1">
+                  パスワード（確認）
+                </label>
+                <div className="relative">
+                  <Lock className="absolute left-3 top-1/2 -translate-y-1/2 w-5 h-5 text-slate-400" />
+                  <input
+                    type="password"
+                    value={confirmPassword}
+                    onChange={(e) => setConfirmPassword(e.target.value)}
+                    required
+                    placeholder="••••••••"
+                    minLength={6}
+                    className={`w-full pl-10 pr-4 py-3 border rounded-xl focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-transparent ${
+                      confirmPassword && password !== confirmPassword
+                        ? 'border-red-300 bg-red-50'
+                        : 'border-slate-200'
+                    }`}
+                  />
+                </div>
+                {confirmPassword && password !== confirmPassword && (
+                  <p className="mt-1 text-xs text-red-600">パスワードが一致しません</p>
+                )}
               </div>
             )}
 

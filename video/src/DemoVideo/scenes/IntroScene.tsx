@@ -27,7 +27,7 @@ export const IntroScene: React.FC = () => {
         }}
       >
         <p className="text-4xl font-bold text-white leading-relaxed">
-          もう、夜中に赤ペン握らなくていい。
+          記述の添削をもっと早く、正確に。
         </p>
       </div>
     </AbsoluteFill>

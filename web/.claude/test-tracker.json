@@ -1,11 +1,11 @@
 {
   "executions": {
     "typecheck": {
-      "timestamp": "2026-02-13T16:21:49.449619",
-      "command": "cd \"/Users/yoshiikatsuhiko/Development/開発 (Development)2026~/auto-tensaku-system/web\" && npm run typecheck 2>&1 | tail -20"
+      "timestamp": "2026-02-18T22:35:54.645813",
+      "command": "cd \"/Users/yoshiikatsuhiko/Development/開発 (Development)2026~/auto-tensaku-system/web\" && npm run typecheck 2>&1 | tail -30"
     },
     "lint": {
-      "timestamp": "2026-02-13T16:22:00.708017",
+      "timestamp": "2026-02-18T22:36:09.586686",
       "command": "cd \"/Users/yoshiikatsuhiko/Development/開発 (Development)2026~/auto-tensaku-system/web\" && npm run lint 2>&1 | tail -20"
     }
   }

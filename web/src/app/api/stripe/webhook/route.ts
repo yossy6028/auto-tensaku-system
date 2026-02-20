@@ -284,23 +284,22 @@ export async function POST(request: NextRequest) {
 
   logger.info('Webhook event received:', event.type);
 
-  // イベント重複処理防止（冪等性チェック — upsert + on conflict で原子的に判定）
-  const { data: insertedEvent, error: eventInsertError } = await getSupabaseAdmin()
-    .from('stripe_events')
-    .upsert(
-      { event_id: event.id, event_type: event.type, data: event.data },
-      { onConflict: 'event_id', ignoreDuplicates: true }
-    )
-    .select('id')
-    .maybeSingle();
-
-  // upsert で行が返らない = 既に処理済み
-  if (!insertedEvent && !eventInsertError) {
-    logger.info('Duplicate event skipped:', event.id);
-    return NextResponse.json({ received: true });
-  }
-
   try {
+    // イベント重複処理防止（冪等性チェック — upsert + on conflict で原子的に判定）
+    const { data: insertedEvent, error: eventInsertError } = await getSupabaseAdmin()
+      .from('stripe_events')
+      .upsert(
+        { event_id: event.id, event_type: event.type, data: event.data },
+        { onConflict: 'event_id', ignoreDuplicates: true }
+      )
+      .select('id')
+      .maybeSingle();
+
+    // upsert で行が返らない = 既に処理済み
+    if (!insertedEvent && !eventInsertError) {
+      logger.info('Duplicate event skipped:', event.id);
+      return NextResponse.json({ received: true });
+    }
     switch (event.type) {
       case 'checkout.session.completed': {
         const session = event.data.object as Stripe.Checkout.Session;

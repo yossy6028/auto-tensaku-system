@@ -1,5 +1,5 @@
-import { NextResponse } from 'next/server';
-import { stripe, getPlanIdFromStripePriceId } from '@/lib/stripe/config';
+import { NextRequest, NextResponse } from 'next/server';
+import { getStripe, getPlanIdFromStripePriceId } from '@/lib/stripe/config';
 import { createClient } from '@/lib/supabase/server';
 
 const PLAN_LIMITS: Record<string, number> = {
@@ -22,8 +22,16 @@ const mapStripeStatus = (stripeStatus?: string | null): SubscriptionStatus => {
   return 'past_due';
 };
 
-export async function POST() {
+export async function POST(_request: NextRequest) {
   try {
+    if (!process.env.NEXT_PUBLIC_SUPABASE_URL || !process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY) {
+      return NextResponse.json({ error: 'Supabase設定が不足しています' }, { status: 503 });
+    }
+
+    if (!process.env.STRIPE_SECRET_KEY) {
+      return NextResponse.json({ error: 'Stripe設定が不足しています' }, { status: 503 });
+    }
+
     // eslint-disable-next-line @typescript-eslint/no-explicit-any -- Supabase client型の互換性問題を回避
     const supabase = (await createClient()) as any;
     const {
@@ -54,6 +62,7 @@ export async function POST() {
     const customerId = stripeCustomerId;
 
     // 最新のサブスクリプションをStripeから取得
+    const stripe = getStripe();
     const subscriptions = await stripe.subscriptions.list({
       customer: customerId,
       status: 'all',

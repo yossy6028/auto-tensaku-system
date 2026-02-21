@@ -37,6 +37,19 @@ interface PlanResolution {
   pricePaid: number;
 }
 
+// Stripe API 2025-11-17+ では current_period_start/end が
+// トップレベルから items.data[0] に移動されたため、両方をフォールバックで取得する
+function getSubscriptionPeriod(subscription: Record<string, unknown>): { start?: Date; end?: Date } {
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const item = (subscription.items as any)?.data?.[0];
+  const startTs = (subscription.current_period_start as number | undefined) ?? (item?.current_period_start as number | undefined);
+  const endTs = (subscription.current_period_end as number | undefined) ?? (item?.current_period_end as number | undefined);
+  return {
+    start: startTs ? new Date(startTs * 1000) : undefined,
+    end: endTs ? new Date(endTs * 1000) : undefined,
+  };
+}
+
 const mapStripeStatus = (stripeStatus?: string | null): SubscriptionStatus => {
   if (stripeStatus === 'active' || stripeStatus === 'trialing') return 'active';
   if (stripeStatus === 'canceled' || stripeStatus === 'cancelled') return 'cancelled';
@@ -323,13 +336,14 @@ export async function POST(request: NextRequest) {
           }
 
           const priceId = subscription.items.data[0]?.price?.id;
+          const period = getSubscriptionPeriod(subscription);
           await upsertSubscriptionRecord({
             userId,
             subscriptionId,
             priceId: priceId || null,
             status: 'active',
-            currentPeriodStart: new Date(subscription.current_period_start * 1000),
-            currentPeriodEnd: new Date(subscription.current_period_end * 1000),
+            currentPeriodStart: period.start,
+            currentPeriodEnd: period.end,
             cancelAtPeriodEnd: subscription.cancel_at_period_end || false,
             resetUsageCount: true,
             purchasedAt: new Date(),
@@ -361,13 +375,14 @@ export async function POST(request: NextRequest) {
         const planChanged = previousAttributes?.items !== undefined;
 
         const priceId = subscription.items.data[0]?.price?.id;
+        const period = getSubscriptionPeriod(subscription);
         await upsertSubscriptionRecord({
           userId,
           subscriptionId: subscription.id,
           priceId: priceId || null,
           status: mapStripeStatus(subscription.status),
-          currentPeriodStart: new Date(subscription.current_period_start * 1000),
-          currentPeriodEnd: new Date(subscription.current_period_end * 1000),
+          currentPeriodStart: period.start,
+          currentPeriodEnd: period.end,
           cancelAtPeriodEnd: subscription.cancel_at_period_end || false,
           resetUsageCount: planChanged,
         });
@@ -392,17 +407,14 @@ export async function POST(request: NextRequest) {
         
         if (!userId) break;
 
+        const deletedPeriod = getSubscriptionPeriod(subscription);
         await upsertSubscriptionRecord({
           userId,
           subscriptionId: subscription.id,
           priceId: subscription.items?.data?.[0]?.price?.id || null,
           status: 'cancelled',
-          currentPeriodStart: subscription.current_period_start
-            ? new Date(subscription.current_period_start * 1000)
-            : undefined,
-          currentPeriodEnd: subscription.current_period_end
-            ? new Date(subscription.current_period_end * 1000)
-            : undefined,
+          currentPeriodStart: deletedPeriod.start,
+          currentPeriodEnd: deletedPeriod.end,
           cancelAtPeriodEnd: true,
         });
         break;
@@ -430,13 +442,14 @@ export async function POST(request: NextRequest) {
           
           if (!userId) break;
 
+          const invoicePeriod = getSubscriptionPeriod(subscription);
           await upsertSubscriptionRecord({
             userId,
             subscriptionId,
             priceId: subscription.items?.data?.[0]?.price?.id || null,
             status: mapStripeStatus(subscription.status),
-            currentPeriodStart: new Date(subscription.current_period_start * 1000),
-            currentPeriodEnd: new Date(subscription.current_period_end * 1000),
+            currentPeriodStart: invoicePeriod.start,
+            currentPeriodEnd: invoicePeriod.end,
             cancelAtPeriodEnd: subscription.cancel_at_period_end || false,
             resetUsageCount: true,
           });
@@ -466,17 +479,14 @@ export async function POST(request: NextRequest) {
           
           if (!userId) break;
 
+          const failedPeriod = getSubscriptionPeriod(subscription);
           await upsertSubscriptionRecord({
             userId,
             subscriptionId,
             priceId: subscription.items?.data?.[0]?.price?.id || null,
             status: 'past_due',
-            currentPeriodStart: subscription.current_period_start
-              ? new Date(subscription.current_period_start * 1000)
-              : undefined,
-            currentPeriodEnd: subscription.current_period_end
-              ? new Date(subscription.current_period_end * 1000)
-              : undefined,
+            currentPeriodStart: failedPeriod.start,
+            currentPeriodEnd: failedPeriod.end,
             cancelAtPeriodEnd: subscription.cancel_at_period_end || false,
           });
         }

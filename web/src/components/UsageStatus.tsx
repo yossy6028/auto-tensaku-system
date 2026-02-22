@@ -199,12 +199,6 @@ export function UsageStatus({ compact = false, className = '' }: UsageStatusProp
           </div>
         </div>
 
-        {freeAccessInfo?.trialDaysRemaining !== null && freeAccessInfo?.trialDaysRemaining !== undefined && (
-          <p className="text-sm text-slate-500 text-center mt-3">
-            体験期間残り: <span className="font-bold">{freeAccessInfo.trialDaysRemaining}日</span>
-          </p>
-        )}
-
         <div className="mt-4 p-3 bg-indigo-50 border border-indigo-100 rounded-lg">
           <p className="text-sm text-indigo-700 text-center">
             無料体験後も引き続きご利用いただくには、

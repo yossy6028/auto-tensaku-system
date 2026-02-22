@@ -3,7 +3,7 @@
 export const dynamic = 'force-dynamic';
 
 import React, { useState, useEffect } from 'react';
-import { ArrowLeft, Save, Plus, Trash2, AlertCircle, CheckCircle, Loader2, Edit2, X, Infinity, Users, BarChart3, Gift, Calendar, Clock } from 'lucide-react';
+import { ArrowLeft, Save, Plus, Trash2, AlertCircle, CheckCircle, Loader2, Edit2, X, Infinity, Users, BarChart3, Gift, Calendar } from 'lucide-react';
 import Link from 'next/link';
 import { useAuth } from '@/components/AuthProvider';
 import type { SupabaseClient } from '@supabase/supabase-js';
@@ -17,7 +17,6 @@ interface UserStats {
 }
 
 interface SystemSettingsState {
-  freeTrialDays: number;
   freeTrialUsageLimit: number;
   freeAccessEnabled: boolean;
   freeAccessUntil: string;
@@ -44,7 +43,6 @@ export default function AdminPage() {
   
   // システム設定
   const [systemSettings, setSystemSettings] = useState<SystemSettingsState>({
-    freeTrialDays: 7,
     freeTrialUsageLimit: 3,
     freeAccessEnabled: false,
     freeAccessUntil: '',
@@ -116,7 +114,6 @@ export default function AdminPage() {
     
       if (data) {
         const settings: SystemSettingsState = {
-          freeTrialDays: 7,
           freeTrialUsageLimit: 3,
           freeAccessEnabled: false,
           freeAccessUntil: '',
@@ -125,9 +122,6 @@ export default function AdminPage() {
         data.forEach((item: SystemSettingRow) => {
           const valueString = item.value ?? '';
           switch (item.key) {
-            case 'free_trial_days':
-              settings.freeTrialDays = parseInt(valueString, 10) || 7;
-              break;
             case 'free_trial_usage_limit':
               settings.freeTrialUsageLimit = parseInt(valueString, 10) || 3;
               break;
@@ -153,7 +147,6 @@ export default function AdminPage() {
 
     try {
       const updates: Array<{ key: SystemSettingRow['key']; value: string }> = [
-        { key: 'free_trial_days', value: systemSettings.freeTrialDays.toString() },
         { key: 'free_trial_usage_limit', value: systemSettings.freeTrialUsageLimit.toString() },
         { key: 'free_access_enabled', value: systemSettings.freeAccessEnabled.toString() },
         { key: 'free_access_until', value: systemSettings.freeAccessUntil ? `"${systemSettings.freeAccessUntil}"` : 'null' },
@@ -658,29 +651,11 @@ export default function AdminPage() {
             {/* 無料体験設定 */}
             <div className="bg-amber-50 rounded-2xl p-6 border border-amber-100">
               <h3 className="text-lg font-bold text-amber-800 mb-4 flex items-center">
-                <Clock className="w-5 h-5 mr-2" />
-                無料体験期間設定
+                <Gift className="w-5 h-5 mr-2" />
+                無料体験設定
               </h3>
               
               <div className="space-y-4">
-                <div>
-                  <label className="block text-sm font-medium text-slate-700 mb-1">
-                    体験期間（日数）
-                  </label>
-                  <input
-                    type="number"
-                    value={systemSettings.freeTrialDays}
-                    onChange={(e) => setSystemSettings({ 
-                      ...systemSettings, 
-                      freeTrialDays: parseInt(e.target.value) || 7 
-                    })}
-                    min="1"
-                    max="30"
-                    className="w-full px-4 py-2 border border-amber-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-amber-500 bg-white"
-                  />
-                  <p className="text-xs text-amber-600 mt-1">新規登録から何日間無料体験を提供するか</p>
-                </div>
-
                 <div>
                   <label className="block text-sm font-medium text-slate-700 mb-1">
                     体験利用回数上限

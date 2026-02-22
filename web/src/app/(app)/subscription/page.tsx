@@ -407,13 +407,6 @@ export default function SubscriptionPage() {
                     </div>
                   </div>
 
-                  {/* Trial Period Info */}
-                  {freeAccessInfo?.trialDaysRemaining !== null && freeAccessInfo?.trialDaysRemaining !== undefined && (
-                    <p className="text-sm text-slate-500 flex items-center">
-                      <Clock className="w-4 h-4 mr-2" />
-                      体験期間の残り日数: <span className="font-bold text-slate-700 ml-1">{freeAccessInfo.trialDaysRemaining}日</span>
-                    </p>
-                  )}
                 </div>
 
                 {/* CTA */}

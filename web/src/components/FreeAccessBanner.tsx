@@ -2,7 +2,7 @@
 
 import React from 'react';
 import { useAuth } from './AuthProvider';
-import { Gift, Clock, Sparkles, X, AlertCircle } from 'lucide-react';
+import { Gift, Sparkles, X, AlertCircle } from 'lucide-react';
 import { useState } from 'react';
 import Link from 'next/link';
 
@@ -66,7 +66,6 @@ export function FreeAccessBanner() {
 
   // 無料体験中
   if (usageInfo?.accessType === 'trial') {
-    const daysRemaining = freeAccessInfo?.trialDaysRemaining ?? 0;
     const usageRemaining = usageInfo.remainingCount ?? 0;
     const usageLimit = systemSettings?.freeTrialUsageLimit || 3;
     const usageCount = usageLimit - usageRemaining;
@@ -77,11 +76,6 @@ export function FreeAccessBanner() {
           <Sparkles className="w-5 h-5" />
           <span className="font-bold">無料体験中</span>
           <div className="flex items-center gap-4 text-amber-100 text-sm">
-            <span className="flex items-center">
-              <Clock className="w-4 h-4 mr-1" />
-              残り{daysRemaining}日
-            </span>
-            <span>|</span>
             <span className="font-semibold">
               {usageCount}/{usageLimit}回使用済み（残り{usageRemaining}回）
             </span>

@@ -848,17 +848,22 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       options: { emailRedirectTo: `${SITE_URL}/auth/callback` },
     });
 
-    // Supabase は既存の未確認ユーザー（プロファイルなし）に対して error=null を返すが
-    // 確認メールを再送しない。identities が空配列の場合に明示的に再送する。
+    // Supabase は既存ユーザーに対して error=null + identities=[] を返す（ユーザー列挙防止）。
+    // 未確認ユーザーなら resend で確認メール再送、確認済みならログインを促す。
     if (!error && data?.user?.identities?.length === 0) {
       try {
-        await supabase.auth.resend({
+        const { error: resendError } = await supabase.auth.resend({
           type: 'signup',
           email,
           options: { emailRedirectTo: `${SITE_URL}/auth/callback` },
         });
+        if (resendError) {
+          // resend がエラー → 既に確認済みのユーザー（孤立ユーザー含む）
+          return { error: new Error('このメールアドレスは既に登録されています。ログインをお試しください。') };
+        }
       } catch {
-        // resend 失敗でもユーザー列挙防止のため成功として扱う
+        // 通信エラー — 安全側に倒してログインを促す
+        return { error: new Error('このメールアドレスは既に登録されています。ログインをお試しください。') };
       }
     }
 

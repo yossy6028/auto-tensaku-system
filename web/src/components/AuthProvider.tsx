@@ -663,12 +663,18 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         ]).catch(() => {});
 
         // ユーザー固有のデータ取得（セッションがある場合のみ）
+        // プロフィール作成完了後にrefreshUsageInfoを実行（レースコンディション防止）
         if (session?.user && isMounted) {
-          Promise.all([
-            fetchProfile(session.user.id).catch(() => {}),
-            fetchSubscription(session.user.id).catch(() => {}),
-            handleDeviceRegistration(session.user.id).catch(() => {})
-          ]).catch(() => {});
+          const userId = session.user.id;
+          // fetchProfileを先に完了させてからrefreshUsageInfoを実行
+          fetchProfile(userId).catch(() => {}).then(() => {
+            if (isMounted) {
+              refreshUsageInfo(session.user).catch(() => {});
+            }
+          });
+          // サブスクリプション・デバイス登録は並列で問題なし
+          fetchSubscription(userId).catch(() => {});
+          handleDeviceRegistration(userId).catch(() => {});
         }
       } catch (error) {
         console.error('[AuthProvider] Auth initialization error:', error);
@@ -703,18 +709,18 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
           const sessionUser = session.user;
 
           setTimeout(async () => {
-            // プロファイル取得（直接クエリ）
+            // プロファイル取得（ensure-profile対応版を使用し、レースコンディションを防止）
             try {
-              const { data: profileData, error: profileError } = await supabase
-                .from('user_profiles')
-                .select('*')
-                .eq('id', userId)
-                .single();
-              if (!profileError && profileData) {
-                setProfile(profileData as UserProfile);
-              }
+              await fetchProfile(userId);
             } catch (e) {
               console.error('[AuthProvider] Profile fetch error:', e);
+            }
+
+            // プロフィール作成完了後に利用可否情報を更新
+            try {
+              await refreshUsageInfo(sessionUser);
+            } catch (e) {
+              console.error('[AuthProvider] refreshUsageInfo error:', e);
             }
 
             // サブスクリプション取得（直接クエリ）
@@ -732,13 +738,6 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
               }
             } catch (e) {
               console.error('[AuthProvider] Subscription fetch error:', e);
-            }
-
-            // 利用可否情報を更新
-            try {
-              await refreshUsageInfo(sessionUser);
-            } catch (e) {
-              console.error('[AuthProvider] refreshUsageInfo error:', e);
             }
 
             // デバイス登録処理

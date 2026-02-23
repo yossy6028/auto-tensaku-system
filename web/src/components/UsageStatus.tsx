@@ -47,7 +47,8 @@ export function UsageStatus({ compact = false, className = '' }: UsageStatusProp
 
   // 管理者アカウントの場合はsubscriptionチェックをスキップ
   // 無料体験中のユーザーもsubscriptionチェックをスキップ
-  if (!subscription && !isAdmin && !isTrial && !isTrialExpired) {
+  // canUseがtrueの場合は、プロフィール読み込み中の可能性があるため表示しない
+  if (!subscription && !isAdmin && !isTrial && !isTrialExpired && !usageInfo.canUse) {
     return (
       <div className={`flex items-center text-amber-600 ${className}`}>
         <AlertCircle className="w-4 h-4 mr-2" />

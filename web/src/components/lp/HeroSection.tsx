@@ -77,7 +77,7 @@ export function HeroSection() {
               transition={{ duration: 0.8, delay: 0.2 }}
               className="mb-6 text-3xl font-bold tracking-tight bg-gradient-to-r from-blue-600 to-indigo-600 bg-clip-text text-transparent sm:text-4xl md:text-5xl"
             >
-              記述の添削を<br />もっと速く、正確に。
+              国語の答案を、3分で<br />&ldquo;どこを直すべきか&rdquo;まで見える化。
             </motion.h1>
           </motion.div>
 
@@ -104,10 +104,10 @@ export function HeroSection() {
             className="flex flex-col gap-4 sm:flex-row"
           >
             <Link
-              href="/#features"
-              className="inline-flex items-center justify-center rounded-full bg-white/80 px-8 py-4 text-base font-bold text-slate-700 shadow-md ring-1 ring-slate-200 backdrop-blur-sm transition-all hover:bg-white hover:text-[#1565C0] hover:shadow-lg hover:-translate-y-0.5"
+              href="/grading"
+              className="inline-flex items-center justify-center rounded-full bg-es-teal px-8 py-4 text-lg font-bold text-white shadow-lg shadow-es-teal/25 transition-all hover:brightness-110 hover:shadow-xl hover:-translate-y-0.5"
             >
-              機能を見る
+              無料で3回試す
             </Link>
           </motion.div>
         </div>

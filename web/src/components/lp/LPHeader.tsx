@@ -52,7 +52,7 @@ export function LPHeader() {
             href="/grading"
             className="rounded-full bg-indigo-600 px-5 py-2.5 text-sm font-bold text-white shadow-lg shadow-indigo-600/20 transition-all hover:bg-indigo-700 hover:scale-105"
           >
-            無料で試す
+            無料で3回試す
           </Link>
         </div>
 
@@ -92,7 +92,7 @@ export function LPHeader() {
                 className="rounded-full bg-indigo-600 px-5 py-3 text-center text-sm font-bold text-white shadow-md"
                 onClick={() => setMobileOpen(false)}
               >
-                無料で試す
+                無料で3回試す
               </Link>
             </div>
           </motion.div>

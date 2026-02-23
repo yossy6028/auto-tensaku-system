@@ -95,7 +95,7 @@ export function CTASection() {
         </motion.p>
 
         <motion.div
-          className="mt-10 flex flex-col items-center gap-4 sm:flex-row sm:justify-center"
+          className="mt-10 flex justify-center"
           initial={reducedMotion ? undefined : { opacity: 0, y: 20 }}
           whileInView={{ opacity: 1, y: 0 }}
           viewport={{ once: true, amount: 0.5 }}
@@ -105,13 +105,7 @@ export function CTASection() {
             href="/grading"
             className="inline-flex items-center rounded-full bg-es-teal px-8 py-4 text-lg font-semibold text-white shadow-lg shadow-[#2DB3A0]/25 transition-transform hover:scale-105"
           >
-            無料で始める
-          </Link>
-          <Link
-            href="/pricing"
-            className="inline-flex items-center rounded-full border border-white/20 px-8 py-4 text-lg font-semibold text-white transition-colors hover:bg-white/10"
-          >
-            料金プランを見る
+            無料で3回試す
           </Link>
         </motion.div>
       </div>

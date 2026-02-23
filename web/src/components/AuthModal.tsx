@@ -109,7 +109,7 @@ export function AuthModal({ isOpen, onClose, initialMode = 'signin' }: AuthModal
       } else {
         result = await signUp(email, password);
         if (!result.error) {
-          setMessage({ type: 'success', text: '確認メールを送信しました。メールをご確認ください。' });
+          setMessage({ type: 'success', text: 'メールを送信しました。メールをご確認ください。' });
           setEmail('');
           setPassword('');
           setConfirmPassword('');

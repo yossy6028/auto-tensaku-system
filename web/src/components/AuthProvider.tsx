@@ -837,9 +837,13 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
           return { error: null };
         }
       } catch {
-        // resend 自体の通信エラー — フォールスルーしてエラー表示
+        // resend 自体の通信エラー — フォールスルーして resetPasswordForEmail へ
       }
-      return { error: new Error('このメールアドレスは既に登録されています。ログインをお試しください。') };
+      // 確認済みユーザー → パスワードリセットメールを送信（ユーザー列挙防止 + 有用な案内）
+      await supabase.auth.resetPasswordForEmail(email, {
+        redirectTo: `${SITE_URL}/auth/reset-password`,
+      }).catch(() => {});
+      return { error: null };
     }
 
     const { data, error } = await supabase.auth.signUp({
@@ -858,12 +862,18 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
           options: { emailRedirectTo: `${SITE_URL}/auth/callback` },
         });
         if (resendError) {
-          // resend がエラー → 既に確認済みのユーザー（孤立ユーザー含む）
-          return { error: new Error('このメールアドレスは既に登録されています。ログインをお試しください。') };
+          // resend がエラー → 確認済みユーザー → パスワードリセットメールを送信
+          await supabase.auth.resetPasswordForEmail(email, {
+            redirectTo: `${SITE_URL}/auth/reset-password`,
+          }).catch(() => {});
+          return { error: null };
         }
       } catch {
-        // 通信エラー — 安全側に倒してログインを促す
-        return { error: new Error('このメールアドレスは既に登録されています。ログインをお試しください。') };
+        // 通信エラー — パスワードリセットメールを試みて成功扱い
+        await supabase.auth.resetPasswordForEmail(email, {
+          redirectTo: `${SITE_URL}/auth/reset-password`,
+        }).catch(() => {});
+        return { error: null };
       }
     }
 

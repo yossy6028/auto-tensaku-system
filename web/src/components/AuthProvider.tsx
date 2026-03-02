@@ -793,11 +793,11 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
           console.warn('[AuthProvider] Device registration failed:', e);
         });
         
-        Promise.all([
-          fetchProfile(data.session.user.id).catch(() => {}),
-          fetchSubscription(data.session.user.id).catch(() => {}),
-          refreshUsageInfo(data.session.user).catch(() => {})
-        ]).catch(() => {});
+        // fetchProfile → refreshUsageInfo は順序依存（profileが存在しないとcan_use_serviceが失敗する）
+        fetchProfile(data.session.user.id).catch(() => {}).then(() => {
+          refreshUsageInfo(data.session.user).catch(() => {});
+        });
+        fetchSubscription(data.session.user.id).catch(() => {});
       }
     }
     

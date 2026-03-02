@@ -48,7 +48,7 @@ BEGIN
     -- ★ 2. 無料開放チェック（枠消費不要）
     BEGIN
         SELECT * INTO v_free_access FROM public.check_free_access(p_user_id);
-        IF v_free_access.has_free_access AND v_free_access.free_access_type = 'system_free_access' THEN
+        IF v_free_access.has_free_access AND v_free_access.free_access_type = 'promo' THEN
             RETURN QUERY SELECT
                 TRUE, v_free_access.message,
                 NULL::UUID, NULL::INTEGER, NULL::INTEGER,

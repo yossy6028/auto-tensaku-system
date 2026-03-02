@@ -35,6 +35,7 @@ import {
   generateDefaultTitle,
 } from '@/lib/storage/savedProblems';
 import { Users } from 'lucide-react';
+import { WelcomeGuide } from '@/components/WelcomeGuide';
 
 type GradingStrictness = 'lenient' | 'standard' | 'strict';
 
@@ -3527,8 +3528,18 @@ export default function Home() {
           </div>
         </div>
 
+        {/* Welcome Guide for first-time trial users */}
+        {user && usageInfo?.accessType === 'trial' && usageInfo?.usageCount === 0 && (
+          <WelcomeGuide
+            remainingCount={usageInfo.remainingCount ?? 3}
+            onStartTrial={() => {
+              document.getElementById('grading-form')?.scrollIntoView({ behavior: 'smooth' });
+            }}
+          />
+        )}
+
         {/* Main Card */}
-        <div className="bg-white/70 backdrop-blur-2xl shadow-[0_20px_60px_-15px_rgba(0,0,0,0.1)] rounded-[2.5rem] overflow-hidden border border-white/60 ring-1 ring-white/60 transition-all duration-500 hover:shadow-[0_30px_70px_-15px_rgba(79,70,229,0.15)] relative">
+        <div id="grading-form" className="bg-white/70 backdrop-blur-2xl shadow-[0_20px_60px_-15px_rgba(0,0,0,0.1)] rounded-[2.5rem] overflow-hidden border border-white/60 ring-1 ring-white/60 transition-all duration-500 hover:shadow-[0_30px_70px_-15px_rgba(79,70,229,0.15)] relative">
           <div className="absolute top-0 left-0 w-full h-2 bg-gradient-to-r from-indigo-500 via-violet-500 to-fuchsia-500"></div>
           <div className="p-8 md:p-14">
             {/* ========== Mode Toggle Tabs ========== */}

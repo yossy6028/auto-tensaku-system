@@ -779,6 +779,12 @@ export async function POST(req: NextRequest) {
             });
         } catch (error) {
             if (error instanceof QueueFullError) {
+                // キュー満杯時は予約した利用枠を解放（リーク防止）
+                if (reservedCount > 0) {
+                    await supabaseRpc
+                        .rpc('release_usage', { p_user_id: user.id, p_count: reservedCount })
+                        .catch((e: unknown) => logger.error('Failed to release usage on QueueFullError:', e));
+                }
                 const queueState = getQueueState();
                 return NextResponse.json(
                     {

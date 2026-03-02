@@ -179,7 +179,7 @@ BEGIN
     -- 4. 無料体験チェック（フォールバック・回数のみ）
     SELECT * INTO v_profile FROM user_profiles WHERE id = p_user_id;
 
-    IF v_profile IS NOT NULL AND v_profile.free_trial_started_at IS NOT NULL THEN
+    IF FOUND AND v_profile.free_trial_started_at IS NOT NULL THEN
         SELECT COALESCE(value::INTEGER, 3) INTO v_free_trial_usage_limit FROM system_settings WHERE key = 'free_trial_usage_limit';
 
         -- カスタム設定を優先
@@ -329,7 +329,7 @@ BEGIN
     -- 4. 無料体験: FOR UPDATE でロック → 回数のみで判定 → インクリメント
     SELECT * INTO v_profile FROM user_profiles WHERE id = p_user_id FOR UPDATE;
 
-    IF v_profile IS NOT NULL AND v_profile.free_trial_started_at IS NOT NULL THEN
+    IF FOUND AND v_profile.free_trial_started_at IS NOT NULL THEN
         SELECT COALESCE(value::INTEGER, 3) INTO v_free_trial_usage_limit
         FROM system_settings WHERE key = 'free_trial_usage_limit';
 

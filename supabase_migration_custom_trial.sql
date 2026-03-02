@@ -216,7 +216,7 @@ BEGIN
     -- ★ 4. 無料体験チェック（フォールバック）
     SELECT * INTO v_profile FROM user_profiles WHERE id = p_user_id;
 
-    IF v_profile IS NOT NULL AND v_profile.free_trial_started_at IS NOT NULL THEN
+    IF FOUND AND v_profile.free_trial_started_at IS NOT NULL THEN
         SELECT COALESCE(value::INTEGER, 7) INTO v_free_trial_days FROM system_settings WHERE key = 'free_trial_days';
         SELECT COALESCE(value::INTEGER, 3) INTO v_free_trial_usage_limit FROM system_settings WHERE key = 'free_trial_usage_limit';
 

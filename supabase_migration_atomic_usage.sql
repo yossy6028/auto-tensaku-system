@@ -116,7 +116,7 @@ BEGIN
     -- ★ 4. 無料体験: FOR UPDATE でロック → 枠確認 → インクリメント
     SELECT * INTO v_profile FROM user_profiles WHERE id = p_user_id FOR UPDATE;
 
-    IF v_profile IS NOT NULL AND v_profile.free_trial_started_at IS NOT NULL THEN
+    IF FOUND AND v_profile.free_trial_started_at IS NOT NULL THEN
         SELECT COALESCE(value::INTEGER, 7) INTO v_free_trial_days
         FROM system_settings WHERE key = 'free_trial_days';
         SELECT COALESCE(value::INTEGER, 3) INTO v_free_trial_usage_limit
@@ -213,7 +213,7 @@ BEGIN
     -- 無料体験から解放
     SELECT * INTO v_profile FROM user_profiles WHERE id = p_user_id FOR UPDATE;
 
-    IF v_profile IS NOT NULL THEN
+    IF FOUND THEN
         UPDATE user_profiles
         SET free_trial_usage_count = GREATEST(0, free_trial_usage_count - p_count), updated_at = NOW()
         WHERE id = p_user_id;

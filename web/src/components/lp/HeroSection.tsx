@@ -77,7 +77,7 @@ export function HeroSection() {
               transition={{ duration: 0.8, delay: 0.2 }}
               className="mb-6 text-3xl font-bold tracking-tight bg-gradient-to-r from-blue-600 to-indigo-600 bg-clip-text text-transparent sm:text-4xl md:text-5xl"
             >
-              国語の答案を、3分で<br />&ldquo;どこを直すべきか&rdquo;まで見える化。
+              どんな国語の答案も<br />3分でプロ視点の添削が完了
             </motion.h1>
           </motion.div>
 

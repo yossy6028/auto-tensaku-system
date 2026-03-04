@@ -92,9 +92,9 @@ function sleep(ms: number): Promise<void> {
 /**
  * Gemini APIのレート制限状態を管理するシングルトンクラス
  *
- * gemini-3-pro-previewには1日あたりの利用制限があり、
- * 制限に達した場合はgemini-2.5-proへ自動的にフォールバックする。
- * 日付が変わると自動的にリセットされ、gemini-3-proに戻る。
+ * メインモデルには1日あたりの利用制限があり、
+ * 制限に達した場合はフォールバックモデルへ自動的に切り替える。
+ * 日付が変わると自動的にリセットされ、メインモデルに戻る。
  */
 class RateLimitManager {
     private static instance: RateLimitManager;

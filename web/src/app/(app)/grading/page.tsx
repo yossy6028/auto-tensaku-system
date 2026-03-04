@@ -2381,6 +2381,9 @@ export default function Home() {
       return;
     }
 
+    // バリデーション通過後、即座にボタンを無効化して二重タップを防止
+    setIsLoading(true);
+
     let targetLabels = selectedProblems;
     if (targetLabels.length === 0) {
       const currentLabel = generateProblemLabel();
@@ -2439,6 +2442,7 @@ export default function Home() {
       const hasPdf = filesToUse.some(f => f.type === 'application/pdf');
       const baseMessage = `ファイルの合計サイズが大きすぎます（${totalMB}MB、${fileCount}枚）。合計${maxMB}MB以下になるように、ファイルを分割するか、写真の枚数を減らしてください。`;
       setError(hasPdf ? `${baseMessage} ${PDF_SIZE_ADVICE}` : baseMessage);
+      setIsLoading(false);
       return;
     }
 
@@ -2492,6 +2496,7 @@ export default function Home() {
           }
           setError(fallbackMessage);
           setOcrFlowStep('idle');
+          setIsLoading(false);
           return;
         }
 
@@ -2508,18 +2513,21 @@ export default function Home() {
           }
           setError(message);
           setOcrFlowStep('idle');
+          setIsLoading(false);
           return;
         }
 
         if (data.status === 'error') {
           setError(data.message ?? 'OCR処理中にエラーが発生しました');
           setOcrFlowStep('idle');
+          setIsLoading(false);
           return;
         }
 
         if (!data.ocrResult) {
           setError('OCR結果が取得できませんでした');
           setOcrFlowStep('idle');
+          setIsLoading(false);
           return;
         }
 
@@ -2541,6 +2549,7 @@ export default function Home() {
         console.error('OCR error:', err);
         setError('OCR処理中にエラーが発生しました。');
         setOcrFlowStep('idle');
+        setIsLoading(false);
         return;
       }
     }
@@ -2548,6 +2557,7 @@ export default function Home() {
     setOcrResults(newOcrResults);
     setOcrFlowStep('confirm');
     setCurrentOcrLabel('');
+    setIsLoading(false);
   };
 
   // 確認済みテキストで採点を実行
@@ -4550,6 +4560,16 @@ export default function Home() {
                         <span className="flex items-center">
                           <Loader2 className="animate-spin -ml-1 mr-3 h-6 w-6" />
                           {currentOcrLabel ? `「${currentOcrLabel}」を読み取り中...` : '読み取り中...'}
+                        </span>
+                      ) : isCompressing ? (
+                        <span className="flex items-center">
+                          <Loader2 className="animate-spin -ml-1 mr-3 h-6 w-6" />
+                          画像を圧縮中...
+                        </span>
+                      ) : isLoading ? (
+                        <span className="flex items-center">
+                          <Loader2 className="animate-spin -ml-1 mr-3 h-6 w-6" />
+                          準備中...
                         </span>
                       ) : (
                         <span className="flex items-center">

@@ -1,10 +1,38 @@
 'use client';
 
-import React, { useState, useEffect } from 'react';
+import React, { useSyncExternalStore } from 'react';
 import { X, ArrowRight, Sparkles, FileText, Camera, CheckCircle } from 'lucide-react';
 import type { LucideIcon } from 'lucide-react';
 
 const STORAGE_KEY = 'taskal-welcome-guide-dismissed';
+const STORAGE_EVENT = 'taskal-welcome-guide-changed';
+
+const readDismissedSnapshot = (): boolean => {
+  if (typeof window === 'undefined') {
+    return true;
+  }
+
+  try {
+    return window.localStorage.getItem(STORAGE_KEY) === 'true';
+  } catch {
+    return true;
+  }
+};
+
+const subscribeToDismissedState = (callback: () => void) => {
+  if (typeof window === 'undefined') {
+    return () => {};
+  }
+
+  const handleChange = () => callback();
+  window.addEventListener('storage', handleChange);
+  window.addEventListener(STORAGE_EVENT, handleChange);
+
+  return () => {
+    window.removeEventListener('storage', handleChange);
+    window.removeEventListener(STORAGE_EVENT, handleChange);
+  };
+};
 
 type Step = {
   icon: LucideIcon;
@@ -36,18 +64,21 @@ type Props = {
 };
 
 export function WelcomeGuide({ remainingCount, onStartTrial }: Props) {
-  const [dismissed, setDismissed] = useState(true); // 初期値trueでフラッシュ防止
-
-  useEffect(() => {
-    const stored = localStorage.getItem(STORAGE_KEY);
-    setDismissed(stored === 'true');
-  }, []);
+  const dismissed = useSyncExternalStore(
+    subscribeToDismissedState,
+    readDismissedSnapshot,
+    () => true
+  );
 
   if (dismissed || steps.length === 0) return null;
 
   const handleDismiss = () => {
-    localStorage.setItem(STORAGE_KEY, 'true');
-    setDismissed(true);
+    try {
+      window.localStorage.setItem(STORAGE_KEY, 'true');
+      window.dispatchEvent(new Event(STORAGE_EVENT));
+    } catch {
+      // localStorage が使えない環境では UI を維持するだけに留める
+    }
   };
 
   const handleStart = () => {

@@ -5,7 +5,7 @@
  * 解答用紙の構造分析用プロンプト
  */
 
-import type { AnswerSheetAnalysis, LayoutInfo, OcrHints } from './types';
+import type { AnswerSheetAnalysis, LayoutInfo } from './types';
 
 /**
  * 解答用紙構造分析用メインプロンプト

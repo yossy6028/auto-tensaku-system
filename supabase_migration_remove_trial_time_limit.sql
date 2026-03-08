@@ -311,8 +311,8 @@ BEGIN
         END IF;
 
         -- アトミックにインクリメント（枠確保）
-        UPDATE public.subscriptions
-        SET usage_count = usage_count + p_count, updated_at = NOW()
+        UPDATE public.subscriptions AS s
+        SET usage_count = s.usage_count + p_count, updated_at = NOW()
         WHERE id = v_subscription.sub_id;
 
         RETURN QUERY SELECT

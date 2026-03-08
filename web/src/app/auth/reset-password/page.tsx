@@ -3,14 +3,12 @@
 import React, { useState, useEffect, Suspense } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { Lock, CheckCircle, AlertCircle, Loader2 } from 'lucide-react';
-import { useAuth } from '@/components/AuthProvider';
 import { createClient } from '@/lib/supabase/client';
 import Link from 'next/link';
 
 function ResetPasswordContent() {
   const router = useRouter();
   const searchParams = useSearchParams();
-  const { user } = useAuth();
   const [password, setPassword] = useState('');
   const [confirmPassword, setConfirmPassword] = useState('');
   const [isLoading, setIsLoading] = useState(false);
@@ -264,4 +262,3 @@ export default function ResetPasswordPage() {
     </Suspense>
   );
 }
-

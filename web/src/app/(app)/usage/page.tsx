@@ -2,11 +2,11 @@
 
 import React from 'react';
 import Link from 'next/link';
-import { ArrowLeft, BookOpen, Upload, FileText, CheckCircle, Image, FileCheck, Lightbulb } from 'lucide-react';
+import { ArrowLeft, BookOpen, FileText, CheckCircle, ImageIcon, FileCheck, Lightbulb } from 'lucide-react';
 import { useAuth } from '@/components/AuthProvider';
 
 export default function UsagePage() {
-  const { user, isLoading } = useAuth();
+  const { isLoading } = useAuth();
 
   if (isLoading) {
     return (
@@ -106,7 +106,7 @@ export default function UsagePage() {
                 <div className="grid md:grid-cols-2 gap-4">
                   <div className="bg-violet-50 rounded-xl p-4 border border-violet-100">
                     <div className="flex items-center mb-2">
-                      <Image className="w-5 h-5 text-violet-600 mr-2" />
+                      <ImageIcon className="w-5 h-5 text-violet-600 mr-2" />
                       <strong className="text-violet-800">画像ファイル</strong>
                     </div>
                     <p className="text-violet-700 text-sm">JPEG、PNG、GIF、WebP、HEIC形式</p>

@@ -1,4 +1,4 @@
-import { NextRequest, NextResponse } from 'next/server';
+import { NextResponse } from 'next/server';
 import { stripe, getPlanIdFromStripePriceId } from '@/lib/stripe/config';
 import { createClient } from '@/lib/supabase/server';
 
@@ -22,7 +22,7 @@ const mapStripeStatus = (stripeStatus?: string | null): SubscriptionStatus => {
   return 'past_due';
 };
 
-export async function POST(_request: NextRequest) {
+export async function POST() {
   try {
     // eslint-disable-next-line @typescript-eslint/no-explicit-any -- Supabase client型の互換性問題を回避
     const supabase = (await createClient()) as any;

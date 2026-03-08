@@ -1,7 +1,7 @@
 import { createServerClient } from '@supabase/ssr';
 import { NextResponse, type NextRequest } from 'next/server';
 
-export async function middleware(request: NextRequest) {
+export async function proxy(request: NextRequest) {
   // マジックリンク等で code/error パラメータがルートに届いた場合に転送
   if (request.nextUrl.pathname === '/') {
     const code = request.nextUrl.searchParams.get('code');
@@ -63,4 +63,3 @@ export const config = {
     '/((?!_next/static|_next/image|favicon.ico|.*\\.(?:svg|png|jpg|jpeg|gif|webp)$).*)',
   ],
 };
-

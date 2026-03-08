@@ -22,7 +22,6 @@ import {
   BatchMode,
   createStudentEntry,
   MAX_STUDENTS,
-  FileRole as BatchFileRole,
 } from '@/lib/types/batch';
 import { SaveProblemModal, SavedProblemsList } from '@/components/SavedProblems';
 import type { SavedProblemSummary, SavedFileRole } from '@/lib/storage/types';
@@ -78,6 +77,18 @@ type GradingResponseItem = {
   regradeMode?: 'new' | 'free' | 'none';
 };
 
+const MAX_TOTAL_SIZE_BYTES = 4.2 * 1024 * 1024;
+const MAX_SINGLE_FILE_SIZE_BYTES = 4.3 * 1024 * 1024;
+const PDF_SIZE_ADVICE = 'PDFはページ番号を指定すると必要ページだけ抽出して軽くできます。難しい場合はオンライン圧縮ツール（iLovePDF等）で圧縮してから再度お試しください。';
+const MAX_FILE_SIZE = 50 * 1024 * 1024; // 50MB
+const MAX_FILES = 10;
+const VALID_EXTENSIONS = /\.(jpg|jpeg|png|gif|webp|bmp|heic|heif|pdf)$/i;
+
+const getCompressionTimeout = (fileCount: number) => {
+  // 基本: 1ファイルあたり6秒 + バッファ10秒（最低15秒、最大60秒）
+  return Math.min(60000, Math.max(15000, fileCount * 6000 + 10000));
+};
+
 export default function Home() {
   const {
     user,
@@ -96,18 +107,6 @@ export default function Home() {
   } = useAuth();
   const [isAuthModalOpen, setIsAuthModalOpen] = useState(false);
   const [authMode, setAuthMode] = useState<'signin' | 'signup'>('signin');
-
-  // バッチモード用の問題オプション
-  const PROBLEM_OPTIONS = [
-    { value: '問1', label: '問1' },
-    { value: '問2', label: '問2' },
-    { value: '問3', label: '問3' },
-    { value: '(1)', label: '(1)' },
-    { value: '(2)', label: '(2)' },
-    { value: '(3)', label: '(3)' },
-    { value: '大問1(1)', label: '大問1(1)' },
-    { value: '大問1(2)', label: '大問1(2)' },
-  ];
 
   // 問題形式タイプ: 'big-small' = 大問+小問, 'small-only' = 問のみ, 'free' = 自由入力
   const [problemFormat, setProblemFormat] = useState<'big-small' | 'small-only' | 'free'>('big-small');
@@ -148,13 +147,6 @@ export default function Home() {
   const [results, setResults] = useState<GradingResponseItem[] | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [requirePlan, setRequirePlan] = useState(false);
-
-  // 回数消費確認用の状態
-  const [usageConsumed, setUsageConsumed] = useState<{
-    consumed: boolean;
-    previousCount: number | null;
-    currentCount: number | null;
-  } | null>(null);
 
   // 画像圧縮中の状態
   const [isCompressing, setIsCompressing] = useState(false);
@@ -694,89 +686,6 @@ export default function Home() {
     setCurrentBatchOcrIndex(0);
   };
 
-  // 一括処理: 全生徒の採点を実行（OCR確認なし、直接採点）
-  const executeBatchGrading = async () => {
-    if (!validateBatchStudents()) return;
-    if (selectedProblems.length === 0) {
-      setError('採点する問題を選択してください');
-      return;
-    }
-
-    // 使用量チェック
-    if (usageInfo && usageInfo.usageLimit !== null && usageInfo.usageCount !== null) {
-      const requiredUsage = batchStudents.length;
-      const remainingUsage = usageInfo.usageLimit - usageInfo.usageCount;
-      if (remainingUsage < requiredUsage) {
-        setError(`使用可能回数が不足しています（残り${remainingUsage}回、必要${requiredUsage}回）`);
-        setRequirePlan(true);
-        return;
-      }
-    }
-
-    setError(null);
-    setIsLoading(true);
-
-    // 状態を初期化
-    const studentsWithStatus = batchStudents.map((s) => ({ ...s, status: 'pending' as const }));
-    setBatchStudents(studentsWithStatus);
-    setBatchState({
-      students: studentsWithStatus,
-      currentIndex: 0,
-      isProcessing: true,
-      completedCount: 0,
-      successCount: 0,
-      errorCount: 0,
-    });
-
-    let successCount = 0;
-    let errorCount = 0;
-
-    // 順次処理
-    for (let i = 0; i < batchStudents.length; i++) {
-      const student = batchStudents[i];
-
-      // 現在の生徒を処理中に設定
-      setBatchStudents((prev) =>
-        prev.map((s, idx) => (idx === i ? { ...s, status: 'processing' } : s))
-      );
-      setBatchState((prev) => ({ ...prev, currentIndex: i }));
-
-      // 採点を実行
-      const result = await gradeOneStudent(student, selectedProblems, gradingStrictness);
-
-      if (result.success && result.results) {
-        successCount++;
-        setBatchStudents((prev) =>
-          prev.map((s, idx) =>
-            idx === i ? { ...s, status: 'success', results: result.results } : s
-          )
-        );
-      } else {
-        errorCount++;
-        setBatchStudents((prev) =>
-          prev.map((s, idx) =>
-            idx === i ? { ...s, status: 'error', errorMessage: result.error } : s
-          )
-        );
-      }
-
-      setBatchState((prev) => ({
-        ...prev,
-        completedCount: i + 1,
-        successCount,
-        errorCount,
-      }));
-    }
-
-    setBatchState((prev) => ({ ...prev, isProcessing: false }));
-    setIsLoading(false);
-
-    // 使用量を更新
-    if (successCount > 0) {
-      await refreshUsageInfo();
-    }
-  };
-
   // 一括処理: ZIPダウンロード
   const handleDownloadZip = async () => {
     const successStudents = batchStudents.filter((s) => s.status === 'success' && s.results);
@@ -1063,8 +972,6 @@ export default function Home() {
     }));
 
     for (const student of failedStudents) {
-      const idx = batchStudents.findIndex((s) => s.id === student.id);
-
       setBatchStudents((prev) =>
         prev.map((s) => (s.id === student.id ? { ...s, status: 'processing' } : s))
       );
@@ -1651,10 +1558,6 @@ export default function Home() {
     return foundIndex >= 0 ? foundIndex : 0;
   };
 
-  const MAX_TOTAL_SIZE_BYTES = 4.2 * 1024 * 1024;
-  const MAX_SINGLE_FILE_SIZE_BYTES = 4.3 * 1024 * 1024;
-  const PDF_SIZE_ADVICE = 'PDFはページ番号を指定すると必要ページだけ抽出して軽くできます。難しい場合はオンライン圧縮ツール（iLovePDF等）で圧縮してから再度お試しください。';
-
   const parsePageRange = (input?: string): number[] => {
     if (!input) return [];
     const pages = new Set<number>();
@@ -1710,7 +1613,7 @@ export default function Home() {
     }
   };
 
-  const shouldCompressImages = (files: File[]): boolean => {
+  const shouldCompressImages = useCallback((files: File[]): boolean => {
     const imageFiles = files.filter((file) => isImageFile(file));
     if (imageFiles.length === 0) return false;
 
@@ -1727,32 +1630,26 @@ export default function Home() {
 
     const imageBudget = MAX_TOTAL_SIZE_BYTES - nonImageSize;
     return imageSize > imageBudget;
-  };
+  }, []);
 
-  // 圧縮タイムアウト: ファイル数に応じて動的に設定（PC版で高解像度画像が多い場合に対応）
-  const getCompressionTimeout = (fileCount: number) => {
-    // 基本: 1ファイルあたり6秒 + バッファ10秒（最低15秒、最大60秒）
-    const baseTimeout = Math.min(60000, Math.max(15000, fileCount * 6000 + 10000));
-    return baseTimeout;
-  };
-
-  const compressWithTimeout = async (
+  const compressWithTimeout = useCallback(async (
     files: File[],
     onProgress?: (progress: number, currentFile: string) => void
   ): Promise<File[]> => {
     const startTime = Date.now();
     const totalSize = files.reduce((sum, f) => sum + f.size, 0);
     const timeoutMs = getCompressionTimeout(files.length);
+    let timeoutId: ReturnType<typeof setTimeout> | undefined;
     console.log(`[Page] Compression start: ${files.length} files, ${(totalSize / 1024 / 1024).toFixed(2)}MB, timeout: ${timeoutMs}ms`);
 
     try {
       // 外側タイムアウト（最終防衛線）
-      const timeoutPromise = new Promise<File[]>((resolve) =>
-        setTimeout(() => {
+      const timeoutPromise = new Promise<File[]>((resolve) => {
+        timeoutId = setTimeout(() => {
           console.warn(`[Page] Compression timeout after ${timeoutMs}ms, using original files`);
           resolve(files);
-        }, timeoutMs)
-      );
+        }, timeoutMs);
+      });
 
       const result = await Promise.race([
         compressMultipleImages(files, onProgress),
@@ -1766,8 +1663,12 @@ export default function Home() {
     } catch (err) {
       console.error('[Page] Compression error:', err);
       return files; // エラー時は元ファイル
+    } finally {
+      if (timeoutId) {
+        clearTimeout(timeoutId);
+      }
     }
-  };
+  }, []);
 
   const prepareFilesForUpload = async (
     files: File[],
@@ -1982,11 +1883,6 @@ export default function Home() {
     setIsDragging(false);
   }, []);
 
-  // ファイル処理の共通ロジック
-  const MAX_FILE_SIZE = 50 * 1024 * 1024; // 50MB
-  const MAX_FILES = 10;
-  const VALID_EXTENSIONS = /\.(jpg|jpeg|png|gif|webp|bmp|heic|heif|pdf)$/i;
-
   const processFiles = useCallback(async (files: File[]) => {
     console.log(`[Page] File selected: ${files.length} files`);
 
@@ -2068,19 +1964,18 @@ export default function Home() {
     // 新しいファイルに対して役割を自動推定（初期値として）
     const initialRoles: Record<number, FileRole> = {};
     processedFiles.forEach((file, i) => {
-      const idx = i; // モーダル内でのインデックス
       const name = file.name.toLowerCase();
       if (/(answer|ans|student|解答|答案|生徒)/.test(name)) {
-        initialRoles[idx] = 'answer';
+        initialRoles[i] = 'answer';
       } else if (/(problem|question|課題|設問|問題|本文)/.test(name)) {
-        initialRoles[idx] = 'problem';
+        initialRoles[i] = 'problem';
       } else if (/(model|key|模範|解説|正解|解答例)/.test(name)) {
-        initialRoles[idx] = 'model';
+        initialRoles[i] = 'model';
       } else {
         // デフォルト: 1つ目は答案、2つ目以降は問題+模範解答
         const existingAnswers = Object.values(initialRoles).filter(r => r === 'answer' || r === 'answer_problem' || r === 'all').length;
-        if (existingAnswers === 0) initialRoles[idx] = 'answer';
-        else initialRoles[idx] = 'problem_model';  // 問題と模範解答が一緒のケースが多い
+        if (existingAnswers === 0) initialRoles[i] = 'answer';
+        else initialRoles[i] = 'problem_model';  // 問題と模範解答が一緒のケースが多い
       }
     });
 
@@ -2090,7 +1985,7 @@ export default function Home() {
       setPendingFileRoles(initialRoles);
       setShowFileRoleModal(true);
     }
-  }, []);
+  }, [compressWithTimeout, shouldCompressImages]);
 
   const handleFileChange = useCallback(async (e: React.ChangeEvent<HTMLInputElement>) => {
     if (e.target.files && e.target.files.length > 0) {
@@ -2940,16 +2835,6 @@ export default function Home() {
         });
         if (Array.isArray(data.results)) ingestRegradeInfo(data.results);
 
-        // 回数消費情報をログ出力・保存
-        if (data.usageInfo) {
-          // 現在の使用回数を保存（APIから返された最新情報）
-          setUsageConsumed({
-            consumed: true,
-            previousCount: usageInfo?.usageCount ?? null,
-            currentCount: data.usageInfo.usageCount ?? null,
-          });
-        }
-
         // 利用情報を更新（エラーが発生しても続行、非同期で実行）
         refreshUsageInfo().then(() => {
         }).catch((err) => {
@@ -3130,7 +3015,6 @@ export default function Home() {
     setEditedFeedbacks({});
     setEditingFields({});
     setPdfPageInfo({ answerPage: '', problemPage: '', modelAnswerPage: '' });
-    setUsageConsumed(null);
     setIsLoading(false);
     setRegradingLabel(null);
 
@@ -3170,7 +3054,6 @@ export default function Home() {
     setRegradeByLabel({});
     setEditedFeedbacks({});
     setEditingFields({});
-    setUsageConsumed(null);
     setIsLoading(false);
     setRegradingLabel(null);
 

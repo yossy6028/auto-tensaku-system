@@ -45,3 +45,9 @@ out/
 *.tsbuildinfo
 
 .vercel
+
+# Local working artifacts
+/HANDOVER.md
+/web/.claude/test-tracker.json
+/web/public/logo-edushift-original.png
+/web/public/ogp-new.png

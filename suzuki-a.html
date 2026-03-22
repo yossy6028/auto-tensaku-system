@@ -1,0 +1,308 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>プロ家庭教師 鈴木雄太 ｜ 千葉県野田市</title>
+  <meta name="description" content="指導歴16年・900名超の実績。千葉県野田市を拠点に、完全オーダーメイドの個人契約家庭教師。不登校対応・受験対策もお任せください。" />
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Noto+Sans+JP:wght@400;500;700;900&display=swap" rel="stylesheet" />
+  <style>
+    :root {
+      --primary: #047857;
+      --primary-light: #059669;
+      --primary-dark: #065f46;
+      --accent: #10b981;
+      --bg-light: #f0fdf4;
+      --bg-warm: #ecfdf5;
+      --text-main: #0f172a;
+      --text-sub: #475569;
+      --white: #ffffff;
+      --shadow: 0 4px 20px rgba(4,120,87,0.12);
+      --shadow-lg: 0 10px 40px rgba(4,120,87,0.18);
+      --radius: 16px;
+    }
+    *, *::before, *::after { margin: 0; padding: 0; box-sizing: border-box; }
+    html { scroll-behavior: smooth; }
+    body {
+      font-family: 'Noto Sans JP', sans-serif;
+      color: var(--text-main); line-height: 1.8;
+      background: var(--white); overflow-x: hidden;
+    }
+
+    /* ── ヘッダー ── */
+    .header {
+      position: fixed; top: 0; left: 0; right: 0; z-index: 100;
+      background: rgba(255,255,255,0.92); backdrop-filter: blur(12px);
+      box-shadow: 0 1px 8px rgba(0,0,0,0.06);
+    }
+    .header-inner {
+      max-width: 1100px; margin: 0 auto;
+      display: flex; align-items: center; justify-content: space-between;
+      padding: 14px 24px;
+    }
+    .header-logo { font-weight: 700; font-size: 1.1rem; color: var(--primary-dark); text-decoration: none; }
+    .header-nav { display: flex; gap: 24px; }
+    .header-nav a {
+      font-size: 0.88rem; font-weight: 500; color: var(--text-sub);
+      text-decoration: none; transition: color 0.2s;
+    }
+    .header-nav a:hover { color: var(--primary); }
+    .header-cta {
+      background: var(--primary); color: var(--white); padding: 8px 20px;
+      border-radius: 100px; font-size: 0.85rem; font-weight: 700;
+      text-decoration: none; transition: background 0.2s, transform 0.2s;
+    }
+    .header-cta:hover { background: var(--primary-light); transform: translateY(-1px); }
+
+    /* ── ヒーロー ── */
+    .hero {
+      min-height: 100vh; display: flex; align-items: center; justify-content: center;
+      background: linear-gradient(135deg, var(--bg-light) 0%, var(--white) 50%, var(--bg-warm) 100%);
+      padding: 100px 24px 60px; text-align: center; position: relative;
+    }
+    .hero-badge {
+      display: inline-block; background: #d1fae5; color: var(--primary-dark);
+      padding: 6px 18px; border-radius: 100px; font-size: 0.85rem; font-weight: 600;
+      margin-bottom: 20px;
+    }
+    .hero h1 { font-size: clamp(2rem, 5vw, 3.5rem); font-weight: 900; line-height: 1.3; margin-bottom: 24px; }
+    .hero h1 .accent { color: var(--primary); }
+    .hero p { font-size: 1.1rem; color: var(--text-sub); max-width: 600px; margin: 0 auto 40px; line-height: 1.9; }
+    .hero-buttons { display: flex; gap: 16px; justify-content: center; flex-wrap: wrap; }
+    .btn-primary {
+      background: var(--primary); color: var(--white); padding: 16px 36px;
+      border-radius: 100px; font-size: 1.05rem; font-weight: 700;
+      text-decoration: none; box-shadow: 0 6px 24px rgba(4,120,87,0.25); transition: all 0.3s;
+    }
+    .btn-primary:hover { background: var(--primary-light); transform: translateY(-2px); box-shadow: var(--shadow-lg); }
+    .btn-outline {
+      border: 2px solid var(--primary); color: var(--primary); padding: 14px 36px;
+      border-radius: 100px; font-size: 1.05rem; font-weight: 700;
+      text-decoration: none; background: transparent; transition: all 0.3s;
+    }
+    .btn-outline:hover { background: var(--bg-light); }
+
+    /* ── 数字 ── */
+    .stats { padding: 60px 24px; background: var(--white); }
+    .stats-grid {
+      max-width: 900px; margin: 0 auto;
+      display: grid; grid-template-columns: repeat(4, 1fr); gap: 24px;
+    }
+    .stat-card {
+      text-align: center; padding: 24px 16px;
+      border: 1px solid #d1fae5; border-radius: var(--radius); background: #f0fdf4;
+    }
+    .stat-num { font-size: 1.6rem; font-weight: 900; color: var(--primary); }
+    .stat-label { font-size: 0.75rem; color: var(--text-sub); margin-top: 6px; }
+
+    /* ── セクション共通 ── */
+    .section { padding: 80px 24px; }
+    .section-title { text-align: center; font-size: clamp(1.5rem, 3vw, 2.2rem); font-weight: 700; margin-bottom: 48px; }
+    .section-title .accent { color: var(--primary); }
+    .section--alt { background: linear-gradient(180deg, var(--white) 0%, var(--bg-light) 100%); }
+    .section--bg { background: var(--bg-light); }
+
+    /* ── 特長カード ── */
+    .features-grid {
+      max-width: 1100px; margin: 0 auto;
+      display: grid; grid-template-columns: repeat(3, 1fr); gap: 28px;
+    }
+    .feature-card {
+      background: var(--white); border-radius: var(--radius);
+      padding: 32px; box-shadow: var(--shadow); border: 1px solid #d1fae5;
+    }
+    .feature-icon {
+      width: 56px; height: 56px; border-radius: 14px;
+      background: #d1fae5; display: flex; align-items: center; justify-content: center;
+      margin-bottom: 16px; font-size: 1.5rem;
+    }
+    .feature-card h3 { font-size: 1.15rem; font-weight: 700; margin-bottom: 10px; }
+    .feature-card p { font-size: 0.9rem; color: var(--text-sub); line-height: 1.8; }
+
+    /* ── コース ── */
+    .courses-grid {
+      max-width: 900px; margin: 0 auto;
+      display: grid; grid-template-columns: repeat(2, 1fr); gap: 24px;
+    }
+    .course-card { border-radius: var(--radius); padding: 28px; border: 2px solid #d1fae5; }
+    .course-card h3 { font-size: 1.1rem; font-weight: 700; color: var(--primary-dark); margin-bottom: 8px; }
+    .course-card p { font-size: 0.88rem; color: var(--text-sub); margin-bottom: 14px; }
+    .course-card ul { list-style: none; }
+    .course-card li {
+      font-size: 0.85rem; color: var(--text-main); padding: 4px 0;
+      display: flex; align-items: center; gap: 8px;
+    }
+    .course-card li::before { content: "✓"; color: var(--primary); font-weight: 700; }
+
+    /* ── 流れ ── */
+    .flow-list { max-width: 700px; margin: 0 auto; }
+    .flow-item { display: flex; gap: 20px; align-items: flex-start; margin-bottom: 32px; }
+    .flow-num {
+      width: 48px; height: 48px; border-radius: 50%; background: var(--primary); color: var(--white);
+      display: flex; align-items: center; justify-content: center;
+      font-weight: 700; font-size: 1.05rem; flex-shrink: 0;
+    }
+    .flow-item h3 { font-size: 1.05rem; font-weight: 700; margin-bottom: 4px; }
+    .flow-item p { font-size: 0.88rem; color: var(--text-sub); }
+
+    /* ── CTA ── */
+    .cta {
+      padding: 80px 24px; text-align: center;
+      background: linear-gradient(135deg, var(--primary) 0%, var(--primary-dark) 50%, #064e3b 100%);
+      color: var(--white);
+    }
+    .cta h2 { font-size: clamp(1.5rem, 3vw, 2.2rem); font-weight: 700; margin-bottom: 16px; }
+    .cta p { color: #a7f3d0; margin-bottom: 36px; font-size: 1.05rem; }
+    .cta .btn-white {
+      display: inline-flex; align-items: center; gap: 10px;
+      background: var(--white); color: var(--primary-dark);
+      padding: 16px 36px; border-radius: var(--radius);
+      font-weight: 700; font-size: 1.05rem; text-decoration: none;
+      box-shadow: 0 6px 20px rgba(0,0,0,0.15); transition: all 0.3s;
+    }
+    .cta .btn-white:hover { transform: translateY(-2px); box-shadow: 0 10px 30px rgba(0,0,0,0.2); }
+    .cta-info { margin-top: 20px; font-size: 0.85rem; color: #a7f3d0; }
+
+    /* ── フッター ── */
+    .footer { background: #0f172a; padding: 32px 24px; text-align: center; }
+    .footer p { color: #64748b; font-size: 0.8rem; }
+
+    /* ── レスポンシブ ── */
+    @media (max-width: 900px) {
+      .header-nav { display: none; }
+      .stats-grid { grid-template-columns: repeat(2, 1fr); }
+      .features-grid { grid-template-columns: 1fr; }
+      .courses-grid { grid-template-columns: 1fr; }
+    }
+    @media (max-width: 600px) {
+      .hero-buttons { flex-direction: column; align-items: center; }
+      .stats-grid { grid-template-columns: repeat(2, 1fr); gap: 12px; }
+    }
+
+    /* ── アニメーション ── */
+    .fade-up { opacity: 0; transform: translateY(30px); transition: opacity 0.6s ease, transform 0.6s ease; }
+    .fade-up.visible { opacity: 1; transform: translateY(0); }
+  </style>
+</head>
+<body>
+
+  <header class="header">
+    <div class="header-inner">
+      <a href="#" class="header-logo">プロ家庭教師 鈴木雄太</a>
+      <nav class="header-nav">
+        <a href="#features">強み</a>
+        <a href="#courses">指導内容</a>
+        <a href="#flow">ご利用の流れ</a>
+        <a href="#contact">お問い合わせ</a>
+      </nav>
+      <a href="#contact" class="header-cta">無料相談</a>
+    </div>
+  </header>
+
+  <section class="hero">
+    <div>
+      <span class="hero-badge">千葉県野田市 ｜ 個人契約プロ家庭教師</span>
+      <h1>指導歴<span class="accent">16年</span>。<br><span class="accent">900名</span>を超える<br>指導実績。</h1>
+      <p>お子さま一人ひとりに向き合う完全オーダーメイド指導。<br>明治大学卒のプロ講師が、学力向上から不登校サポートまで幅広く対応いたします。</p>
+      <div class="hero-buttons">
+        <a href="#contact" class="btn-primary">無料相談を申し込む</a>
+        <a href="#features" class="btn-outline">強みを見る</a>
+      </div>
+    </div>
+  </section>
+
+  <section class="stats">
+    <div class="stats-grid">
+      <div class="stat-card fade-up"><div class="stat-num">16年</div><div class="stat-label">指導歴</div></div>
+      <div class="stat-card fade-up"><div class="stat-num">900名+</div><div class="stat-label">指導実績</div></div>
+      <div class="stat-card fade-up"><div class="stat-num">個人契約</div><div class="stat-label">中間マージンなし</div></div>
+      <div class="stat-card fade-up"><div class="stat-num">対応</div><div class="stat-label">不登校サポート</div></div>
+    </div>
+  </section>
+
+  <section id="features" class="section section--alt">
+    <h2 class="section-title">選ばれる<span class="accent">5つの理由</span></h2>
+    <div class="features-grid">
+      <div class="feature-card fade-up">
+        <div class="feature-icon">🎓</div>
+        <h3>16年・900名超の実績</h3>
+        <p>長年にわたる豊富な指導経験で、あらゆるタイプの生徒に対応。確かな実績が信頼の証です。</p>
+      </div>
+      <div class="feature-card fade-up">
+        <div class="feature-icon">🤝</div>
+        <h3>個人契約で安心</h3>
+        <p>仲介業者を介さない個人契約。中間マージンがないため、質の高い指導をリーズナブルにご提供。</p>
+      </div>
+      <div class="feature-card fade-up">
+        <div class="feature-icon">📋</div>
+        <h3>完全オーダーメイド</h3>
+        <p>お子さまの学力・性格・目標に合わせた完全個別カリキュラム。「わからない」の根本から解決します。</p>
+      </div>
+      <div class="feature-card fade-up">
+        <div class="feature-icon">💚</div>
+        <h3>不登校サポート</h3>
+        <p>不登校のお子さまにも寄り添い、学習の遅れを取り戻します。メンタル面も配慮した丁寧な指導。</p>
+      </div>
+      <div class="feature-card fade-up">
+        <div class="feature-icon">🏫</div>
+        <h3>明治大卒のプロ講師</h3>
+        <p>大学受験の経験を活かした受験指導はもちろん、基礎学力の定着から応用まで幅広くカバーします。</p>
+      </div>
+    </div>
+  </section>
+
+  <section id="courses" class="section">
+    <h2 class="section-title">指導内容</h2>
+    <div class="courses-grid">
+      <div class="course-card fade-up">
+        <h3>小学生コース</h3>
+        <p>基礎学力の定着から中学受験対策まで</p>
+        <ul><li>学校の授業フォロー</li><li>中学受験対策</li><li>学習習慣づくり</li><li>苦手科目の克服</li></ul>
+      </div>
+      <div class="course-card fade-up">
+        <h3>中学生コース</h3>
+        <p>定期テスト・高校受験に向けた指導</p>
+        <ul><li>定期テスト対策</li><li>高校受験対策</li><li>内申点アップ</li><li>不登校の学習支援</li></ul>
+      </div>
+      <div class="course-card fade-up">
+        <h3>高校生コース</h3>
+        <p>大学受験・推薦対策をサポート</p>
+        <ul><li>大学受験対策</li><li>定期テスト対策</li><li>推薦・AO対策</li><li>小論文指導</li></ul>
+      </div>
+      <div class="course-card fade-up">
+        <h3>不登校サポート</h3>
+        <p>学びを止めない。心に寄り添う指導</p>
+        <ul><li>学習の遅れの解消</li><li>お子さまのペースに合わせた指導</li><li>自信の回復サポート</li><li>復学への準備</li></ul>
+      </div>
+    </div>
+  </section>
+
+  <section id="flow" class="section section--bg">
+    <h2 class="section-title">ご利用の流れ</h2>
+    <div class="flow-list">
+      <div class="flow-item fade-up"><div class="flow-num">01</div><div><h3>お問い合わせ</h3><p>メールまたはお電話でお気軽にご相談ください。</p></div></div>
+      <div class="flow-item fade-up"><div class="flow-num">02</div><div><h3>無料カウンセリング</h3><p>お子さまの現状・目標をヒアリングし、最適な指導プランをご提案します。</p></div></div>
+      <div class="flow-item fade-up"><div class="flow-num">03</div><div><h3>体験授業</h3><p>実際の指導を体験。お子さまとの相性もご確認いただけます。</p></div></div>
+      <div class="flow-item fade-up"><div class="flow-num">04</div><div><h3>指導開始</h3><p>ご納得いただけましたら個人契約を結び、指導をスタートします。</p></div></div>
+    </div>
+  </section>
+
+  <section id="contact" class="cta">
+    <h2>まずはお気軽にご相談ください</h2>
+    <p>無料カウンセリング・体験授業 受付中！</p>
+    <a href="mailto:suzuki.yuta.tutor@example.com" class="btn-white">✉ メールで問い合わせる</a>
+    <div class="cta-info">📍 千葉県野田市 ｜ オンライン対応可</div>
+  </section>
+
+  <footer class="footer"><p>&copy; 2026 プロ家庭教師 鈴木雄太. All rights reserved.</p></footer>
+
+  <script>
+    const observer = new IntersectionObserver((entries) => {
+      entries.forEach(entry => { if (entry.isIntersecting) entry.target.classList.add('visible'); });
+    }, { threshold: 0.15 });
+    document.querySelectorAll('.fade-up').forEach(el => observer.observe(el));
+  </script>
+</body>
+</html>

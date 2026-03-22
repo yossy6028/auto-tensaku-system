@@ -1,0 +1,365 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>ならいや 前田塾 ｜ 三重県松阪市</title>
+  <meta name="description" content="小1〜高3対応。兄弟割引あり。2022年開校、2024年移転拡大、2025年2校目開校予定。地域に根ざした丁寧な個別指導塾。" />
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Noto+Sans+JP:wght@400;500;700;900&display=swap" rel="stylesheet" />
+  <style>
+    :root {
+      --primary: #ea580c;
+      --primary-light: #f97316;
+      --primary-dark: #c2410c;
+      --bg-light: #fff7ed;
+      --bg-warm: #fffbeb;
+      --text-main: #0f172a;
+      --text-sub: #475569;
+      --white: #ffffff;
+      --shadow: 0 4px 20px rgba(234,88,12,0.1);
+      --shadow-lg: 0 10px 40px rgba(234,88,12,0.16);
+      --radius: 16px;
+      --border: #fed7aa;
+    }
+    *, *::before, *::after { margin: 0; padding: 0; box-sizing: border-box; }
+    html { scroll-behavior: smooth; }
+    body {
+      font-family: 'Noto Sans JP', sans-serif;
+      color: var(--text-main); line-height: 1.8;
+      background: var(--white); overflow-x: hidden;
+    }
+
+    /* ── ヘッダー ── */
+    .header {
+      position: fixed; top: 0; left: 0; right: 0; z-index: 100;
+      background: rgba(255,255,255,0.92); backdrop-filter: blur(12px);
+      box-shadow: 0 1px 8px rgba(0,0,0,0.06);
+    }
+    .header-inner {
+      max-width: 1100px; margin: 0 auto;
+      display: flex; align-items: center; justify-content: space-between;
+      padding: 14px 24px;
+    }
+    .header-logo { font-weight: 700; font-size: 1.1rem; color: var(--primary-dark); text-decoration: none; }
+    .header-nav { display: flex; gap: 24px; }
+    .header-nav a {
+      font-size: 0.88rem; font-weight: 500; color: var(--text-sub);
+      text-decoration: none; transition: color 0.2s;
+    }
+    .header-nav a:hover { color: var(--primary); }
+    .header-cta {
+      background: var(--primary); color: var(--white); padding: 8px 20px;
+      border-radius: 100px; font-size: 0.85rem; font-weight: 700;
+      text-decoration: none; transition: background 0.2s, transform 0.2s;
+    }
+    .header-cta:hover { background: var(--primary-light); transform: translateY(-1px); }
+
+    /* ── ヒーロー ── */
+    .hero {
+      min-height: 100vh; display: flex; align-items: center; justify-content: center;
+      background: linear-gradient(135deg, var(--bg-light) 0%, var(--white) 50%, var(--bg-warm) 100%);
+      padding: 100px 24px 60px; text-align: center;
+    }
+    .hero-badge {
+      display: inline-block; background: #ffedd5; color: var(--primary-dark);
+      padding: 6px 18px; border-radius: 100px; font-size: 0.85rem; font-weight: 600;
+      margin-bottom: 20px;
+    }
+    .hero h1 { font-size: clamp(2rem, 5vw, 3.5rem); font-weight: 900; line-height: 1.3; margin-bottom: 24px; }
+    .hero h1 .accent { color: var(--primary); }
+    .hero p { font-size: 1.1rem; color: var(--text-sub); max-width: 600px; margin: 0 auto 40px; line-height: 1.9; }
+    .hero-buttons { display: flex; gap: 16px; justify-content: center; flex-wrap: wrap; }
+    .btn-primary {
+      background: var(--primary); color: var(--white); padding: 16px 36px;
+      border-radius: 100px; font-size: 1.05rem; font-weight: 700;
+      text-decoration: none; box-shadow: 0 6px 24px rgba(234,88,12,0.25); transition: all 0.3s;
+    }
+    .btn-primary:hover { background: var(--primary-light); transform: translateY(-2px); }
+    .btn-outline {
+      border: 2px solid var(--primary); color: var(--primary); padding: 14px 36px;
+      border-radius: 100px; font-size: 1.05rem; font-weight: 700;
+      text-decoration: none; background: transparent; transition: all 0.3s;
+    }
+    .btn-outline:hover { background: var(--bg-light); }
+
+    /* ── 数字 ── */
+    .stats { padding: 60px 24px; background: var(--white); }
+    .stats-grid {
+      max-width: 900px; margin: 0 auto;
+      display: grid; grid-template-columns: repeat(4, 1fr); gap: 24px;
+    }
+    .stat-card {
+      text-align: center; padding: 24px 16px;
+      border: 1px solid var(--border); border-radius: var(--radius); background: var(--bg-light);
+    }
+    .stat-num { font-size: 1.5rem; font-weight: 900; color: var(--primary-dark); }
+    .stat-label { font-size: 0.75rem; color: var(--text-sub); margin-top: 6px; }
+
+    /* ── セクション共通 ── */
+    .section { padding: 80px 24px; }
+    .section-title { text-align: center; font-size: clamp(1.5rem, 3vw, 2.2rem); font-weight: 700; margin-bottom: 48px; }
+    .section-title .accent { color: var(--primary); }
+    .section--alt { background: linear-gradient(180deg, var(--white) 0%, var(--bg-light) 100%); }
+    .section--bg { background: var(--bg-light); }
+
+    /* ── 特長カード ── */
+    .features-grid {
+      max-width: 1100px; margin: 0 auto;
+      display: grid; grid-template-columns: repeat(3, 1fr); gap: 28px;
+    }
+    .feature-card {
+      background: var(--white); border-radius: var(--radius);
+      padding: 32px; box-shadow: var(--shadow); border: 1px solid var(--border);
+    }
+    .feature-icon {
+      width: 56px; height: 56px; border-radius: 14px;
+      background: #ffedd5; display: flex; align-items: center; justify-content: center;
+      margin-bottom: 16px; font-size: 1.5rem;
+    }
+    .feature-card h3 { font-size: 1.15rem; font-weight: 700; margin-bottom: 10px; }
+    .feature-card p { font-size: 0.9rem; color: var(--text-sub); line-height: 1.8; }
+
+    /* ── コース ── */
+    .courses-grid {
+      max-width: 900px; margin: 0 auto;
+      display: grid; grid-template-columns: repeat(3, 1fr); gap: 24px;
+    }
+    .course-card { border-radius: var(--radius); padding: 28px; border: 2px solid var(--border); }
+    .course-card.amber { background: #fffbeb; border-color: #fde68a; }
+    .course-card.amber h3 { color: #92400e; }
+    .course-card.orange { background: #fff7ed; border-color: #fed7aa; }
+    .course-card.orange h3 { color: #c2410c; }
+    .course-card.red { background: #fef2f2; border-color: #fecaca; }
+    .course-card.red h3 { color: #b91c1c; }
+    .course-card h3 { font-size: 1.1rem; font-weight: 700; margin-bottom: 4px; }
+    .course-card .grades { font-size: 0.8rem; color: var(--text-sub); margin-bottom: 14px; }
+    .course-card ul { list-style: none; }
+    .course-card li {
+      font-size: 0.85rem; color: var(--text-main); padding: 4px 0;
+      display: flex; align-items: center; gap: 8px;
+    }
+    .course-card li::before { content: "✓"; font-weight: 700; }
+    .course-card.amber li::before { color: #92400e; }
+    .course-card.orange li::before { color: #c2410c; }
+    .course-card.red li::before { color: #b91c1c; }
+
+    /* ── 教室案内 ── */
+    .schools-grid {
+      max-width: 700px; margin: 0 auto;
+      display: grid; grid-template-columns: repeat(2, 1fr); gap: 24px;
+    }
+    .school-card {
+      background: var(--white); border-radius: var(--radius); padding: 24px;
+      box-shadow: 0 2px 12px rgba(0,0,0,0.06); border: 1px solid var(--border);
+    }
+    .school-card h3 { font-size: 1.05rem; font-weight: 700; margin-bottom: 6px; }
+    .school-card p { font-size: 0.85rem; color: var(--text-sub); margin-bottom: 10px; }
+    .school-badge {
+      display: inline-block; padding: 4px 12px; border-radius: 100px;
+      font-size: 0.75rem; font-weight: 600;
+    }
+    .school-badge.open { background: #dcfce7; color: #166534; }
+    .school-badge.soon { background: #fef3c7; color: #92400e; }
+
+    /* ── 流れ ── */
+    .flow-list { max-width: 700px; margin: 0 auto; }
+    .flow-item { display: flex; gap: 20px; align-items: flex-start; margin-bottom: 32px; }
+    .flow-num {
+      width: 48px; height: 48px; border-radius: 50%; background: var(--primary); color: var(--white);
+      display: flex; align-items: center; justify-content: center;
+      font-weight: 700; font-size: 1.05rem; flex-shrink: 0;
+    }
+    .flow-item h3 { font-size: 1.05rem; font-weight: 700; margin-bottom: 4px; }
+    .flow-item p { font-size: 0.88rem; color: var(--text-sub); }
+
+    /* ── 料金 ── */
+    .price-box {
+      max-width: 600px; margin: 0 auto; text-align: center;
+      border: 2px solid var(--border); border-radius: var(--radius);
+      background: var(--white); padding: 40px 32px;
+    }
+    .price-box p { font-size: 1rem; color: var(--text-sub); margin-bottom: 20px; }
+    .price-box .highlight { font-weight: 700; color: var(--primary); }
+    .price-features { text-align: left; max-width: 320px; margin: 0 auto 20px; }
+    .price-features div {
+      display: flex; align-items: center; gap: 8px; padding: 4px 0;
+      font-size: 0.9rem; color: var(--text-main);
+    }
+    .price-features div::before { content: "✓"; color: var(--primary); font-weight: 700; }
+    .price-note { font-size: 0.8rem; color: var(--text-sub); }
+
+    /* ── CTA ── */
+    .cta {
+      padding: 80px 24px; text-align: center;
+      background: linear-gradient(135deg, var(--primary) 0%, var(--primary-dark) 50%, #9a3412 100%);
+      color: var(--white);
+    }
+    .cta h2 { font-size: clamp(1.5rem, 3vw, 2.2rem); font-weight: 700; margin-bottom: 16px; }
+    .cta p { color: #fed7aa; margin-bottom: 36px; font-size: 1.05rem; }
+    .cta .btn-white {
+      display: inline-flex; align-items: center; gap: 10px;
+      background: var(--white); color: var(--primary-dark);
+      padding: 16px 36px; border-radius: var(--radius);
+      font-weight: 700; font-size: 1.05rem; text-decoration: none;
+      box-shadow: 0 6px 20px rgba(0,0,0,0.15); transition: all 0.3s;
+    }
+    .cta .btn-white:hover { transform: translateY(-2px); box-shadow: 0 10px 30px rgba(0,0,0,0.2); }
+    .cta-info { margin-top: 20px; font-size: 0.85rem; color: #fed7aa; }
+
+    /* ── フッター ── */
+    .footer { background: #0f172a; padding: 32px 24px; text-align: center; }
+    .footer p { color: #64748b; font-size: 0.8rem; }
+
+    /* ── レスポンシブ ── */
+    @media (max-width: 900px) {
+      .header-nav { display: none; }
+      .stats-grid { grid-template-columns: repeat(2, 1fr); }
+      .features-grid, .courses-grid { grid-template-columns: 1fr; }
+      .schools-grid { grid-template-columns: 1fr; }
+    }
+    @media (max-width: 600px) {
+      .hero-buttons { flex-direction: column; align-items: center; }
+    }
+
+    .fade-up { opacity: 0; transform: translateY(30px); transition: opacity 0.6s ease, transform 0.6s ease; }
+    .fade-up.visible { opacity: 1; transform: translateY(0); }
+  </style>
+</head>
+<body>
+
+  <header class="header">
+    <div class="header-inner">
+      <a href="#" class="header-logo">ならいや 前田塾</a>
+      <nav class="header-nav">
+        <a href="#features">特長</a>
+        <a href="#courses">コース</a>
+        <a href="#schools">教室案内</a>
+        <a href="#price">料金</a>
+        <a href="#contact">お問い合わせ</a>
+      </nav>
+      <a href="#contact" class="header-cta">お問い合わせ</a>
+    </div>
+  </header>
+
+  <section class="hero">
+    <div>
+      <span class="hero-badge">三重県松阪市 ｜ 2022年開校</span>
+      <h1>一人ひとりの<br><span class="accent">「わかった！」</span>を<br>大切にする塾。</h1>
+      <p>小学1年生から高校3年生まで対応。兄弟割引あり・2025年には2校目も開校予定。地域に根ざした丁寧な指導で、お子さまの成長を支えます。</p>
+      <div class="hero-buttons">
+        <a href="#contact" class="btn-primary">無料体験を申し込む</a>
+        <a href="#features" class="btn-outline">塾の特長を見る</a>
+      </div>
+    </div>
+  </section>
+
+  <section class="stats">
+    <div class="stats-grid">
+      <div class="stat-card fade-up"><div class="stat-num">2022年</div><div class="stat-label">開校</div></div>
+      <div class="stat-card fade-up"><div class="stat-num">小1〜高3</div><div class="stat-label">対象学年</div></div>
+      <div class="stat-card fade-up"><div class="stat-num">2校</div><div class="stat-label">教室展開（2025年〜）</div></div>
+      <div class="stat-card fade-up"><div class="stat-num">あり</div><div class="stat-label">兄弟割引</div></div>
+    </div>
+  </section>
+
+  <section id="features" class="section section--alt">
+    <h2 class="section-title">ならいやが選ばれる<span class="accent">3つの理由</span></h2>
+    <div class="features-grid">
+      <div class="feature-card fade-up">
+        <div class="feature-icon">📖</div>
+        <h3>一人ひとりに合わせた指導</h3>
+        <p>お子さまの理解度・ペースに合わせた個別カリキュラム。「わからない」を「わかった！」に変える丁寧な指導です。</p>
+      </div>
+      <div class="feature-card fade-up">
+        <div class="feature-icon">👨‍👩‍👧‍👦</div>
+        <h3>兄弟割引で家計にやさしい</h3>
+        <p>ご兄弟で通塾される場合は割引を適用。複数のお子さまの学びを応援します。</p>
+      </div>
+      <div class="feature-card fade-up">
+        <div class="feature-icon">🚀</div>
+        <h3>成長中の活気ある教室</h3>
+        <p>2022年の開校から着実に成長し、2024年に移転拡大、2025年には2校目を開校予定。勢いのある環境で学べます。</p>
+      </div>
+    </div>
+  </section>
+
+  <section id="courses" class="section">
+    <h2 class="section-title">コース案内</h2>
+    <div class="courses-grid">
+      <div class="course-card amber fade-up">
+        <h3>小学生コース</h3>
+        <div class="grades">小1〜小6</div>
+        <ul><li>学校の授業フォロー</li><li>中学受験対策</li><li>学習習慣づくり</li></ul>
+      </div>
+      <div class="course-card orange fade-up">
+        <h3>中学生コース</h3>
+        <div class="grades">中1〜中3</div>
+        <ul><li>定期テスト対策</li><li>高校受験対策</li><li>内申点アップ</li></ul>
+      </div>
+      <div class="course-card red fade-up">
+        <h3>高校生コース</h3>
+        <div class="grades">高1〜高3</div>
+        <ul><li>大学受験対策</li><li>定期テスト対策</li><li>推薦・AO対策</li></ul>
+      </div>
+    </div>
+  </section>
+
+  <section id="schools" class="section section--bg">
+    <h2 class="section-title">教室案内</h2>
+    <div class="schools-grid">
+      <div class="school-card fade-up">
+        <h3>🏫 本校（松阪市）</h3>
+        <p>2024年移転・拡大リニューアル</p>
+        <span class="school-badge open">開校中</span>
+      </div>
+      <div class="school-card fade-up">
+        <h3>🏫 第2校</h3>
+        <p>2025年 開校予定</p>
+        <span class="school-badge soon">準備中</span>
+      </div>
+    </div>
+  </section>
+
+  <section class="section">
+    <h2 class="section-title">入塾までの流れ</h2>
+    <div class="flow-list">
+      <div class="flow-item fade-up"><div class="flow-num">01</div><div><h3>お問い合わせ</h3><p>フォームまたはお電話でお気軽にご連絡ください。</p></div></div>
+      <div class="flow-item fade-up"><div class="flow-num">02</div><div><h3>面談・教室見学</h3><p>お子さまの状況をヒアリングし、最適なコースをご提案します。</p></div></div>
+      <div class="flow-item fade-up"><div class="flow-num">03</div><div><h3>無料体験授業</h3><p>実際の授業を体験。お子さまに合うかどうかをご確認いただけます。</p></div></div>
+      <div class="flow-item fade-up"><div class="flow-num">04</div><div><h3>入塾・指導開始</h3><p>ご納得いただけましたら入塾手続きへ。一緒にがんばりましょう！</p></div></div>
+    </div>
+  </section>
+
+  <section id="price" class="section section--bg">
+    <h2 class="section-title">料金のご案内</h2>
+    <div class="price-box fade-up">
+      <p>学年・コースに応じた<span class="highlight">明瞭な料金体系</span>です。</p>
+      <div class="price-features">
+        <div>入塾金は初回のみ</div>
+        <div>兄弟割引あり</div>
+        <div>教材費込みのシンプルな月謝制</div>
+        <div>無料体験授業あり</div>
+      </div>
+      <p class="price-note">※詳細な料金はコース・学年により異なります。お気軽にお問い合わせください。</p>
+    </div>
+  </section>
+
+  <section id="contact" class="cta">
+    <h2>まずはお気軽にお問い合わせください</h2>
+    <p>無料体験授業・教室見学 受付中！</p>
+    <a href="https://naraiya0326.wixsite.com/-site" target="_blank" rel="noopener noreferrer" class="btn-white">📖 お問い合わせフォームへ</a>
+    <div class="cta-info">📍 三重県松阪市</div>
+  </section>
+
+  <footer class="footer"><p>&copy; 2026 ならいや 前田塾. All rights reserved.</p></footer>
+
+  <script>
+    const observer = new IntersectionObserver((entries) => {
+      entries.forEach(entry => { if (entry.isIntersecting) entry.target.classList.add('visible'); });
+    }, { threshold: 0.15 });
+    document.querySelectorAll('.fade-up').forEach(el => observer.observe(el));
+  </script>
+</body>
+</html>

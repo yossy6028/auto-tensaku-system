@@ -1,0 +1,340 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>個別指導ウェルカム ｜ 山形市</title>
+  <meta name="description" content="7つの習慣J®・速読解など独自プログラム導入。個別指導+コンサル体制で学力×人間力を同時に伸ばす個別指導塾。" />
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Noto+Sans+JP:wght@400;500;700;900&display=swap" rel="stylesheet" />
+  <style>
+    :root {
+      --primary: #2563eb;
+      --primary-light: #3b82f6;
+      --primary-dark: #1e40af;
+      --bg-light: #eff6ff;
+      --bg-warm: #eef2ff;
+      --text-main: #0f172a;
+      --text-sub: #475569;
+      --white: #ffffff;
+      --shadow: 0 4px 20px rgba(37,99,235,0.1);
+      --shadow-lg: 0 10px 40px rgba(37,99,235,0.16);
+      --radius: 16px;
+      --border: #bfdbfe;
+    }
+    *, *::before, *::after { margin: 0; padding: 0; box-sizing: border-box; }
+    html { scroll-behavior: smooth; }
+    body {
+      font-family: 'Noto Sans JP', sans-serif;
+      color: var(--text-main); line-height: 1.8;
+      background: var(--white); overflow-x: hidden;
+    }
+
+    /* ── ヘッダー ── */
+    .header {
+      position: fixed; top: 0; left: 0; right: 0; z-index: 100;
+      background: rgba(255,255,255,0.92); backdrop-filter: blur(12px);
+      box-shadow: 0 1px 8px rgba(0,0,0,0.06);
+    }
+    .header-inner {
+      max-width: 1100px; margin: 0 auto;
+      display: flex; align-items: center; justify-content: space-between;
+      padding: 14px 24px;
+    }
+    .header-logo { font-weight: 700; font-size: 1.1rem; color: var(--primary-dark); text-decoration: none; }
+    .header-nav { display: flex; gap: 24px; }
+    .header-nav a {
+      font-size: 0.88rem; font-weight: 500; color: var(--text-sub);
+      text-decoration: none; transition: color 0.2s;
+    }
+    .header-nav a:hover { color: var(--primary); }
+    .header-cta {
+      background: var(--primary); color: var(--white); padding: 8px 20px;
+      border-radius: 100px; font-size: 0.85rem; font-weight: 700;
+      text-decoration: none; transition: background 0.2s, transform 0.2s;
+    }
+    .header-cta:hover { background: var(--primary-light); transform: translateY(-1px); }
+
+    /* ── ヒーロー ── */
+    .hero {
+      min-height: 100vh; display: flex; align-items: center; justify-content: center;
+      background: linear-gradient(135deg, var(--bg-light) 0%, var(--white) 50%, var(--bg-warm) 100%);
+      padding: 100px 24px 60px; text-align: center;
+    }
+    .hero-badge {
+      display: inline-block; background: #dbeafe; color: var(--primary-dark);
+      padding: 6px 18px; border-radius: 100px; font-size: 0.85rem; font-weight: 600;
+      margin-bottom: 20px;
+    }
+    .hero h1 { font-size: clamp(2rem, 5vw, 3.5rem); font-weight: 900; line-height: 1.3; margin-bottom: 24px; }
+    .hero h1 .accent { color: var(--primary); }
+    .hero p { font-size: 1.1rem; color: var(--text-sub); max-width: 600px; margin: 0 auto 40px; line-height: 1.9; }
+    .hero-buttons { display: flex; gap: 16px; justify-content: center; flex-wrap: wrap; }
+    .btn-primary {
+      background: var(--primary); color: var(--white); padding: 16px 36px;
+      border-radius: 100px; font-size: 1.05rem; font-weight: 700;
+      text-decoration: none; box-shadow: 0 6px 24px rgba(37,99,235,0.25); transition: all 0.3s;
+    }
+    .btn-primary:hover { background: var(--primary-light); transform: translateY(-2px); }
+    .btn-outline {
+      border: 2px solid var(--primary); color: var(--primary); padding: 14px 36px;
+      border-radius: 100px; font-size: 1.05rem; font-weight: 700;
+      text-decoration: none; background: transparent; transition: all 0.3s;
+    }
+    .btn-outline:hover { background: var(--bg-light); }
+
+    /* ── セクション共通 ── */
+    .section { padding: 80px 24px; }
+    .section-title { text-align: center; font-size: clamp(1.5rem, 3vw, 2.2rem); font-weight: 700; margin-bottom: 16px; }
+    .section-title .accent { color: var(--primary); }
+    .section-subtitle { text-align: center; color: var(--text-sub); margin-bottom: 48px; font-size: 0.95rem; }
+    .section--alt { background: linear-gradient(180deg, var(--bg-light) 0%, var(--white) 100%); }
+    .section--bg { background: var(--bg-light); }
+
+    /* ── 独自プログラム ── */
+    .programs-grid {
+      max-width: 1100px; margin: 0 auto;
+      display: grid; grid-template-columns: repeat(3, 1fr); gap: 28px;
+    }
+    .program-card {
+      background: #f8fafc; border-radius: var(--radius);
+      padding: 32px; border: 1px solid #e2e8f0;
+      transition: box-shadow 0.3s;
+    }
+    .program-card:hover { box-shadow: var(--shadow-lg); }
+    .program-icon {
+      width: 56px; height: 56px; border-radius: 14px;
+      display: flex; align-items: center; justify-content: center;
+      margin-bottom: 16px; font-size: 1.5rem;
+    }
+    .program-icon.indigo { background: #e0e7ff; }
+    .program-icon.sky { background: #e0f2fe; }
+    .program-icon.violet { background: #ede9fe; }
+    .program-card h3 { font-size: 1.15rem; font-weight: 700; margin-bottom: 10px; }
+    .program-card p { font-size: 0.9rem; color: var(--text-sub); line-height: 1.8; }
+
+    /* ── 特長 ── */
+    .features-grid {
+      max-width: 900px; margin: 0 auto;
+      display: grid; grid-template-columns: repeat(2, 1fr); gap: 24px;
+    }
+    .feature-card {
+      display: flex; gap: 16px; background: var(--white);
+      border-radius: var(--radius); padding: 24px;
+      box-shadow: 0 2px 12px rgba(0,0,0,0.05); border: 1px solid var(--border);
+    }
+    .feature-icon-sm {
+      width: 48px; height: 48px; border-radius: 12px;
+      background: #dbeafe; display: flex; align-items: center; justify-content: center;
+      flex-shrink: 0; font-size: 1.3rem;
+    }
+    .feature-card h3 { font-size: 1rem; font-weight: 700; margin-bottom: 6px; }
+    .feature-card p { font-size: 0.85rem; color: var(--text-sub); line-height: 1.7; }
+
+    /* ── コース ── */
+    .courses-grid {
+      max-width: 900px; margin: 0 auto;
+      display: grid; grid-template-columns: repeat(3, 1fr); gap: 24px;
+    }
+    .course-card { border-radius: var(--radius); padding: 28px; border: 2px solid var(--border); }
+    .course-card.blue { background: #eff6ff; border-color: #bfdbfe; }
+    .course-card.blue h3 { color: #1e40af; }
+    .course-card.indigo { background: #eef2ff; border-color: #c7d2fe; }
+    .course-card.indigo h3 { color: #3730a3; }
+    .course-card.sky { background: #f0f9ff; border-color: #bae6fd; }
+    .course-card.sky h3 { color: #075985; }
+    .course-card h3 { font-size: 1.1rem; font-weight: 700; margin-bottom: 8px; }
+    .course-card p { font-size: 0.85rem; color: var(--text-sub); margin-bottom: 14px; }
+    .course-card ul { list-style: none; }
+    .course-card li {
+      font-size: 0.85rem; color: var(--text-main); padding: 4px 0;
+      display: flex; align-items: center; gap: 8px;
+    }
+    .course-card li::before { content: "✓"; font-weight: 700; }
+    .course-card.blue li::before { color: #1e40af; }
+    .course-card.indigo li::before { color: #3730a3; }
+    .course-card.sky li::before { color: #075985; }
+
+    /* ── 流れ ── */
+    .flow-list { max-width: 700px; margin: 0 auto; }
+    .flow-item { display: flex; gap: 20px; align-items: flex-start; margin-bottom: 32px; }
+    .flow-num {
+      width: 48px; height: 48px; border-radius: 50%; background: var(--primary); color: var(--white);
+      display: flex; align-items: center; justify-content: center;
+      font-weight: 700; font-size: 1.05rem; flex-shrink: 0;
+    }
+    .flow-item h3 { font-size: 1.05rem; font-weight: 700; margin-bottom: 4px; }
+    .flow-item p { font-size: 0.88rem; color: var(--text-sub); }
+
+    /* ── CTA ── */
+    .cta {
+      padding: 80px 24px; text-align: center;
+      background: linear-gradient(135deg, var(--primary) 0%, var(--primary-dark) 50%, #1e3a5f 100%);
+      color: var(--white);
+    }
+    .cta h2 { font-size: clamp(1.5rem, 3vw, 2.2rem); font-weight: 700; margin-bottom: 16px; }
+    .cta p { color: #bfdbfe; margin-bottom: 36px; font-size: 1.05rem; }
+    .cta .btn-white {
+      display: inline-flex; align-items: center; gap: 10px;
+      background: var(--white); color: var(--primary-dark);
+      padding: 16px 36px; border-radius: var(--radius);
+      font-weight: 700; font-size: 1.05rem; text-decoration: none;
+      box-shadow: 0 6px 20px rgba(0,0,0,0.15); transition: all 0.3s;
+    }
+    .cta .btn-white:hover { transform: translateY(-2px); box-shadow: 0 10px 30px rgba(0,0,0,0.2); }
+    .cta-info { margin-top: 20px; font-size: 0.85rem; color: #bfdbfe; }
+
+    /* ── フッター ── */
+    .footer { background: #0f172a; padding: 32px 24px; text-align: center; }
+    .footer p { color: #64748b; font-size: 0.8rem; }
+
+    /* ── レスポンシブ ── */
+    @media (max-width: 900px) {
+      .header-nav { display: none; }
+      .programs-grid, .courses-grid { grid-template-columns: 1fr; }
+      .features-grid { grid-template-columns: 1fr; }
+    }
+    @media (max-width: 600px) {
+      .hero-buttons { flex-direction: column; align-items: center; }
+    }
+
+    .fade-up { opacity: 0; transform: translateY(30px); transition: opacity 0.6s ease, transform 0.6s ease; }
+    .fade-up.visible { opacity: 1; transform: translateY(0); }
+  </style>
+</head>
+<body>
+
+  <header class="header">
+    <div class="header-inner">
+      <a href="#" class="header-logo">個別指導ウェルカム</a>
+      <nav class="header-nav">
+        <a href="#programs">独自プログラム</a>
+        <a href="#features">特長</a>
+        <a href="#courses">コース</a>
+        <a href="#contact">お問い合わせ</a>
+      </nav>
+      <a href="#contact" class="header-cta">お問い合わせ</a>
+    </div>
+  </header>
+
+  <section class="hero">
+    <div>
+      <span class="hero-badge">山形市 ｜ 個別指導 + 独自プログラム</span>
+      <h1>学力×<span class="accent">人間力</span>を<br>同時に伸ばす。</h1>
+      <p>7つの習慣J&reg;・速読解など独自プログラムを取り入れた個別指導塾。学力向上だけでなく、自ら考え行動できる力を育てます。</p>
+      <div class="hero-buttons">
+        <a href="#contact" class="btn-primary">無料体験を申し込む</a>
+        <a href="#features" class="btn-outline">特長を見る</a>
+      </div>
+    </div>
+  </section>
+
+  <section id="programs" class="section">
+    <h2 class="section-title">他にはない<span class="accent">独自プログラム</span></h2>
+    <p class="section-subtitle">学力だけでなく、社会で活きる力を育てるプログラムを導入しています。</p>
+    <div class="programs-grid">
+      <div class="program-card fade-up">
+        <div class="program-icon indigo">🛡️</div>
+        <h3>7つの習慣J&reg;</h3>
+        <p>世界的ベストセラー「7つの習慣」を子ども向けにアレンジ。主体性・目標設定・協調性など、人間力の土台を築きます。</p>
+      </div>
+      <div class="program-card fade-up">
+        <div class="program-icon sky">⚡</div>
+        <h3>速読解力講座</h3>
+        <p>読むスピードと理解力を同時にトレーニング。全教科の学力底上げにつながる「読む力」を鍛えます。</p>
+      </div>
+      <div class="program-card fade-up">
+        <div class="program-icon violet">🧠</div>
+        <h3>思考力養成</h3>
+        <p>論理的思考力・問題解決力を養うオリジナルカリキュラム。受験だけでなく将来に活きる力を育成します。</p>
+      </div>
+    </div>
+  </section>
+
+  <section id="features" class="section section--alt">
+    <h2 class="section-title">ウェルカムが選ばれる<span class="accent">理由</span></h2>
+    <p class="section-subtitle">&nbsp;</p>
+    <div class="features-grid">
+      <div class="feature-card fade-up">
+        <div class="feature-icon-sm">🎯</div>
+        <div>
+          <h3>個別指導 × コンサル体制</h3>
+          <p>一人ひとりの目標に合わせた個別指導に加え、定期的な面談で学習計画を見直し、常に最適な学びを提供します。</p>
+        </div>
+      </div>
+      <div class="feature-card fade-up">
+        <div class="feature-icon-sm">💡</div>
+        <div>
+          <h3>独自の差別化プログラム</h3>
+          <p>7つの習慣J&reg;や速読解など、他の塾にはないプログラムで「学力＋人間力」のバランスの取れた成長を実現します。</p>
+        </div>
+      </div>
+      <div class="feature-card fade-up">
+        <div class="feature-icon-sm">👥</div>
+        <div>
+          <h3>少人数制で手厚いサポート</h3>
+          <p>一人ひとりに目が行き届く少人数制。質問しやすい環境で、苦手を克服し得意を伸ばします。</p>
+        </div>
+      </div>
+      <div class="feature-card fade-up">
+        <div class="feature-icon-sm">🚀</div>
+        <div>
+          <h3>自立学習の習慣づくり</h3>
+          <p>「教えてもらう」だけでなく「自分で学ぶ力」を育成。将来にわたって活きる学習習慣を身につけます。</p>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <section id="courses" class="section">
+    <h2 class="section-title">コース・料金</h2>
+    <p class="section-subtitle">&nbsp;</p>
+    <div class="courses-grid">
+      <div class="course-card blue fade-up">
+        <h3>個別指導コース</h3>
+        <p>1対1〜1対3の個別指導。全教科対応。</p>
+        <ul><li>定期テスト対策</li><li>受験対策</li><li>苦手克服</li></ul>
+      </div>
+      <div class="course-card indigo fade-up">
+        <h3>7つの習慣J&reg;コース</h3>
+        <p>人間力を育てるリーダーシッププログラム。</p>
+        <ul><li>主体性の育成</li><li>目標設定力</li><li>コミュニケーション力</li></ul>
+      </div>
+      <div class="course-card sky fade-up">
+        <h3>速読解力コース</h3>
+        <p>読む速さと正確さを同時にトレーニング。</p>
+        <ul><li>読解速度UP</li><li>全教科の底上げ</li><li>集中力向上</li></ul>
+      </div>
+    </div>
+    <p style="text-align:center; margin-top:32px; font-size:0.85rem; color:#64748b;">※料金の詳細はお問い合わせください。無料体験授業も随時受付中です。</p>
+  </section>
+
+  <section class="section section--bg">
+    <h2 class="section-title">入塾までの流れ</h2>
+    <p class="section-subtitle">&nbsp;</p>
+    <div class="flow-list">
+      <div class="flow-item fade-up"><div class="flow-num">01</div><div><h3>お問い合わせ</h3><p>お電話またはフォームでご連絡ください。</p></div></div>
+      <div class="flow-item fade-up"><div class="flow-num">02</div><div><h3>カウンセリング</h3><p>お子さまの現状・目標をじっくりヒアリング。最適なプランをご提案します。</p></div></div>
+      <div class="flow-item fade-up"><div class="flow-num">03</div><div><h3>無料体験授業</h3><p>実際の授業を体験いただけます。独自プログラムもお試し可能です。</p></div></div>
+      <div class="flow-item fade-up"><div class="flow-num">04</div><div><h3>入塾・スタート</h3><p>ご納得いただけましたら入塾手続きへ。一緒に目標に向かいましょう！</p></div></div>
+    </div>
+  </section>
+
+  <section id="contact" class="cta">
+    <h2>まずはお気軽にお問い合わせください</h2>
+    <p>無料体験授業・カウンセリング 受付中！</p>
+    <a href="https://shunichi0214.wixsite.com/welcome" target="_blank" rel="noopener noreferrer" class="btn-white">💬 お問い合わせフォームへ</a>
+    <div class="cta-info">📍 山形市</div>
+  </section>
+
+  <footer class="footer"><p>&copy; 2026 個別指導ウェルカム. All rights reserved.</p></footer>
+
+  <script>
+    const observer = new IntersectionObserver((entries) => {
+      entries.forEach(entry => { if (entry.isIntersecting) entry.target.classList.add('visible'); });
+    }, { threshold: 0.15 });
+    document.querySelectorAll('.fade-up').forEach(el => observer.observe(el));
+  </script>
+</body>
+</html>

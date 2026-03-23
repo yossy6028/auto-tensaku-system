@@ -74,7 +74,7 @@ ON CONFLICT (id) DO NOTHING;
 -- システム設定初期データ
 INSERT INTO system_settings (key, value, description) VALUES
     ('free_trial_days', '7', '無料体験期間（日数）'),
-    ('free_trial_usage_limit', '3', '無料体験中の利用回数上限'),
+    ('free_trial_usage_limit', '5', '無料体験中の利用回数上限'),
     ('free_access_enabled', 'false', '期間限定無料開放フラグ'),
     ('free_access_until', 'null', '無料開放終了日時')
 ON CONFLICT (key) DO NOTHING;
@@ -218,7 +218,7 @@ BEGIN
     SELECT COALESCE(value::INTEGER, 7) INTO v_free_trial_days
     FROM system_settings WHERE key = 'free_trial_days';
     
-    SELECT COALESCE(value::INTEGER, 3) INTO v_free_trial_usage_limit
+    SELECT COALESCE(value::INTEGER, 5) INTO v_free_trial_usage_limit
     FROM system_settings WHERE key = 'free_trial_usage_limit';
 
     -- 期間限定無料開放チェック
@@ -427,7 +427,7 @@ BEGIN
     SELECT COALESCE(value::INTEGER, 7) INTO v_free_trial_days
     FROM system_settings WHERE key = 'free_trial_days';
     
-    SELECT COALESCE(value::INTEGER, 3) INTO v_free_trial_usage_limit
+    SELECT COALESCE(value::INTEGER, 5) INTO v_free_trial_usage_limit
     FROM system_settings WHERE key = 'free_trial_usage_limit';
 
     -- ユーザープロファイル取得

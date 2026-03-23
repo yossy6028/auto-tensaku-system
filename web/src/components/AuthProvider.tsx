@@ -119,7 +119,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         // デフォルト値を設定
         setSystemSettings({
           freeTrialDays: 7,
-          freeTrialUsageLimit: 3,
+          freeTrialUsageLimit: 5,
           freeAccessEnabled: false,
           freeAccessUntil: null,
           freeAccessMessage: '',
@@ -130,7 +130,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       if (data) {
       const settings: SystemSettings = {
         freeTrialDays: 7,
-        freeTrialUsageLimit: 3,
+        freeTrialUsageLimit: 5,
         freeAccessEnabled: false,
         freeAccessUntil: null,
         freeAccessMessage: '',
@@ -143,7 +143,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
             settings.freeTrialDays = parseInt(valueString, 10) || 7;
             break;
           case 'free_trial_usage_limit':
-            settings.freeTrialUsageLimit = parseInt(valueString, 10) || 3;
+            settings.freeTrialUsageLimit = parseInt(valueString, 10) || 5;
             break;
           case 'free_access_enabled':
             settings.freeAccessEnabled = String(item.value) === 'true';
@@ -164,7 +164,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       // デフォルト値を設定
       setSystemSettings({
         freeTrialDays: 7,
-        freeTrialUsageLimit: 3,
+        freeTrialUsageLimit: 5,
         freeAccessEnabled: false,
         freeAccessUntil: null,
         freeAccessMessage: '',

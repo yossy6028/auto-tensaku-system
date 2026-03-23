@@ -65,7 +65,7 @@ export function TrialEndedModal() {
               <p className="text-sm text-slate-600 text-center">
                 無料体験期間（{systemSettings?.freeTrialDays || 7}日間）での利用回数：
                 <span className="font-bold text-slate-800 ml-1">
-                  {systemSettings?.freeTrialUsageLimit || 3}回
+                  {systemSettings?.freeTrialUsageLimit || 5}回
                 </span>
               </p>
             </div>

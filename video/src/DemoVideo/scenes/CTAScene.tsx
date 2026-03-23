@@ -22,7 +22,7 @@ export const CTAScene: React.FC = () => {
           今すぐ無料で添削を体験
         </p>
         <p className="mt-4 text-xl text-white/70">
-          初回3回無料 / クレジットカード不要
+          初回5回無料 / クレジットカード不要
         </p>
       </div>
 

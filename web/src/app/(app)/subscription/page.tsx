@@ -349,7 +349,7 @@ export default function SubscriptionPage() {
                         ? 'プランを購入して引き続きご利用ください'
                         : usageInfo?.remainingCount === 0
                           ? 'プランを購入すると引き続き採点できます'
-                          : `最大${systemSettings?.freeTrialUsageLimit || 3}回まで無料でお試しいただけます`}
+                          : `最大${systemSettings?.freeTrialUsageLimit || 5}回まで無料でお試しいただけます`}
                     </p>
                   </div>
                 </div>
@@ -379,7 +379,7 @@ export default function SubscriptionPage() {
                         <span className="text-3xl font-black text-slate-800">
                           {usageInfo?.usageCount ?? ((systemSettings?.freeTrialUsageLimit || 3) - (freeAccessInfo?.trialUsageRemaining ?? 0))}
                         </span>
-                        <span className="text-slate-500 ml-2">/ {systemSettings?.freeTrialUsageLimit || 3}回使用</span>
+                        <span className="text-slate-500 ml-2">/ {systemSettings?.freeTrialUsageLimit || 5}回使用</span>
                       </div>
                       <span className={`font-bold ${
                         usageInfo?.remainingCount === 0 || freeAccessInfo?.freeAccessType === 'expired'

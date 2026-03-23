@@ -23,7 +23,7 @@
 | # | 対象 | 現状の記述 | コードの実装値 | 修正内容 | 優先度 |
 |---|------|-----------|--------------|---------|--------|
 | 1 | Q8 ファイルサイズ上限 | 「20MBが上限」 | MAX_FILE_SIZE=50MB/file（クライアント側）、ただし合計リクエストサイズ MAX_TOTAL_SIZE_BYTES=4.2MB。画像は自動圧縮（0.6MB〜0.85MB/枚に） | 「1ファイルあたり50MBまでアップロードできますが、アップロード後に自動で圧縮・最適化されます。画像の枚数によらず快適に利用できるよう、システムが自動調整します。高画質な写真でもそのままアップロードしてください。」のように修正 | **High** |
-| 2 | Q15 無料体験 | 「7日間・5回まで」 | system_settingsのデフォルト: free_trial_days=7, free_trial_usage_limit=3（admin/page.tsx、SQL migration両方で確認）。料金ページFAQでは「3回分の無料採点」 | 「7日間・**3回まで**無料でお試しいただけます」に修正 | **High** |
+| 2 | Q15 無料体験 | 「7日間・5回まで」 | system_settingsのデフォルト: free_trial_days=7, free_trial_usage_limit=5（admin/page.tsx、SQL migration両方で確認）。料金ページFAQでは「5回分の無料採点」 | 「**5回まで**無料でお試しいただけます」に修正（対応済み） | **High** |
 | 3 | Q21 エラー対策表 | 「20MB以下に圧縮」 | MAX_FILE_SIZE=50MB | 「50MB以下のファイルをお使いください（画像は自動で圧縮されます）」に修正 | **High** |
 | 4 | Q28 採点履歴 | 「過去の採点結果は『履歴』ページで確認できます」 | 履歴ページ（/history）は存在しない。app/配下のルートは account, admin, api, auth, pricing, privacy, subscription, usage のみ | 履歴ページへの言及を削除。「現在のセッション中は採点結果を確認できます。ページを閉じると結果は失われますので、必要に応じてスクリーンショットの保存をおすすめします。問題保存機能を使えば、問題設定を保存して次回再利用できます。」のように修正 | **High** |
 | 5 | Q28 保存期間 | 「契約期間中および解約後90日間」 | サーバー側に履歴保存機能は確認できない | 保存期間の記述を削除 | **High** |
@@ -55,7 +55,7 @@
 |---|--------------|-----------|--------------|---------|--------|
 | 1 | 4. 一括採点 | 「最大5名分」 | MAX_STUDENTS=10 | 「最大**10名分**」に修正 | **High** |
 | 2 | 4. 結果のエクスポート | 「CSV形式（Excel等で開けます）・PDF形式（印刷用）」 | エクスポート機能のコード実装が見当たらない | セクションごと削除するか、「※ エクスポート機能は今後対応予定です」に変更 | **High** |
-| 3 | 5. 無料トライアル | 「期間: 7日間 / 採点回数: 5回まで」 | free_trial_days=7, free_trial_usage_limit=3 | 「採点回数: **3回まで**」に修正 | **High** |
+| 3 | 5. 無料トライアル | 「期間: 7日間 / 採点回数: 5回まで」 | free_trial_days=7, free_trial_usage_limit=5 | 「採点回数: **5回まで**」（対応済み） | **High** |
 | 4 | 7. ファイルサイズ | 「最大: 20MB/ファイル」 | MAX_FILE_SIZE=50MB/file、合計MAX_TOTAL_SIZE_BYTES=4.2MB（圧縮後） | 「1ファイルあたり50MBまでアップロード可能。画像は自動圧縮されるため、スマホで撮影した大きな画像もそのままお使いいただけます。」に修正 | **High** |
 
 ### 追加が必要なセクション
@@ -127,13 +127,13 @@
 
 ### High（早急に対応）
 - [FAQ] Q8: ファイルサイズ上限 20MB → 50MB + 自動圧縮の説明
-- [FAQ] Q15: 無料体験 5回 → 3回
+- [FAQ] Q15: 無料体験 5回（対応済み）
 - [FAQ] Q21: エラー対策表のファイルサイズ修正
 - [FAQ] Q28: 履歴ページの記述を修正（存在しない機能）
 - [FAQ] 新規: 一括採点の人数（10名）、問題保存、再採点機能
 - [Guide] 一括採点の人数 5名 → 10名
 - [Guide] エクスポート機能の記述を削除/修正
-- [Guide] 無料トライアル 5回 → 3回
+- [Guide] 無料トライアル 5回（対応済み）
 - [Guide] ファイルサイズの説明修正
 - [Guide] 再採点機能の使い方セクション追加
 - [Guide] 問題保存機能のセクション追加
@@ -163,8 +163,8 @@
 | 画像圧縮デフォルト | `web/src/lib/utils/imageCompressor.ts:41` | maxSizeMB: 0.6 |
 | 画像圧縮高品質 | `web/src/lib/utils/imageCompressor.ts:51` | maxSizeMB: 0.85 |
 | free_trial_days（デフォルト） | `web/src/app/admin/page.tsx:47`, `supabase_migration.sql:206` | 7 |
-| free_trial_usage_limit（デフォルト） | `web/src/app/admin/page.tsx:48`, `supabase_migration.sql:209` | 3 |
-| 料金ページFAQ | `web/src/app/pricing/page.tsx:405-406` | 「3回分の無料採点」 |
+| free_trial_usage_limit（デフォルト） | `web/src/app/admin/page.tsx:48`, `supabase_migration.sql:209` | 5 |
+| 料金ページFAQ | `web/src/app/pricing/page.tsx:405-406` | 「5回分の無料採点」 |
 | 再採点回数 | `web/src/app/api/grade/route.ts:102` | 2回（REGRADE_MAX_FREE_TIMES_PER_LABEL） |
 | カメラ撮影対応 | `web/src/app/page.tsx:4259,4261` | `accept="image/*,.pdf"` + `capture="environment"` |
 | エクスポート機能 | コード検索結果 | CSV/PDFエクスポートの実装なし |

@@ -1,26 +1,18 @@
 -- =====================================================
--- マイグレーション: 無料体験の時間制限撤廃
--- 目的: 時間ベースの判定を削除し、回数（5回）のみで無料体験を管理
--- 背景: free_trial_started_at がアカウント作成時にセットされ、
---        7日経過すると usage_count=0 でも期限切れ判定される問題を解消
--- 適用: Supabase SQL Editor で実行
+-- マイグレーション: 無料添削回数を3回→5回に変更
+-- 適用日: 2026-03-23
+-- 目的: 無料体験の利用回数上限を5回に統一
 -- =====================================================
 
--- =====================================================
--- 1. check_free_access: 時間判定を削除、回数のみで判定
--- =====================================================
-CREATE OR REPLACE FUNCTION check_free_access(p_user_id UUID)
-RETURNS TABLE (
-    has_free_access BOOLEAN,
-    free_access_type TEXT,
-    message TEXT,
-    trial_days_remaining INTEGER,
-    trial_usage_remaining INTEGER,
-    free_access_until TIMESTAMPTZ
-)
-LANGUAGE plpgsql
-SECURITY DEFINER
-AS $$
+-- 1. system_settings テーブルの値を更新（既にUPDATE済みだが冪等性のため含む）
+UPDATE system_settings SET value = '5' WHERE key = 'free_trial_usage_limit';
+
+-- 2. check_free_access 関数を再作成（COALESCE フォールバック値を5に変更）
+CREATE OR REPLACE FUNCTION public.check_free_access(p_user_id uuid)
+ RETURNS TABLE(has_free_access boolean, free_access_type text, message text, trial_days_remaining integer, trial_usage_remaining integer, free_access_until timestamp with time zone)
+ LANGUAGE plpgsql
+ SECURITY DEFINER
+AS $function$
 DECLARE
     v_profile user_profiles%ROWTYPE;
     v_free_access_enabled BOOLEAN;
@@ -73,23 +65,14 @@ BEGIN
     -- 無料体験終了（回数上限到達）
     RETURN QUERY SELECT false, 'expired'::TEXT, '無料体験終了'::TEXT, NULL::INTEGER, 0::INTEGER, NULL::TIMESTAMPTZ;
 END;
-$$;
+$function$;
 
--- =====================================================
--- 2. can_use_service: フォールバック部分の時間判定を削除
--- =====================================================
-CREATE OR REPLACE FUNCTION public.can_use_service(p_user_id UUID)
-RETURNS TABLE (
-    can_use BOOLEAN,
-    message TEXT,
-    usage_count INTEGER,
-    usage_limit INTEGER,
-    remaining_count INTEGER,
-    plan_name TEXT
-)
-LANGUAGE plpgsql
-SECURITY DEFINER
-AS $$
+-- 3. can_use_service 関数を再作成（COALESCE フォールバック値を5に変更）
+CREATE OR REPLACE FUNCTION public.can_use_service(p_user_id uuid)
+ RETURNS TABLE(can_use boolean, message text, usage_count integer, usage_limit integer, remaining_count integer, plan_name text)
+ LANGUAGE plpgsql
+ SECURITY DEFINER
+AS $function$
 DECLARE
     v_subscription RECORD;
     v_is_admin BOOLEAN := FALSE;
@@ -179,7 +162,7 @@ BEGIN
     -- 4. 無料体験チェック（フォールバック・回数のみ）
     SELECT * INTO v_profile FROM user_profiles WHERE id = p_user_id;
 
-    IF FOUND AND v_profile.free_trial_started_at IS NOT NULL THEN
+    IF v_profile IS NOT NULL AND v_profile.free_trial_started_at IS NOT NULL THEN
         SELECT COALESCE(value::INTEGER, 5) INTO v_free_trial_usage_limit FROM system_settings WHERE key = 'free_trial_usage_limit';
 
         -- カスタム設定を優先
@@ -217,27 +200,14 @@ BEGIN
         0::INTEGER,
         NULL::TEXT;
 END;
-$$;
+$function$;
 
--- =====================================================
--- 3. reserve_usage: 時間判定を削除、回数のみで枠確保
--- =====================================================
-CREATE OR REPLACE FUNCTION public.reserve_usage(
-    p_user_id UUID,
-    p_count INTEGER DEFAULT 1
-)
-RETURNS TABLE (
-    success BOOLEAN,
-    message TEXT,
-    subscription_id UUID,
-    usage_count INTEGER,
-    usage_limit INTEGER,
-    remaining_count INTEGER,
-    plan_name TEXT
-)
-LANGUAGE plpgsql
-SECURITY DEFINER
-AS $$
+-- 4. reserve_usage 関数を再作成（COALESCE フォールバック値を5に変更）
+CREATE OR REPLACE FUNCTION public.reserve_usage(p_user_id uuid, p_count integer DEFAULT 1)
+ RETURNS TABLE(success boolean, message text, subscription_id uuid, usage_count integer, usage_limit integer, remaining_count integer, plan_name text)
+ LANGUAGE plpgsql
+ SECURITY DEFINER
+AS $function$
 DECLARE
     v_subscription RECORD;
     v_is_admin BOOLEAN := FALSE;
@@ -367,23 +337,4 @@ BEGIN
         FALSE, '利用可能なプランがありません。プランを購入してください。'::TEXT,
         NULL::UUID, NULL::INTEGER, NULL::INTEGER, NULL::INTEGER, NULL::TEXT;
 END;
-$$;
-
--- =====================================================
--- 完了メッセージ
--- =====================================================
-DO $$
-BEGIN
-    RAISE NOTICE '=====================================================';
-    RAISE NOTICE '時間制限撤廃マイグレーションが完了しました';
-    RAISE NOTICE '=====================================================';
-    RAISE NOTICE '変更内容:';
-    RAISE NOTICE '1. check_free_access: 時間判定を削除、回数のみで判定';
-    RAISE NOTICE '2. can_use_service: フォールバック部分の時間判定を削除';
-    RAISE NOTICE '3. reserve_usage: 時間判定を削除、回数のみで枠確保';
-    RAISE NOTICE '';
-    RAISE NOTICE '後方互換性:';
-    RAISE NOTICE '- free_trial_started_at カラム: 監査用に残存';
-    RAISE NOTICE '- custom_trial_days カラム: 無効だが残存（将来削除可能）';
-    RAISE NOTICE '- system_settings の free_trial_days: DB上に残存（参照されない）';
-END $$;
+$function$;

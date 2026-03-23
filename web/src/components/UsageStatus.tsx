@@ -43,7 +43,7 @@ export function UsageStatus({ compact = false, className = '' }: UsageStatusProp
   // 無料体験中のユーザー
   const isTrial = usageInfo.accessType === 'trial';
   const isTrialExpired = freeAccessInfo?.freeAccessType === 'expired';
-  const trialUsageLimit = systemSettings?.freeTrialUsageLimit || 3;
+  const trialUsageLimit = systemSettings?.freeTrialUsageLimit || 5;
 
   // 管理者アカウントの場合はsubscriptionチェックをスキップ
   // 無料体験中のユーザーもsubscriptionチェックをスキップ

@@ -102,7 +102,7 @@ function TermsContent() {
         <h3 className="text-xl font-bold text-slate-800 mb-4 border-b border-slate-200 pb-2">第6条（料金・支払い）</h3>
         <div className="text-slate-700 leading-relaxed whitespace-pre-wrap text-sm">
           {`1. 本サービスの有料プランの利用料金は、月額サブスクリプション方式とし、料金の詳細は本サービスのWebサイトに掲載するものとします。
-2. 初回登録のユーザーには、無料トライアルとして3回分の無料採点を提供します。
+2. 初回登録のユーザーには、無料トライアルとして5回分の無料採点を提供します。
 3. 支払方法は、クレジットカード（Visa、Mastercard、JCB、American Express）によるものとします。
 4. 利用料金はすべて税込価格で表示されます。`}
         </div>
@@ -599,7 +599,7 @@ function TokushohoContent() {
             {
               term: '特別な販売条件',
               desc: `・18歳未満の利用には保護者の同意が必要
-・無料トライアル（初回3回分の無料採点）あり`,
+・無料トライアル（初回5回分の無料採点）あり`,
             },
           ].map((item, i) => (
             <div key={i} className="py-4 sm:grid sm:grid-cols-3 sm:gap-4">

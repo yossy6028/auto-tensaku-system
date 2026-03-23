@@ -52,7 +52,7 @@ BEGIN
     SELECT (value = 'true') INTO v_free_access_enabled FROM system_settings WHERE key = 'free_access_enabled';
     SELECT CASE WHEN value = 'null' THEN NULL ELSE value::TIMESTAMPTZ END INTO v_free_access_until FROM system_settings WHERE key = 'free_access_until';
     SELECT COALESCE(value::INTEGER, 7) INTO v_free_trial_days FROM system_settings WHERE key = 'free_trial_days';
-    SELECT COALESCE(value::INTEGER, 3) INTO v_free_trial_usage_limit FROM system_settings WHERE key = 'free_trial_usage_limit';
+    SELECT COALESCE(value::INTEGER, 5) INTO v_free_trial_usage_limit FROM system_settings WHERE key = 'free_trial_usage_limit';
 
     -- 期間限定無料開放チェック
     IF v_free_access_enabled AND (v_free_access_until IS NULL OR v_free_access_until > NOW()) THEN
@@ -218,7 +218,7 @@ BEGIN
 
     IF FOUND AND v_profile.free_trial_started_at IS NOT NULL THEN
         SELECT COALESCE(value::INTEGER, 7) INTO v_free_trial_days FROM system_settings WHERE key = 'free_trial_days';
-        SELECT COALESCE(value::INTEGER, 3) INTO v_free_trial_usage_limit FROM system_settings WHERE key = 'free_trial_usage_limit';
+        SELECT COALESCE(value::INTEGER, 5) INTO v_free_trial_usage_limit FROM system_settings WHERE key = 'free_trial_usage_limit';
 
         -- カスタム設定を優先
         IF v_profile.custom_trial_days IS NOT NULL THEN

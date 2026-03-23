@@ -107,7 +107,7 @@ export function HeroSection() {
               href="/grading"
               className="inline-flex items-center justify-center rounded-full bg-es-teal px-8 py-4 text-lg font-bold text-white shadow-lg shadow-es-teal/25 transition-all hover:brightness-110 hover:shadow-xl hover:-translate-y-0.5"
             >
-              無料で3回試す
+              無料で5回試す
             </Link>
           </motion.div>
         </div>

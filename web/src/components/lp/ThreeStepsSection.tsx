@@ -70,7 +70,7 @@ export function ThreeStepsSection() {
             始め方は<span className="text-es-teal">かんたん3ステップ</span>
           </h2>
           <p className="mt-4 text-lg text-slate-600">
-            初回3回無料。今すぐお試しいただけます。
+            初回5回無料。今すぐお試しいただけます。
           </p>
         </motion.div>
 
@@ -123,7 +123,7 @@ export function ThreeStepsSection() {
             href="/grading"
             className="inline-flex items-center rounded-full bg-es-teal px-8 py-4 text-lg font-semibold text-white shadow-lg shadow-es-teal/25 transition-transform hover:scale-105"
           >
-            無料で3回試す
+            無料で5回試す
           </Link>
         </motion.div>
       </div>

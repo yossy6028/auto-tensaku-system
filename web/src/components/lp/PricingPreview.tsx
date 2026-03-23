@@ -144,7 +144,7 @@ export function PricingPreview() {
                       : 'border border-white/20 text-white hover:bg-white/10'
                     }`}
                 >
-                  無料で3回試す
+                  無料で5回試す
                 </Link>
               </div>
             </motion.div>

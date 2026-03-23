@@ -824,7 +824,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
     if (emailBlocked) {
       // プロファイルは存在するが、未確認ユーザーかもしれない。
-      // resend を試み、成功すれば確認メールを再送。失敗なら本当に重複。
+      // resend を試み、成功すれば確認メール再送。失敗なら確認済みユーザー。
       try {
         const { error: resendError } = await supabase.auth.resend({
           type: 'signup',
@@ -836,13 +836,10 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
           return { error: null };
         }
       } catch {
-        // resend 自体の通信エラー — フォールスルーして resetPasswordForEmail へ
+        // resend 自体の通信エラー — フォールスルー
       }
-      // 確認済みユーザー → パスワードリセットメールを送信（ユーザー列挙防止 + 有用な案内）
-      await supabase.auth.resetPasswordForEmail(email, {
-        redirectTo: `${SITE_URL}/auth/reset-password`,
-      }).catch(() => {});
-      return { error: null };
+      // 確認済みユーザー → 登録済みであることを伝える
+      return { error: new Error('このメールアドレスは既に登録済みです。ログインしてください。パスワードをお忘れの場合は「パスワードを忘れた場合」からリセットできます。') };
     }
 
     const { data, error } = await supabase.auth.signUp({
@@ -861,18 +858,12 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
           options: { emailRedirectTo: `${SITE_URL}/auth/callback` },
         });
         if (resendError) {
-          // resend がエラー → 確認済みユーザー → パスワードリセットメールを送信
-          await supabase.auth.resetPasswordForEmail(email, {
-            redirectTo: `${SITE_URL}/auth/reset-password`,
-          }).catch(() => {});
-          return { error: null };
+          // resend がエラー → 確認済みユーザー → 登録済みであることを伝える
+          return { error: new Error('このメールアドレスは既に登録済みです。ログインしてください。パスワードをお忘れの場合は「パスワードを忘れた場合」からリセットできます。') };
         }
       } catch {
-        // 通信エラー — パスワードリセットメールを試みて成功扱い
-        await supabase.auth.resetPasswordForEmail(email, {
-          redirectTo: `${SITE_URL}/auth/reset-password`,
-        }).catch(() => {});
-        return { error: null };
+        // 通信エラー
+        return { error: new Error('このメールアドレスは既に登録済みです。ログインしてください。') };
       }
     }
 

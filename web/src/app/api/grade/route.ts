@@ -692,7 +692,16 @@ export async function POST(req: NextRequest) {
         }
 
         // フォームデータ解析
-        const formData = await req.formData();
+        let formData: FormData;
+        try {
+            formData = await req.formData();
+        } catch (formDataError) {
+            logger.error('Failed to parse formData:', formDataError);
+            return NextResponse.json(
+                { status: 'error', message: 'リクエストデータの解析に失敗しました。ファイルサイズが大きすぎるか、リクエストの形式が不正です。' },
+                { status: 400 }
+            );
+        }
         const deviceFingerprintRaw = formData.get('deviceFingerprint');
 
         // デバイス制限チェック（デバイスフィンガープリントが提供されている場合）
@@ -825,7 +834,7 @@ export async function POST(req: NextRequest) {
 
         if (!Array.isArray(targetLabels) || targetLabels.length === 0) {
             return NextResponse.json(
-                { status: 'error', message: 'Invalid target labels' },
+                { status: 'error', message: '問題番号の形式が不正です。' },
                 { status: 400 }
             );
         }
@@ -994,16 +1003,16 @@ export async function POST(req: NextRequest) {
                         }
 
                         // 不完全な採点結果のチェック（課金対象外）
-                        const resultObj = result as { incomplete_grading?: boolean; missing_fields?: string[] } | undefined;
-                        if (resultObj?.incomplete_grading) {
-                            logger.warn(`[API] Incomplete grading for ${label}: missing ${resultObj.missing_fields?.join(', ')}`);
+                        const resultObj = result as { incomplete_grading?: boolean; missing_fields?: string[]; status?: string; grading_result?: unknown; message?: string } | undefined;
+                        if (resultObj?.incomplete_grading || (resultObj?.status === 'error' && !resultObj?.grading_result)) {
+                            logger.warn(`[API] Failed/Incomplete grading for ${label}: ${resultObj?.status === 'error' ? resultObj.message : `missing ${resultObj?.missing_fields?.join(', ')}`}`);
                             return {
                                 label,
                                 result,
                                 strictness,
                                 incompleteGrading: true,
-                                missingFields: resultObj.missing_fields,
-                                error: resultObj.missing_fields ? `採点結果が不完全: ${resultObj.missing_fields.join(', ')}` : '採点結果が不完全です'
+                                missingFields: resultObj?.missing_fields,
+                                error: resultObj?.missing_fields ? `採点結果が不完全: ${resultObj.missing_fields.join(', ')}` : (resultObj as any)?.message || '採点結果が不完全です'
                             };
                         } else {
                             return { label, result, strictness };
@@ -1039,11 +1048,13 @@ export async function POST(req: NextRequest) {
 
                 // 失敗分の枠を解放（予約した数 - 実際に成功した有料採点数）
                 const releaseCount = reservedCount - successfulPaidCount;
+                let usageReleaseWarning = false;
                 if (releaseCount > 0) {
                     const { error: releaseError } = await supabaseRpc
                         .rpc('release_usage', { p_user_id: user.id, p_count: releaseCount });
                     if (releaseError) {
                         logger.error('Failed to release unused usage slots:', releaseError);
+                        usageReleaseWarning = true;
                         if (supabaseAdmin) {
                             try {
                                 const fallbackRelease = await releaseUsageWithAdminFallback(supabaseAdmin, user.id, releaseCount);
@@ -1052,6 +1063,7 @@ export async function POST(req: NextRequest) {
                                         userId: user.id,
                                         releaseCount,
                                     });
+                                    usageReleaseWarning = false;
                                 }
                             } catch (fallbackError) {
                                 logger.error('[API] Usage release fallback failed:', fallbackError);
@@ -1139,6 +1151,7 @@ export async function POST(req: NextRequest) {
                     status: 'success',
                     results,
                     usageInfo,
+                    usageReleaseWarning: usageReleaseWarning || undefined,
                     warnings: imageCountWarning ? [imageCountWarning] : undefined
                 };
             });

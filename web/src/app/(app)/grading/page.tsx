@@ -68,7 +68,7 @@ type OcrResponseData = {
 
 type GradingResponseItem = {
   label: string;
-  result?: { grading_result?: GradingResultPayload };
+  result?: { grading_result?: GradingResultPayload; message?: string; user_message?: string };
   error?: string;
   status?: string;
   strictness?: GradingStrictness;
@@ -386,15 +386,17 @@ export default function Home() {
         return { success: true, results: data.results };
       }
 
-      return { success: false, error: 'レスポンスの形式が不正です' };
+      return { success: false, error: '採点結果を正しく取得できませんでした。再度お試しください。' };
     } catch (err) {
-      console.error('[BatchGrade] Error grading student:', student.name, err);
-      return { success: false, error: err instanceof Error ? err.message : '通信エラー' };
+      console.error('[BatchGrade] Error grading student:', student.name, err instanceof Error ? err.message : err);
+      return { success: false, error: '採点処理中にエラーが発生しました。再度お試しください。' };
     }
   };
 
   // 一括OCR確認フロー: OCRを実行（採点前）
   const startBatchOcr = async () => {
+    if (!acquireRequestLock()) return;
+    try {
     if (!validateBatchStudents()) return;
     if (selectedProblems.length === 0) {
       setError('採点する問題を選択してください');
@@ -516,15 +518,17 @@ export default function Home() {
               console.log(`[BatchOCR] Layout for ${student.name}/${label}:`, data.ocrResult.layout);
             }
           } else {
-            // OCRエラーの場合は空文字で初期化
-            newOcrResults[student.id][label] = { text: '', charCount: 0 };
-            newConfirmedTexts[student.id][label] = '';
+            // OCRエラーの場合はエラーメッセージを表示
+            const ocrErrorMsg = `[読み取りエラー] ${data.message || '文字の読み取りに失敗しました。画像を確認してください。'}`;
+            newOcrResults[student.id][label] = { text: ocrErrorMsg, charCount: 0 };
+            newConfirmedTexts[student.id][label] = ocrErrorMsg;
             console.error(`[BatchOCR] Error for student ${student.name}, label ${label}:`, data.message);
           }
         } catch (err) {
           console.error(`[BatchOCR] Error for student ${student.name}, label ${label}:`, err);
-          newOcrResults[student.id][label] = { text: '', charCount: 0 };
-          newConfirmedTexts[student.id][label] = '';
+          const catchErrorMsg = '[読み取りエラー] 通信エラーが発生しました。ネットワーク接続を確認してください。';
+          newOcrResults[student.id][label] = { text: catchErrorMsg, charCount: 0 };
+          newConfirmedTexts[student.id][label] = catchErrorMsg;
         }
       }
     }
@@ -534,6 +538,9 @@ export default function Home() {
     setBatchLayouts(newLayouts);  // layout情報を保存
     setBatchOcrStep('confirm');
     setCurrentBatchOcrIndex(0);
+    } finally {
+      releaseRequestLock();
+    }
   };
 
   // 一括OCR確認フロー: 確認済みテキストで採点を実行
@@ -671,10 +678,10 @@ export default function Home() {
         return { success: true, results: data.results };
       }
 
-      return { success: false, error: 'レスポンスの形式が不正です' };
+      return { success: false, error: '採点結果を正しく取得できませんでした。再度お試しください。' };
     } catch (err) {
-      console.error('[BatchGrade] Error grading student with confirmed:', student.name, err);
-      return { success: false, error: err instanceof Error ? err.message : '通信エラー' };
+      console.error('[BatchGrade] Error grading student with confirmed:', student.name, err instanceof Error ? err.message : err);
+      return { success: false, error: '採点処理中にエラーが発生しました。再度お試しください。' };
     }
   };
 
@@ -719,7 +726,7 @@ export default function Home() {
           if (!result.result?.grading_result) continue;
 
           const gr = result.result.grading_result;
-          const score = gr.score <= 10 ? Math.round(gr.score * 10) : Math.round(gr.score);
+          const score = Math.max(0, Math.min(100, Math.round(gr.score)));
           const today = new Date().toLocaleDateString('ja-JP', {
             year: 'numeric',
             month: 'long',
@@ -728,6 +735,15 @@ export default function Home() {
           const deductions = gr.deduction_details || [];
           const maxPoints = problemPoints[result.label];
           const earnedPoints = maxPoints ? Math.round((score / 100) * maxPoints) : null;
+
+          // XSS対策: ユーザー入力をエスケープ
+          const safeStudentName = escapeHtml(student.name || '');
+          const safeTeacherName = teacherName ? escapeHtml(teacherName) : '';
+          const safeLabel = escapeHtml(result.label || '');
+          const safeFeedbackGoodPoint = escapeHtml(gr.feedback_content?.good_point || '');
+          const safeFeedbackImprovement = escapeHtml(gr.feedback_content?.improvement_advice || '');
+          const safeFeedbackRewrite = escapeHtml(gr.feedback_content?.rewrite_example || '');
+          const safeRecognizedText = escapeHtml(gr.recognized_text || gr.recognized_text_full || '');
 
           // HTMLレポートを作成
           container.innerHTML = `
@@ -744,7 +760,7 @@ export default function Home() {
               <!-- 問題番号 -->
               <div style="margin-bottom: 24px; padding-bottom: 16px; border-bottom: 3px solid #6366f1;">
                 <span style="display: inline-block; background: #4f46e5; color: white; padding: 12px 24px; border-radius: 8px; font-size: 20px; font-weight: bold;">
-                  ${result.label}
+                  ${safeLabel}
                 </span>
               </div>
 
@@ -752,11 +768,11 @@ export default function Home() {
               <div style="display: flex; justify-content: space-between; align-items: flex-end; border-bottom: 2px solid #1e293b; padding-bottom: 16px; margin-bottom: 24px;">
                 <div>
                   <h1 style="font-size: 24px; font-weight: bold; margin: 0 0 8px 0;">採点レポート</h1>
-                  <p style="font-size: 14px; color: #475569; margin: 0;">生徒名: ${student.name}</p>
+                  <p style="font-size: 14px; color: #475569; margin: 0;">生徒名: ${safeStudentName}</p>
                 </div>
                 <div style="text-align: right;">
                   <p style="font-size: 12px; color: #64748b; margin: 0;">実施日: ${today}</p>
-                  ${teacherName ? `<p style="font-size: 12px; color: #475569; margin: 0;">添削担当: ${teacherName}</p>` : ''}
+                  ${safeTeacherName ? `<p style="font-size: 12px; color: #475569; margin: 0;">添削担当: ${safeTeacherName}</p>` : ''}
                 </div>
               </div>
 
@@ -771,28 +787,28 @@ export default function Home() {
                   ${earnedPoints !== null ? `<p style="margin-top: 8px; font-size: 14px; color: #475569; font-weight: 600;">得点: ${earnedPoints} / ${maxPoints} 点</p>` : ''}
                   ${deductions.length > 0 ? `
                     <ul style="margin-top: 12px; font-size: 12px; color: #475569; list-style: none; padding: 0; text-align: left;">
-                      ${deductions.map((d: { reason?: string; deduction_percentage?: number }) => `<li style="margin-bottom: 4px;">・${d.reason} で -${d.deduction_percentage}%</li>`).join('')}
+                      ${deductions.map((d: { reason?: string; deduction_percentage?: number }) => `<li style="margin-bottom: 4px;">・${escapeHtml(d.reason || '')} で -${d.deduction_percentage}%</li>`).join('')}
                     </ul>
                   ` : ''}
                 </div>
                 <div style="width: 67%;">
                   <div style="background: #f0fdf4; border-radius: 12px; padding: 16px; border: 1px solid #bbf7d0; margin-bottom: 16px;">
                     <h3 style="font-weight: bold; color: #166534; margin: 0 0 8px 0; font-size: 14px;">👍 良かった点</h3>
-                    <p style="font-size: 13px; color: #475569; margin: 0;">${gr.feedback_content?.good_point || ''}</p>
+                    <p style="font-size: 13px; color: #475569; margin: 0;">${safeFeedbackGoodPoint}</p>
                   </div>
                   <div style="background: #eef2ff; border-radius: 12px; padding: 16px; border: 1px solid #c7d2fe;">
                     <h3 style="font-weight: bold; color: #3730a3; margin: 0 0 8px 0; font-size: 14px;">💡 改善のアドバイス</h3>
-                    <p style="font-size: 13px; color: #475569; margin: 0;">${gr.feedback_content?.improvement_advice || ''}</p>
+                    <p style="font-size: 13px; color: #475569; margin: 0;">${safeFeedbackImprovement}</p>
                   </div>
                 </div>
               </div>
 
               <!-- AI読み取り結果 -->
-              ${gr.recognized_text || gr.recognized_text_full ? `
+              ${safeRecognizedText ? `
               <div style="margin-bottom: 24px;">
                 <h2 style="font-size: 16px; font-weight: bold; border-left: 4px solid #60a5fa; padding-left: 12px; margin: 0 0 16px 0;">AI読み取り結果（確認用）</h2>
                 <div style="background: #eff6ff; border-radius: 12px; padding: 16px; border: 1px solid #bfdbfe;">
-                  <p style="font-size: 13px; color: #475569; margin: 0; white-space: pre-wrap; font-family: monospace;">${gr.recognized_text || gr.recognized_text_full}</p>
+                  <p style="font-size: 13px; color: #475569; margin: 0; white-space: pre-wrap; font-family: monospace;">${safeRecognizedText}</p>
                 </div>
               </div>
               ` : ''}
@@ -811,7 +827,7 @@ export default function Home() {
                   <tbody>
                     ${deductions.map((d: { reason?: string; deduction_percentage?: number }) => `
                       <tr style="border-bottom: 1px solid #f1f5f9;">
-                        <td style="padding: 12px; color: #475569;">${d.reason}</td>
+                        <td style="padding: 12px; color: #475569;">${escapeHtml(d.reason || '')}</td>
                         <td style="padding: 12px; color: #ef4444; font-weight: bold; text-align: right;">-${d.deduction_percentage}%</td>
                       </tr>
                     `).join('')}
@@ -824,7 +840,7 @@ export default function Home() {
               <div style="margin-bottom: 24px;">
                 <h2 style="font-size: 16px; font-weight: bold; border-left: 4px solid #facc15; padding-left: 12px; margin: 0 0 16px 0;">満点の書き直し例</h2>
                 <div style="background: #fefce8; border-radius: 12px; padding: 24px; border: 1px solid #fef08a;">
-                  <p style="font-size: 14px; color: #1e293b; margin: 0; line-height: 1.8;">${gr.feedback_content?.rewrite_example || ''}</p>
+                  <p style="font-size: 14px; color: #1e293b; margin: 0; line-height: 1.8;">${safeFeedbackRewrite}</p>
                 </div>
               </div>
             </div>
@@ -919,8 +935,8 @@ export default function Home() {
           // 更新されたgrading_resultを作成
           const updatedGradingResult = {
             ...currentGradingResult,
-            // スコアは0-100形式で保存（normalizeScoreが <= 10 を10倍するので、ここでは10で割る）
-            score: updates.score !== undefined ? updates.score / 10 : currentGradingResult.score,
+            // スコアは0-100形式でそのまま保存
+            score: updates.score !== undefined ? updates.score : currentGradingResult.score,
             recognized_text: updates.recognized_text ?? currentGradingResult.recognized_text,
             feedback_content: {
               ...currentFeedback,
@@ -1147,8 +1163,7 @@ export default function Home() {
 
     const normalizeScore = (score: number): number => {
       if (typeof score !== 'number' || Number.isNaN(score)) return 0;
-      if (score <= 10) return Math.min(100, Math.round(score * 10));
-      return Math.min(100, Math.round(score));
+      return Math.max(0, Math.min(100, Math.round(score)));
     };
 
     const score = normalizeScore(gradingResult.score);
@@ -1843,6 +1858,9 @@ export default function Home() {
           return Array.from(byLabel.values());
         });
         if (Array.isArray(data.results)) ingestRegradeInfo(data.results);
+        if (data.usageReleaseWarning) {
+          setError('利用回数の返却に問題が発生しました。お問い合わせください。');
+        }
         refreshUsageInfo().catch((err) => {
           console.warn('Failed to refresh usage info:', err);
         });
@@ -2387,7 +2405,7 @@ export default function Home() {
           } else if (res.status === 504) {
             fallbackMessage = 'OCRサーバーがタイムアウトしました。時間をおいて再試行してください。';
           } else {
-            fallbackMessage = `OCRサーバーの応答が不正です（status ${res.status}）。`;
+            fallbackMessage = 'サーバーからの応答を処理できませんでした。時間をおいて再度お試しください。';
           }
           setError(fallbackMessage);
           setOcrFlowStep('idle');
@@ -2404,7 +2422,7 @@ export default function Home() {
           } else if (res.status === 504) {
             message = 'OCRサーバーがタイムアウトしました。時間をおいて再試行してください。';
           } else {
-            message = `OCRリクエストが失敗しました（status ${res.status}）。`;
+            message = '読み取り処理に失敗しました。時間をおいて再度お試しください。';
           }
           setError(message);
           setOcrFlowStep('idle');
@@ -2616,6 +2634,9 @@ export default function Home() {
           return Array.from(byLabel.values());
         });
         if (Array.isArray(data.results)) ingestRegradeInfo(data.results);
+        if (data.usageReleaseWarning) {
+          setError('利用回数の返却に問題が発生しました。お問い合わせください。');
+        }
         refreshUsageInfo().catch((err) => {
           console.warn('Failed to refresh usage info:', err);
         });
@@ -2814,7 +2835,7 @@ export default function Home() {
         data = JSON.parse(responseText);
       } catch (parseError) {
         console.error('[Page] Failed to parse JSON:', parseError);
-        setError(`サーバーエラー: ${responseText.substring(0, 200)}`);
+        setError('サーバーからの応答を処理できませんでした。時間をおいて再度お試しください。');
         return;
       }
       console.log('[Page] Response data:', data);
@@ -2834,6 +2855,9 @@ export default function Home() {
           return Array.from(byLabel.values());
         });
         if (Array.isArray(data.results)) ingestRegradeInfo(data.results);
+        if (data.usageReleaseWarning) {
+          setError('利用回数の返却に問題が発生しました。お問い合わせください。');
+        }
 
         // 利用情報を更新（エラーが発生しても続行、非同期で実行）
         refreshUsageInfo().then(() => {
@@ -2846,8 +2870,8 @@ export default function Home() {
       if (err instanceof Error && err.name === 'AbortError') {
         setError('採点処理がタイムアウトしました（5分経過）。画像ファイルのサイズが大きい場合、圧縮してから再度お試しください。');
       } else {
-        const message = err instanceof Error ? err.message : '通信エラーが発生しました。';
-        setError(message);
+        console.error('[Page] Grading error detail:', err instanceof Error ? err.message : err);
+        setError('採点処理中にエラーが発生しました。ネットワーク接続を確認し、再度お試しください。');
       }
     } finally {
       console.log('[Page] Grading process complete, clearing loading state');
@@ -2953,7 +2977,7 @@ export default function Home() {
       try {
         data = JSON.parse(responseText);
       } catch {
-        setError(`サーバーエラー: ${responseText.substring(0, 200)}`);
+        setError('サーバーからの応答を処理できませんでした。時間をおいて再度お試しください。');
         return;
       }
 
@@ -2987,11 +3011,7 @@ export default function Home() {
 
   const normalizeScore = (score: number): number => {
     if (typeof score !== 'number' || Number.isNaN(score)) return 0;
-    if (score <= 10) {
-      const result = Math.min(100, Math.round(score * 10));
-      return result;
-    }
-    return Math.min(100, Math.round(score));
+    return Math.max(0, Math.min(100, Math.round(score)));
   };
 
   // 次の問題へ進むためのリセット関数（ファイルも全てリセット）
@@ -4419,6 +4439,7 @@ export default function Home() {
                         </div>
                         <p className="text-sm text-red-700 font-bold">{error}</p>
                       </div>
+                      <p className="text-xs text-red-400 ml-14 mt-1">※通信エラーの場合、利用回数は消費されていません。</p>
                       {requirePlan && (
                         <div className="mt-3 ml-14">
                           <Link
@@ -5148,16 +5169,14 @@ export default function Home() {
 
           // エラーの場合や結果がない場合
           if (!gradingResult || res.error) {
-            if (res.error) {
-              return (
-                <div key={index} className="mt-8 bg-red-50 border border-red-200 rounded-2xl p-6">
-                  <h3 className="text-lg font-bold text-red-800 mb-2">{res.label} - エラー</h3>
-                  <p className="text-red-700">{res.error}</p>
-                </div>
-              );
-            }
-            console.warn(`[Page] No grading result for ${res.label}:`, res);
-            return null;
+            const errorMessage = res.error || res.result?.message || res.result?.user_message || 'AIからの応答を解析できませんでした。もう一度お試しください。';
+            return (
+              <div key={index} className="mt-8 bg-red-50 border border-red-200 rounded-2xl p-6">
+                <h3 className="text-lg font-bold text-red-800 mb-2">{res.label} - エラー</h3>
+                <p className="text-red-700">{errorMessage}</p>
+                <p className="text-sm text-slate-500 mt-3">画像の品質や問題番号の指定を確認して、もう一度お試しください。この回の無料分は消費されていません。</p>
+              </div>
+            );
           }
 
           const deductionDetails: DeductionDetail[] = gradingResult.deduction_details ?? [];

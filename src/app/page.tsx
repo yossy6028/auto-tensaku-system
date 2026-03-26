@@ -137,8 +137,7 @@ export default function Home() {
 
   const normalizeScore = (score: number): number => {
     if (typeof score !== 'number' || Number.isNaN(score)) return 0;
-    if (score <= 10) return Math.min(100, Math.round(score * 10));
-    return Math.min(100, Math.round(score));
+    return Math.max(0, Math.min(100, Math.round(score)));
   };
 
   return (
@@ -436,7 +435,26 @@ export default function Home() {
         {/* Result Display */}
         {results && results.map((res, index) => {
           const gradingResult = res.result?.grading_result;
-          if (!gradingResult) return null;
+
+          if (!gradingResult || !gradingResult.feedback_content) {
+            const errorMessage = res.error || res.result?.message || res.result?.user_message || 'AIからの応答を解析できませんでした。もう一度お試しください。';
+            return (
+              <div key={index} className="mt-20 animate-fade-in-up">
+                <div className="bg-white/80 backdrop-blur-3xl shadow-[0_20px_50px_rgba(0,0,0,0.1)] rounded-[2.5rem] overflow-hidden border border-white/60 ring-1 ring-white/50">
+                  <div className="p-8 md:p-14">
+                    <div className="flex items-center mb-4">
+                      <span className="bg-red-100 text-red-600 rounded-lg w-8 h-8 flex items-center justify-center mr-3">⚠️</span>
+                      <h2 className="text-2xl font-bold text-slate-800">{res.label} - 採点エラー</h2>
+                    </div>
+                    <div className="bg-red-50 rounded-2xl p-6 border border-red-100">
+                      <p className="text-red-700 font-medium">{errorMessage}</p>
+                      <p className="text-sm text-slate-500 mt-4">画像の品質や問題番号の指定を確認して、もう一度お試しください。無料回数は消費されていません。</p>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            );
+          }
 
           const deductionDetails = gradingResult?.deduction_details ?? [];
           const normalizedScore = gradingResult ? normalizeScore(gradingResult.score) : 0;

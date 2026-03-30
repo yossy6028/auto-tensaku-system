@@ -1,7 +1,9 @@
 import type { Metadata } from "next";
 import { Inter, Noto_Sans_JP } from "next/font/google";
+import Script from "next/script";
 import "./globals.css";
 import { AuthProvider } from "@/components/AuthProvider";
+import { GoogleAnalytics } from "@/components/GoogleAnalytics";
 
 const inter = Inter({ subsets: ["latin"], variable: "--font-inter" });
 const notoSansJP = Noto_Sans_JP({
@@ -63,7 +65,22 @@ export default function RootLayout({
 }>) {
   return (
     <html lang="ja">
+      <head>
+        <Script
+          src="https://www.googletagmanager.com/gtag/js?id=G-RTB411K3Q1"
+          strategy="afterInteractive"
+        />
+        <Script id="google-analytics" strategy="afterInteractive">
+          {`
+            window.dataLayer = window.dataLayer || [];
+            function gtag(){dataLayer.push(arguments);}
+            gtag('js', new Date());
+            gtag('config', 'G-RTB411K3Q1');
+          `}
+        </Script>
+      </head>
       <body className={`${inter.variable} ${notoSansJP.variable} font-sans antialiased`}>
+        <GoogleAnalytics />
         <AuthProvider>
           {children}
         </AuthProvider>

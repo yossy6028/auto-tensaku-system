@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { createClient } from '@/lib/supabase/server';
-import { stripe } from '@/lib/stripe/config';
+import { getStripe } from '@/lib/stripe/config';
 
 export const dynamic = 'force-dynamic';
 
@@ -21,6 +21,14 @@ function getSafeReturnUrl(request: NextRequest): string {
 
 export async function POST(request: NextRequest) {
   try {
+    if (!process.env.NEXT_PUBLIC_SUPABASE_URL || !process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY) {
+      return NextResponse.json({ error: 'Supabase設定が不足しています' }, { status: 503 });
+    }
+
+    if (!process.env.STRIPE_SECRET_KEY) {
+      return NextResponse.json({ error: 'Stripe設定が不足しています' }, { status: 503 });
+    }
+
     const supabase = await createClient();
 
     // 認証チェック
@@ -46,6 +54,8 @@ export async function POST(request: NextRequest) {
         { status: 404 }
       );
     }
+
+    const stripe = getStripe();
 
     // カスタマーポータルセッション作成（リダイレクト先はサーバー固定）
     const portalSession = await stripe.billingPortal.sessions.create({

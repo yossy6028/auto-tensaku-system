@@ -119,7 +119,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         // デフォルト値を設定
         setSystemSettings({
           freeTrialDays: 7,
-          freeTrialUsageLimit: 3,
+          freeTrialUsageLimit: 5,
           freeAccessEnabled: false,
           freeAccessUntil: null,
           freeAccessMessage: '',
@@ -130,7 +130,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       if (data) {
       const settings: SystemSettings = {
         freeTrialDays: 7,
-        freeTrialUsageLimit: 3,
+        freeTrialUsageLimit: 5,
         freeAccessEnabled: false,
         freeAccessUntil: null,
         freeAccessMessage: '',
@@ -143,7 +143,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
             settings.freeTrialDays = parseInt(valueString, 10) || 7;
             break;
           case 'free_trial_usage_limit':
-            settings.freeTrialUsageLimit = parseInt(valueString, 10) || 3;
+            settings.freeTrialUsageLimit = parseInt(valueString, 10) || 5;
             break;
           case 'free_access_enabled':
             settings.freeAccessEnabled = String(item.value) === 'true';
@@ -164,7 +164,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       // デフォルト値を設定
       setSystemSettings({
         freeTrialDays: 7,
-        freeTrialUsageLimit: 3,
+        freeTrialUsageLimit: 5,
         freeAccessEnabled: false,
         freeAccessUntil: null,
         freeAccessMessage: '',
@@ -663,12 +663,18 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         ]).catch(() => {});
 
         // ユーザー固有のデータ取得（セッションがある場合のみ）
+        // プロフィール作成完了後にrefreshUsageInfoを実行（レースコンディション防止）
         if (session?.user && isMounted) {
-          Promise.all([
-            fetchProfile(session.user.id).catch(() => {}),
-            fetchSubscription(session.user.id).catch(() => {}),
-            handleDeviceRegistration(session.user.id).catch(() => {})
-          ]).catch(() => {});
+          const userId = session.user.id;
+          // fetchProfileを先に完了させてからrefreshUsageInfoを実行
+          fetchProfile(userId).catch(() => {}).then(() => {
+            if (isMounted) {
+              refreshUsageInfo(session.user).catch(() => {});
+            }
+          });
+          // サブスクリプション・デバイス登録は並列で問題なし
+          fetchSubscription(userId).catch(() => {});
+          handleDeviceRegistration(userId).catch(() => {});
         }
       } catch (error) {
         console.error('[AuthProvider] Auth initialization error:', error);
@@ -703,18 +709,18 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
           const sessionUser = session.user;
 
           setTimeout(async () => {
-            // プロファイル取得（直接クエリ）
+            // プロファイル取得（ensure-profile対応版を使用し、レースコンディションを防止）
             try {
-              const { data: profileData, error: profileError } = await supabase
-                .from('user_profiles')
-                .select('*')
-                .eq('id', userId)
-                .single();
-              if (!profileError && profileData) {
-                setProfile(profileData as UserProfile);
-              }
+              await fetchProfile(userId);
             } catch (e) {
               console.error('[AuthProvider] Profile fetch error:', e);
+            }
+
+            // プロフィール作成完了後に利用可否情報を更新
+            try {
+              await refreshUsageInfo(sessionUser);
+            } catch (e) {
+              console.error('[AuthProvider] refreshUsageInfo error:', e);
             }
 
             // サブスクリプション取得（直接クエリ）
@@ -732,13 +738,6 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
               }
             } catch (e) {
               console.error('[AuthProvider] Subscription fetch error:', e);
-            }
-
-            // 利用可否情報を更新
-            try {
-              await refreshUsageInfo(sessionUser);
-            } catch (e) {
-              console.error('[AuthProvider] refreshUsageInfo error:', e);
             }
 
             // デバイス登録処理
@@ -794,11 +793,11 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
           console.warn('[AuthProvider] Device registration failed:', e);
         });
         
-        Promise.all([
-          fetchProfile(data.session.user.id).catch(() => {}),
-          fetchSubscription(data.session.user.id).catch(() => {}),
-          refreshUsageInfo(data.session.user).catch(() => {})
-        ]).catch(() => {});
+        // fetchProfile → refreshUsageInfo は順序依存（profileが存在しないとcan_use_serviceが失敗する）
+        fetchProfile(data.session.user.id).catch(() => {}).then(() => {
+          refreshUsageInfo(data.session.user).catch(() => {});
+        });
+        fetchSubscription(data.session.user.id).catch(() => {});
       }
     }
     
@@ -825,7 +824,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
     if (emailBlocked) {
       // プロファイルは存在するが、未確認ユーザーかもしれない。
-      // resend を試み、成功すれば確認メールを再送。失敗なら本当に重複。
+      // resend を試み、成功すれば確認メール再送。失敗なら確認済みユーザー。
       try {
         const { error: resendError } = await supabase.auth.resend({
           type: 'signup',
@@ -837,9 +836,10 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
           return { error: null };
         }
       } catch {
-        // resend 自体の通信エラー — フォールスルーしてエラー表示
+        // resend 自体の通信エラー — フォールスルー
       }
-      return { error: new Error('このメールアドレスは既に登録されています。ログインをお試しください。') };
+      // 確認済みユーザー → 登録済みであることを伝える
+      return { error: new Error('このメールアドレスは既に登録済みです。ログインしてください。パスワードをお忘れの場合は「パスワードを忘れた場合」からリセットできます。') };
     }
 
     const { data, error } = await supabase.auth.signUp({
@@ -848,17 +848,22 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       options: { emailRedirectTo: `${SITE_URL}/auth/callback` },
     });
 
-    // Supabase は既存の未確認ユーザー（プロファイルなし）に対して error=null を返すが
-    // 確認メールを再送しない。identities が空配列の場合に明示的に再送する。
+    // Supabase は既存ユーザーに対して error=null + identities=[] を返す（ユーザー列挙防止）。
+    // 未確認ユーザーなら resend で確認メール再送、確認済みならログインを促す。
     if (!error && data?.user?.identities?.length === 0) {
       try {
-        await supabase.auth.resend({
+        const { error: resendError } = await supabase.auth.resend({
           type: 'signup',
           email,
           options: { emailRedirectTo: `${SITE_URL}/auth/callback` },
         });
+        if (resendError) {
+          // resend がエラー → 確認済みユーザー → 登録済みであることを伝える
+          return { error: new Error('このメールアドレスは既に登録済みです。ログインしてください。パスワードをお忘れの場合は「パスワードを忘れた場合」からリセットできます。') };
+        }
       } catch {
-        // resend 失敗でもユーザー列挙防止のため成功として扱う
+        // 通信エラー
+        return { error: new Error('このメールアドレスは既に登録済みです。ログインしてください。') };
       }
     }
 

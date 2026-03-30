@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { createServerClient } from '@supabase/ssr';
+import { createClient } from '@supabase/supabase-js';
 import { cookies } from 'next/headers';
 import { TaskalGrader, type FileRole, type GradingStrictness } from '@/lib/core/grader';
 import type { Database } from '@/lib/supabase/types';
@@ -31,8 +32,44 @@ type UploadedFilePart = {
 type CanUseServiceResult = Database['public']['Functions']['can_use_service']['Returns'][number];
 type ReserveUsageResult = Database['public']['Functions']['reserve_usage']['Returns'][number];
 
+type SupabaseRpcError = {
+    code?: string;
+    details?: string;
+    message?: string;
+};
+
 type SupabaseRpcClient = {
-    rpc: (fn: string, args: Record<string, unknown>) => Promise<{ data: unknown; error: { message?: string } | null }>;
+    rpc: (fn: string, args: Record<string, unknown>) => Promise<{ data: unknown; error: SupabaseRpcError | null }>;
+};
+
+type UsageReleaseResult = {
+    success: boolean;
+    message: string;
+};
+
+type UsageProfileRow = {
+    id: string;
+    role: 'user' | 'admin' | null;
+    free_trial_started_at: string | null;
+    free_trial_usage_count: number | null;
+    custom_trial_usage_limit: number | null;
+};
+
+type SubscriptionRow = {
+    id: string;
+    plan_id: string | null;
+    usage_count: number | null;
+    usage_limit: number | null;
+    stripe_subscription_id: string | null;
+    current_period_end: string | null;
+    expires_at: string | null;
+    created_at: string;
+};
+
+type SystemSettingsSnapshot = {
+    freeAccessEnabled: boolean;
+    freeAccessUntil: string | null;
+    freeTrialUsageLimit: number;
 };
 
 /**
@@ -61,6 +98,309 @@ async function getSupabaseClient() {
             },
         }
     );
+}
+
+function getSupabaseAdmin() {
+    const key = process.env.SUPABASE_SERVICE_ROLE_KEY;
+    if (!key) {
+        throw new Error('[grade] SUPABASE_SERVICE_ROLE_KEY is not set');
+    }
+    return createClient(process.env.NEXT_PUBLIC_SUPABASE_URL!, key);
+}
+
+function isUsageReservationFallbackTarget(error: SupabaseRpcError | null | undefined): boolean {
+    const combined = `${error?.message ?? ''} ${error?.details ?? ''}`.toLowerCase();
+    return error?.code === '42702' || (combined.includes('usage_count') && combined.includes('ambiguous'));
+}
+
+function shouldTrackReservedCount(planName: string | null | undefined): boolean {
+    return planName !== 'admin' && planName !== 'promo';
+}
+
+async function loadSystemSettings(admin: ReturnType<typeof getSupabaseAdmin>): Promise<SystemSettingsSnapshot> {
+    const { data, error } = await admin
+        .from('system_settings')
+        .select('key, value')
+        .in('key', ['free_access_enabled', 'free_access_until', 'free_trial_usage_limit']);
+
+    if (error) throw error;
+
+    const settings = new Map<string, string | null>(
+        (data ?? []).map((row: { key: string; value: string | null }) => [row.key, row.value])
+    );
+
+    const freeTrialUsageLimitRaw = settings.get('free_trial_usage_limit');
+    const parsedUsageLimit = freeTrialUsageLimitRaw ? Number.parseInt(freeTrialUsageLimitRaw, 10) : Number.NaN;
+
+    return {
+        freeAccessEnabled: settings.get('free_access_enabled') === 'true',
+        freeAccessUntil: settings.get('free_access_until') ?? null,
+        freeTrialUsageLimit: Number.isFinite(parsedUsageLimit) ? parsedUsageLimit : 3,
+    };
+}
+
+async function loadUsageProfile(admin: ReturnType<typeof getSupabaseAdmin>, userId: string): Promise<UsageProfileRow | null> {
+    const { data, error } = await admin
+        .from('user_profiles')
+        .select('id, role, free_trial_started_at, free_trial_usage_count, custom_trial_usage_limit')
+        .eq('id', userId)
+        .maybeSingle();
+
+    if (error) throw error;
+    return (data as UsageProfileRow | null) ?? null;
+}
+
+async function loadActiveSubscription(
+    admin: ReturnType<typeof getSupabaseAdmin>,
+    userId: string
+): Promise<{ subscription: SubscriptionRow | null; planName: string | null }> {
+    const { data, error } = await admin
+        .from('subscriptions')
+        .select('id, plan_id, usage_count, usage_limit, stripe_subscription_id, current_period_end, expires_at, created_at')
+        .eq('user_id', userId)
+        .eq('status', 'active')
+        .order('created_at', { ascending: false })
+        .limit(5);
+
+    if (error) throw error;
+
+    const now = Date.now();
+    const subscription = ((data as SubscriptionRow[] | null) ?? []).find((row) => {
+        if (!row.expires_at) return true;
+        const expiresAt = Date.parse(row.expires_at);
+        return Number.isNaN(expiresAt) || expiresAt > now;
+    }) ?? null;
+
+    if (!subscription?.plan_id) {
+        return { subscription, planName: null };
+    }
+
+    const { data: planData, error: planError } = await admin
+        .from('pricing_plans')
+        .select('name')
+        .eq('id', subscription.plan_id)
+        .maybeSingle();
+
+    if (planError) throw planError;
+
+    return {
+        subscription,
+        planName: (planData as { name?: string | null } | null)?.name ?? null,
+    };
+}
+
+async function reserveUsageWithAdminFallback(
+    admin: ReturnType<typeof getSupabaseAdmin>,
+    userId: string,
+    count: number
+): Promise<ReserveUsageResult> {
+    const settings = await loadSystemSettings(admin);
+
+    for (let attempt = 0; attempt < 2; attempt += 1) {
+        const profile = await loadUsageProfile(admin, userId);
+
+        if (profile?.role === 'admin') {
+            return {
+                success: true,
+                message: '管理者はサービスを無制限に利用できます',
+                subscription_id: null,
+                usage_count: null,
+                usage_limit: null,
+                remaining_count: null,
+                plan_name: 'admin',
+            };
+        }
+
+        if (settings.freeAccessEnabled) {
+            const freeAccessUntil = settings.freeAccessUntil ? Date.parse(settings.freeAccessUntil) : Number.NaN;
+            if (!settings.freeAccessUntil || Number.isNaN(freeAccessUntil) || freeAccessUntil > Date.now()) {
+                return {
+                    success: true,
+                    message: '期間限定無料開放中！',
+                    subscription_id: null,
+                    usage_count: null,
+                    usage_limit: null,
+                    remaining_count: null,
+                    plan_name: 'promo',
+                };
+            }
+        }
+
+        const { subscription, planName } = await loadActiveSubscription(admin, userId);
+        if (subscription) {
+            const currentUsage = subscription.usage_count ?? 0;
+            const usageLimit = subscription.usage_limit;
+            const currentPeriodEnd = subscription.current_period_end ? Date.parse(subscription.current_period_end) : Number.NaN;
+
+            if (
+                subscription.stripe_subscription_id &&
+                subscription.current_period_end &&
+                !Number.isNaN(currentPeriodEnd) &&
+                currentPeriodEnd < Date.now()
+            ) {
+                return {
+                    success: false,
+                    message: 'サブスクリプションの有効期限が切れています。',
+                    subscription_id: subscription.id,
+                    usage_count: currentUsage,
+                    usage_limit: usageLimit,
+                    remaining_count: 0,
+                    plan_name: planName,
+                };
+            }
+
+            if (usageLimit != null && currentUsage + count > usageLimit) {
+                return {
+                    success: false,
+                    message: '今月の採点回数上限に達しました。',
+                    subscription_id: subscription.id,
+                    usage_count: currentUsage,
+                    usage_limit: usageLimit,
+                    remaining_count: Math.max(0, usageLimit - currentUsage),
+                    plan_name: planName,
+                };
+            }
+
+            const nextUsage = currentUsage + count;
+            const { data: updatedRows, error: updateError } = await admin
+                .from('subscriptions')
+                .update({ usage_count: nextUsage, updated_at: new Date().toISOString() })
+                .eq('id', subscription.id)
+                .eq('usage_count', currentUsage)
+                .select('id');
+
+            if (updateError) throw updateError;
+            if ((updatedRows ?? []).length > 0) {
+                return {
+                    success: true,
+                    message: '利用枠を確保しました',
+                    subscription_id: subscription.id,
+                    usage_count: nextUsage,
+                    usage_limit: usageLimit,
+                    remaining_count: usageLimit == null ? null : usageLimit - nextUsage,
+                    plan_name: planName,
+                };
+            }
+
+            continue;
+        }
+
+        if (profile?.free_trial_started_at) {
+            const currentUsage = profile.free_trial_usage_count ?? 0;
+            const usageLimit = profile.custom_trial_usage_limit ?? settings.freeTrialUsageLimit;
+
+            if (currentUsage + count > usageLimit) {
+                return {
+                    success: false,
+                    message: '無料体験の採点回数上限に達しました。',
+                    subscription_id: null,
+                    usage_count: currentUsage,
+                    usage_limit: usageLimit,
+                    remaining_count: Math.max(0, usageLimit - currentUsage),
+                    plan_name: 'free_trial',
+                };
+            }
+
+            const nextUsage = currentUsage + count;
+            const { data: updatedRows, error: updateError } = await admin
+                .from('user_profiles')
+                .update({ free_trial_usage_count: nextUsage, updated_at: new Date().toISOString() })
+                .eq('id', userId)
+                .eq('free_trial_usage_count', currentUsage)
+                .select('id');
+
+            if (updateError) throw updateError;
+            if ((updatedRows ?? []).length > 0) {
+                return {
+                    success: true,
+                    message: '無料体験の利用枠を確保しました',
+                    subscription_id: null,
+                    usage_count: nextUsage,
+                    usage_limit: usageLimit,
+                    remaining_count: usageLimit - nextUsage,
+                    plan_name: 'free_trial',
+                };
+            }
+
+            continue;
+        }
+
+        return {
+            success: false,
+            message: '利用可能なプランがありません。プランを購入してください。',
+            subscription_id: null,
+            usage_count: null,
+            usage_limit: null,
+            remaining_count: null,
+            plan_name: null,
+        };
+    }
+
+    throw new Error('利用枠の確保で競合が発生しました。再度お試しください。');
+}
+
+async function releaseUsageWithAdminFallback(
+    admin: ReturnType<typeof getSupabaseAdmin>,
+    userId: string,
+    count: number
+): Promise<UsageReleaseResult> {
+    for (let attempt = 0; attempt < 2; attempt += 1) {
+        const profile = await loadUsageProfile(admin, userId);
+        if (profile?.role === 'admin') {
+            return { success: true, message: '管理者は利用枠の解放対象ではありません' };
+        }
+
+        const settings = await loadSystemSettings(admin);
+        if (settings.freeAccessEnabled) {
+            const freeAccessUntil = settings.freeAccessUntil ? Date.parse(settings.freeAccessUntil) : Number.NaN;
+            if (!settings.freeAccessUntil || Number.isNaN(freeAccessUntil) || freeAccessUntil > Date.now()) {
+                return { success: true, message: '無料開放中は利用枠の解放対象ではありません' };
+            }
+        }
+
+        const { subscription } = await loadActiveSubscription(admin, userId);
+        if (subscription) {
+            const currentUsage = subscription.usage_count ?? 0;
+            const nextUsage = Math.max(0, currentUsage - count);
+
+            const { data: updatedRows, error: updateError } = await admin
+                .from('subscriptions')
+                .update({ usage_count: nextUsage, updated_at: new Date().toISOString() })
+                .eq('id', subscription.id)
+                .eq('usage_count', currentUsage)
+                .select('id');
+
+            if (updateError) throw updateError;
+            if ((updatedRows ?? []).length > 0) {
+                return { success: true, message: '利用枠を解放しました' };
+            }
+
+            continue;
+        }
+
+        if (profile) {
+            const currentUsage = profile.free_trial_usage_count ?? 0;
+            const nextUsage = Math.max(0, currentUsage - count);
+
+            const { data: updatedRows, error: updateError } = await admin
+                .from('user_profiles')
+                .update({ free_trial_usage_count: nextUsage, updated_at: new Date().toISOString() })
+                .eq('id', userId)
+                .eq('free_trial_usage_count', currentUsage)
+                .select('id');
+
+            if (updateError) throw updateError;
+            if ((updatedRows ?? []).length > 0) {
+                return { success: true, message: '無料体験の利用枠を解放しました' };
+            }
+
+            continue;
+        }
+
+        return { success: false, message: '解放対象が見つかりませんでした' };
+    }
+
+    throw new Error('利用枠の解放で競合が発生しました。再度お試しください。');
 }
 
 /**
@@ -352,7 +692,16 @@ export async function POST(req: NextRequest) {
         }
 
         // フォームデータ解析
-        const formData = await req.formData();
+        let formData: FormData;
+        try {
+            formData = await req.formData();
+        } catch (formDataError) {
+            logger.error('Failed to parse formData:', formDataError);
+            return NextResponse.json(
+                { status: 'error', message: 'リクエストデータの解析に失敗しました。ファイルサイズが大きすぎるか、リクエストの形式が不正です。' },
+                { status: 400 }
+            );
+        }
         const deviceFingerprintRaw = formData.get('deviceFingerprint');
 
         // デバイス制限チェック（デバイスフィンガープリントが提供されている場合）
@@ -485,7 +834,7 @@ export async function POST(req: NextRequest) {
 
         if (!Array.isArray(targetLabels) || targetLabels.length === 0) {
             return NextResponse.json(
-                { status: 'error', message: 'Invalid target labels' },
+                { status: 'error', message: '問題番号の形式が不正です。' },
                 { status: 400 }
             );
         }
@@ -540,19 +889,40 @@ export async function POST(req: NextRequest) {
         const paidLabels = sanitizedLabels.filter((label) => !freeRegradeByLabel.has(label));
         const requiresPaidUsage = paidLabels.length > 0;
         let reservedCount = 0;
+        const supabaseAdmin = requiresPaidUsage ? getSupabaseAdmin() : null;
 
         // 利用枠をアトミックに予約（無料再採点のみの場合はスキップ）
         if (requiresPaidUsage) {
+            let reserveRows: ReserveUsageResult[] | null = null;
             const { data: reserveData, error: reserveError } = await supabaseRpc
                 .rpc('reserve_usage', { p_user_id: user.id, p_count: paidLabels.length });
-            const reserveRows = reserveData as ReserveUsageResult[] | null;
+            reserveRows = reserveData as ReserveUsageResult[] | null;
 
             if (reserveError) {
                 logger.error('Usage reservation error:', reserveError);
-                return NextResponse.json(
-                    { status: 'error', message: '利用状況の確認中にエラーが発生しました。' },
-                    { status: 500 }
-                );
+
+                if (!supabaseAdmin || !isUsageReservationFallbackTarget(reserveError)) {
+                    return NextResponse.json(
+                        { status: 'error', message: '利用状況の確認中にエラーが発生しました。' },
+                        { status: 500 }
+                    );
+                }
+
+                try {
+                    const fallbackRow = await reserveUsageWithAdminFallback(supabaseAdmin, user.id, paidLabels.length);
+                    reserveRows = [fallbackRow];
+                    logger.warn('[API] reserve_usage RPC failed. Used direct admin fallback.', {
+                        userId: user.id,
+                        planName: fallbackRow.plan_name,
+                        reservedCount: paidLabels.length,
+                    });
+                } catch (fallbackError) {
+                    logger.error('[API] Usage reservation fallback failed:', fallbackError);
+                    return NextResponse.json(
+                        { status: 'error', message: '利用状況の確認中にエラーが発生しました。' },
+                        { status: 500 }
+                    );
+                }
             }
 
             if (!reserveRows || reserveRows.length === 0 || !reserveRows[0].success) {
@@ -565,7 +935,7 @@ export async function POST(req: NextRequest) {
                     { status: 403 }
                 );
             }
-            reservedCount = paidLabels.length;
+            reservedCount = shouldTrackReservedCount(reserveRows[0].plan_name) ? paidLabels.length : 0;
         }
 
         // ファイルをバッファに変換（役割情報を付与）
@@ -633,16 +1003,16 @@ export async function POST(req: NextRequest) {
                         }
 
                         // 不完全な採点結果のチェック（課金対象外）
-                        const resultObj = result as { incomplete_grading?: boolean; missing_fields?: string[] } | undefined;
-                        if (resultObj?.incomplete_grading) {
-                            logger.warn(`[API] Incomplete grading for ${label}: missing ${resultObj.missing_fields?.join(', ')}`);
+                        const resultObj = result as { incomplete_grading?: boolean; missing_fields?: string[]; status?: string; grading_result?: unknown; message?: string } | undefined;
+                        if (resultObj?.incomplete_grading || (resultObj?.status === 'error' && !resultObj?.grading_result)) {
+                            logger.warn(`[API] Failed/Incomplete grading for ${label}: ${resultObj?.status === 'error' ? resultObj.message : `missing ${resultObj?.missing_fields?.join(', ')}`}`);
                             return {
                                 label,
                                 result,
                                 strictness,
                                 incompleteGrading: true,
-                                missingFields: resultObj.missing_fields,
-                                error: resultObj.missing_fields ? `採点結果が不完全: ${resultObj.missing_fields.join(', ')}` : '採点結果が不完全です'
+                                missingFields: resultObj?.missing_fields,
+                                error: resultObj?.missing_fields ? `採点結果が不完全: ${resultObj.missing_fields.join(', ')}` : (resultObj as any)?.message || '採点結果が不完全です'
                             };
                         } else {
                             return { label, result, strictness };
@@ -678,11 +1048,27 @@ export async function POST(req: NextRequest) {
 
                 // 失敗分の枠を解放（予約した数 - 実際に成功した有料採点数）
                 const releaseCount = reservedCount - successfulPaidCount;
+                let usageReleaseWarning = false;
                 if (releaseCount > 0) {
                     const { error: releaseError } = await supabaseRpc
                         .rpc('release_usage', { p_user_id: user.id, p_count: releaseCount });
                     if (releaseError) {
                         logger.error('Failed to release unused usage slots:', releaseError);
+                        usageReleaseWarning = true;
+                        if (supabaseAdmin) {
+                            try {
+                                const fallbackRelease = await releaseUsageWithAdminFallback(supabaseAdmin, user.id, releaseCount);
+                                if (fallbackRelease.success) {
+                                    logger.warn('[API] release_usage RPC failed. Used direct admin fallback.', {
+                                        userId: user.id,
+                                        releaseCount,
+                                    });
+                                    usageReleaseWarning = false;
+                                }
+                            } catch (fallbackError) {
+                                logger.error('[API] Usage release fallback failed:', fallbackError);
+                            }
+                        }
                     } else {
                         logger.info(`[API] Released ${releaseCount} unused usage slot(s)`);
                     }
@@ -765,6 +1151,7 @@ export async function POST(req: NextRequest) {
                     status: 'success',
                     results,
                     usageInfo,
+                    usageReleaseWarning: usageReleaseWarning || undefined,
                     warnings: imageCountWarning ? [imageCountWarning] : undefined
                 };
             });
@@ -779,6 +1166,12 @@ export async function POST(req: NextRequest) {
             });
         } catch (error) {
             if (error instanceof QueueFullError) {
+                // キュー満杯時は予約した利用枠を解放（リーク防止）
+                if (reservedCount > 0) {
+                    await supabaseRpc
+                        .rpc('release_usage', { p_user_id: user.id, p_count: reservedCount })
+                        .catch((e: unknown) => logger.error('Failed to release usage on QueueFullError:', e));
+                }
                 const queueState = getQueueState();
                 return NextResponse.json(
                     {

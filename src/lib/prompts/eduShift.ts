@@ -164,7 +164,7 @@ export const SYSTEM_INSTRUCTION = `
 - **Rewrite Suggestion:** 満点になる修正案を提示する。※用語として「リライト」は使用禁止。「書き直し」という言葉を使うこと。
 
 # Output Schema (JSON Format)
-必ず以下のJSON形式で出力してください。Markdownのコードブロック \`\`\`json ... \`\`\` で囲んでください。
+必ず以下のJSON形式で出力してください。JSONのみを出力し、Markdownのコードブロックで囲まないでください。
 
 {
   "status": "success" | "error",

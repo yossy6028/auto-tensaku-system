@@ -89,7 +89,7 @@ export function ProductHighlights() {
                     viewport={{ once: true, margin: '-100px' }}
                     className="space-y-6"
                 >
-                    {highlights.map((item, index) => {
+                    {highlights.map((item) => {
                         const Icon = item.icon;
                         // The first item in the image looked distinct (large icon on left), but for consistency/implementation speed, 
                         // I'll make them stacked cards or a grid. 

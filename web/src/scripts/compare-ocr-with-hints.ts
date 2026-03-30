@@ -13,7 +13,6 @@ import { GoogleGenAI } from '@google/genai';
 import {
   AgenticVisionPreprocessor,
   buildAnswerSheetHints,
-  type PreprocessResult,
 } from '../lib/core/agenticVision';
 
 const OCR_MODEL = 'gemini-3-pro-preview';

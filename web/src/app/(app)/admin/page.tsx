@@ -43,7 +43,7 @@ export default function AdminPage() {
   
   // システム設定
   const [systemSettings, setSystemSettings] = useState<SystemSettingsState>({
-    freeTrialUsageLimit: 3,
+    freeTrialUsageLimit: 5,
     freeAccessEnabled: false,
     freeAccessUntil: '',
   });
@@ -114,7 +114,7 @@ export default function AdminPage() {
     
       if (data) {
         const settings: SystemSettingsState = {
-          freeTrialUsageLimit: 3,
+          freeTrialUsageLimit: 5,
           freeAccessEnabled: false,
           freeAccessUntil: '',
         };
@@ -123,7 +123,7 @@ export default function AdminPage() {
           const valueString = item.value ?? '';
           switch (item.key) {
             case 'free_trial_usage_limit':
-              settings.freeTrialUsageLimit = parseInt(valueString, 10) || 3;
+              settings.freeTrialUsageLimit = parseInt(valueString, 10) || 5;
               break;
             case 'free_access_enabled':
               settings.freeAccessEnabled = String(item.value) === 'true';
@@ -665,7 +665,7 @@ export default function AdminPage() {
                     value={systemSettings.freeTrialUsageLimit}
                     onChange={(e) => setSystemSettings({ 
                       ...systemSettings, 
-                      freeTrialUsageLimit: parseInt(e.target.value) || 3 
+                      freeTrialUsageLimit: parseInt(e.target.value) || 5 
                     })}
                     min="1"
                     max="100"

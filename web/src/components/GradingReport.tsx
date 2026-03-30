@@ -58,10 +58,7 @@ interface GradingReportProps {
 
 const normalizeScore = (score: number): number => {
     if (typeof score !== 'number' || Number.isNaN(score)) return 0;
-    if (score <= 10) {
-        return Math.min(100, Math.round(score * 10));
-    }
-    return Math.min(100, Math.round(score));
+    return Math.max(0, Math.min(100, Math.round(score)));
 };
 
 const formatPoints = (value: number): string => {

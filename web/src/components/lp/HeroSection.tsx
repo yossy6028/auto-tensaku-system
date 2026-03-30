@@ -1,13 +1,13 @@
 'use client';
 
+import Image from 'next/image';
 import Link from 'next/link';
 import { motion, useMotionValue, useSpring, useTransform } from 'framer-motion';
 import { ChevronDown } from 'lucide-react';
-import { useReducedMotion, useIsMobile } from '@/hooks/useMediaQuery';
+import { useIsMobile } from '@/hooks/useMediaQuery';
 import { useMousePosition } from '@/hooks/useMousePosition';
 
 export function HeroSection() {
-  const reducedMotion = useReducedMotion();
   const isMobile = useIsMobile();
   const mouse = useMousePosition();
 
@@ -25,13 +25,6 @@ export function HeroSection() {
   const parallaxX = useSpring(useTransform(mouseX, [-0.5, 0.5], [-10, 10]), springConfig);
   const parallaxY = useSpring(useTransform(mouseY, [-0.5, 0.5], [-10, 10]), springConfig);
 
-  const fadeUp = reducedMotion
-    ? {}
-    : {
-      initial: { opacity: 0, y: 30 },
-      animate: { opacity: 1, y: 0 },
-    };
-
   return (
     <section className="relative flex min-h-screen items-center justify-center overflow-hidden">
       {/* Background Image with Overlay */}
@@ -40,10 +33,13 @@ export function HeroSection() {
           className="absolute inset-0"
           style={{ x: parallaxX, y: parallaxY, scale: 1.05 }} // Slight parallax and scale to prevent edges showing
         >
-          <img
+          <Image
             src="/bg-modern-desk.png"
             alt="Desk with manuscript background"
-            className="h-full w-full object-cover"
+            fill
+            priority
+            sizes="100vw"
+            className="object-cover"
           />
         </motion.div>
         {/* Overlay for text readability - Increased to 80% per user request */}
@@ -64,9 +60,13 @@ export function HeroSection() {
               transition={{ duration: 0.8 }}
               className="mb-8 flex justify-center w-full"
             >
-              <img
+              <Image
                 src="/taskal-main-logo.png"
                 alt="Taskal AI - 国語記述問題AI自動添削システム"
+                width={1100}
+                height={360}
+                priority
+                sizes="(max-width: 1024px) 100vw, 1024px"
                 className="h-auto w-full max-w-lg object-contain mix-blend-multiply"
               />
             </motion.div>
@@ -77,7 +77,7 @@ export function HeroSection() {
               transition={{ duration: 0.8, delay: 0.2 }}
               className="mb-6 text-3xl font-bold tracking-tight bg-gradient-to-r from-blue-600 to-indigo-600 bg-clip-text text-transparent sm:text-4xl md:text-5xl"
             >
-              記述の添削を<br />もっと速く、正確に。
+              どんな国語の答案も<br />3分でプロ視点の添削が完了
             </motion.h1>
           </motion.div>
 
@@ -104,10 +104,10 @@ export function HeroSection() {
             className="flex flex-col gap-4 sm:flex-row"
           >
             <Link
-              href="/#features"
-              className="inline-flex items-center justify-center rounded-full bg-white/80 px-8 py-4 text-base font-bold text-slate-700 shadow-md ring-1 ring-slate-200 backdrop-blur-sm transition-all hover:bg-white hover:text-[#1565C0] hover:shadow-lg hover:-translate-y-0.5"
+              href="/grading"
+              className="inline-flex items-center justify-center rounded-full bg-es-teal px-8 py-4 text-lg font-bold text-white shadow-lg shadow-es-teal/25 transition-all hover:brightness-110 hover:shadow-xl hover:-translate-y-0.5"
             >
-              機能を見る
+              無料で5回試す
             </Link>
           </motion.div>
         </div>

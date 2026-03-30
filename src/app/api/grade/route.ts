@@ -36,20 +36,46 @@ export async function POST(req: NextRequest) {
         const results = [];
 
         for (const label of targetLabels) {
-            try {
-                const result = await grader.gradeAnswerFromBuffer(
-                    label,
-                    studentBuffer,
-                    studentFile.type,
-                    answerKeyBuffer,
-                    answerKeyFile.type,
-                    problemBuffer,
-                    problemFile.type
-                );
+            let lastError: any = null;
+            let result: any = null;
+            const MAX_RETRIES = 2;
+
+            for (let attempt = 0; attempt < MAX_RETRIES; attempt++) {
+                try {
+                    result = await grader.gradeAnswerFromBuffer(
+                        label,
+                        studentBuffer,
+                        studentFile.type,
+                        answerKeyBuffer,
+                        answerKeyFile.type,
+                        problemBuffer,
+                        problemFile.type
+                    );
+                    lastError = null;
+
+                    // If the grader returned an error status, check if it's retryable
+                    if (result?.status === 'error' && attempt < MAX_RETRIES - 1 && result?.debug_info?.raw_response) {
+                        console.warn(`Grader returned error for ${label} on attempt ${attempt + 1}, retrying...`);
+                        lastError = result;
+                        result = null;
+                        continue;
+                    }
+                    break;
+                } catch (error: any) {
+                    console.error(`Error grading ${label} (attempt ${attempt + 1}):`, error);
+                    lastError = error;
+                    if (attempt < MAX_RETRIES - 1) {
+                        // Brief pause before retry
+                        await new Promise(resolve => setTimeout(resolve, 1000));
+                    }
+                }
+            }
+
+            if (result) {
                 results.push({ label, result });
-            } catch (error: any) {
-                console.error(`Error grading ${label}:`, error);
-                results.push({ label, error: error.message, status: 'error' });
+            } else {
+                const errorMessage = lastError?.message || lastError?.user_message || 'AIの応答処理中にエラーが発生しました。';
+                results.push({ label, error: errorMessage, status: 'error' });
             }
         }
 

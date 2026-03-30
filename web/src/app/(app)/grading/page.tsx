@@ -22,7 +22,6 @@ import {
   BatchMode,
   createStudentEntry,
   MAX_STUDENTS,
-  FileRole as BatchFileRole,
 } from '@/lib/types/batch';
 import { SaveProblemModal, SavedProblemsList } from '@/components/SavedProblems';
 import type { SavedProblemSummary, SavedFileRole } from '@/lib/storage/types';
@@ -35,6 +34,7 @@ import {
   generateDefaultTitle,
 } from '@/lib/storage/savedProblems';
 import { Users } from 'lucide-react';
+import { WelcomeGuide } from '@/components/WelcomeGuide';
 
 type GradingStrictness = 'lenient' | 'standard' | 'strict';
 
@@ -68,13 +68,25 @@ type OcrResponseData = {
 
 type GradingResponseItem = {
   label: string;
-  result?: { grading_result?: GradingResultPayload };
+  result?: { grading_result?: GradingResultPayload; message?: string; user_message?: string };
   error?: string;
   status?: string;
   strictness?: GradingStrictness;
   regradeToken?: string | null;
   regradeRemaining?: number | null;
   regradeMode?: 'new' | 'free' | 'none';
+};
+
+const MAX_TOTAL_SIZE_BYTES = 4.2 * 1024 * 1024;
+const MAX_SINGLE_FILE_SIZE_BYTES = 4.3 * 1024 * 1024;
+const PDF_SIZE_ADVICE = 'PDFはページ番号を指定すると必要ページだけ抽出して軽くできます。難しい場合はオンライン圧縮ツール（iLovePDF等）で圧縮してから再度お試しください。';
+const MAX_FILE_SIZE = 50 * 1024 * 1024; // 50MB
+const MAX_FILES = 10;
+const VALID_EXTENSIONS = /\.(jpg|jpeg|png|gif|webp|bmp|heic|heif|pdf)$/i;
+
+const getCompressionTimeout = (fileCount: number) => {
+  // 基本: 1ファイルあたり6秒 + バッファ10秒（最低15秒、最大60秒）
+  return Math.min(60000, Math.max(15000, fileCount * 6000 + 10000));
 };
 
 export default function Home() {
@@ -95,18 +107,6 @@ export default function Home() {
   } = useAuth();
   const [isAuthModalOpen, setIsAuthModalOpen] = useState(false);
   const [authMode, setAuthMode] = useState<'signin' | 'signup'>('signin');
-
-  // バッチモード用の問題オプション
-  const PROBLEM_OPTIONS = [
-    { value: '問1', label: '問1' },
-    { value: '問2', label: '問2' },
-    { value: '問3', label: '問3' },
-    { value: '(1)', label: '(1)' },
-    { value: '(2)', label: '(2)' },
-    { value: '(3)', label: '(3)' },
-    { value: '大問1(1)', label: '大問1(1)' },
-    { value: '大問1(2)', label: '大問1(2)' },
-  ];
 
   // 問題形式タイプ: 'big-small' = 大問+小問, 'small-only' = 問のみ, 'free' = 自由入力
   const [problemFormat, setProblemFormat] = useState<'big-small' | 'small-only' | 'free'>('big-small');
@@ -147,13 +147,6 @@ export default function Home() {
   const [results, setResults] = useState<GradingResponseItem[] | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [requirePlan, setRequirePlan] = useState(false);
-
-  // 回数消費確認用の状態
-  const [usageConsumed, setUsageConsumed] = useState<{
-    consumed: boolean;
-    previousCount: number | null;
-    currentCount: number | null;
-  } | null>(null);
 
   // 画像圧縮中の状態
   const [isCompressing, setIsCompressing] = useState(false);
@@ -393,15 +386,17 @@ export default function Home() {
         return { success: true, results: data.results };
       }
 
-      return { success: false, error: 'レスポンスの形式が不正です' };
+      return { success: false, error: '採点結果を正しく取得できませんでした。再度お試しください。' };
     } catch (err) {
-      console.error('[BatchGrade] Error grading student:', student.name, err);
-      return { success: false, error: err instanceof Error ? err.message : '通信エラー' };
+      console.error('[BatchGrade] Error grading student:', student.name, err instanceof Error ? err.message : err);
+      return { success: false, error: '採点処理中にエラーが発生しました。再度お試しください。' };
     }
   };
 
   // 一括OCR確認フロー: OCRを実行（採点前）
   const startBatchOcr = async () => {
+    if (!acquireRequestLock()) return;
+    try {
     if (!validateBatchStudents()) return;
     if (selectedProblems.length === 0) {
       setError('採点する問題を選択してください');
@@ -523,15 +518,17 @@ export default function Home() {
               console.log(`[BatchOCR] Layout for ${student.name}/${label}:`, data.ocrResult.layout);
             }
           } else {
-            // OCRエラーの場合は空文字で初期化
-            newOcrResults[student.id][label] = { text: '', charCount: 0 };
-            newConfirmedTexts[student.id][label] = '';
+            // OCRエラーの場合はエラーメッセージを表示
+            const ocrErrorMsg = `[読み取りエラー] ${data.message || '文字の読み取りに失敗しました。画像を確認してください。'}`;
+            newOcrResults[student.id][label] = { text: ocrErrorMsg, charCount: 0 };
+            newConfirmedTexts[student.id][label] = ocrErrorMsg;
             console.error(`[BatchOCR] Error for student ${student.name}, label ${label}:`, data.message);
           }
         } catch (err) {
           console.error(`[BatchOCR] Error for student ${student.name}, label ${label}:`, err);
-          newOcrResults[student.id][label] = { text: '', charCount: 0 };
-          newConfirmedTexts[student.id][label] = '';
+          const catchErrorMsg = '[読み取りエラー] 通信エラーが発生しました。ネットワーク接続を確認してください。';
+          newOcrResults[student.id][label] = { text: catchErrorMsg, charCount: 0 };
+          newConfirmedTexts[student.id][label] = catchErrorMsg;
         }
       }
     }
@@ -541,6 +538,9 @@ export default function Home() {
     setBatchLayouts(newLayouts);  // layout情報を保存
     setBatchOcrStep('confirm');
     setCurrentBatchOcrIndex(0);
+    } finally {
+      releaseRequestLock();
+    }
   };
 
   // 一括OCR確認フロー: 確認済みテキストで採点を実行
@@ -678,10 +678,10 @@ export default function Home() {
         return { success: true, results: data.results };
       }
 
-      return { success: false, error: 'レスポンスの形式が不正です' };
+      return { success: false, error: '採点結果を正しく取得できませんでした。再度お試しください。' };
     } catch (err) {
-      console.error('[BatchGrade] Error grading student with confirmed:', student.name, err);
-      return { success: false, error: err instanceof Error ? err.message : '通信エラー' };
+      console.error('[BatchGrade] Error grading student with confirmed:', student.name, err instanceof Error ? err.message : err);
+      return { success: false, error: '採点処理中にエラーが発生しました。再度お試しください。' };
     }
   };
 
@@ -691,89 +691,6 @@ export default function Home() {
     setBatchOcrResults({});
     setBatchConfirmedTexts({});
     setCurrentBatchOcrIndex(0);
-  };
-
-  // 一括処理: 全生徒の採点を実行（OCR確認なし、直接採点）
-  const executeBatchGrading = async () => {
-    if (!validateBatchStudents()) return;
-    if (selectedProblems.length === 0) {
-      setError('採点する問題を選択してください');
-      return;
-    }
-
-    // 使用量チェック
-    if (usageInfo && usageInfo.usageLimit !== null && usageInfo.usageCount !== null) {
-      const requiredUsage = batchStudents.length;
-      const remainingUsage = usageInfo.usageLimit - usageInfo.usageCount;
-      if (remainingUsage < requiredUsage) {
-        setError(`使用可能回数が不足しています（残り${remainingUsage}回、必要${requiredUsage}回）`);
-        setRequirePlan(true);
-        return;
-      }
-    }
-
-    setError(null);
-    setIsLoading(true);
-
-    // 状態を初期化
-    const studentsWithStatus = batchStudents.map((s) => ({ ...s, status: 'pending' as const }));
-    setBatchStudents(studentsWithStatus);
-    setBatchState({
-      students: studentsWithStatus,
-      currentIndex: 0,
-      isProcessing: true,
-      completedCount: 0,
-      successCount: 0,
-      errorCount: 0,
-    });
-
-    let successCount = 0;
-    let errorCount = 0;
-
-    // 順次処理
-    for (let i = 0; i < batchStudents.length; i++) {
-      const student = batchStudents[i];
-
-      // 現在の生徒を処理中に設定
-      setBatchStudents((prev) =>
-        prev.map((s, idx) => (idx === i ? { ...s, status: 'processing' } : s))
-      );
-      setBatchState((prev) => ({ ...prev, currentIndex: i }));
-
-      // 採点を実行
-      const result = await gradeOneStudent(student, selectedProblems, gradingStrictness);
-
-      if (result.success && result.results) {
-        successCount++;
-        setBatchStudents((prev) =>
-          prev.map((s, idx) =>
-            idx === i ? { ...s, status: 'success', results: result.results } : s
-          )
-        );
-      } else {
-        errorCount++;
-        setBatchStudents((prev) =>
-          prev.map((s, idx) =>
-            idx === i ? { ...s, status: 'error', errorMessage: result.error } : s
-          )
-        );
-      }
-
-      setBatchState((prev) => ({
-        ...prev,
-        completedCount: i + 1,
-        successCount,
-        errorCount,
-      }));
-    }
-
-    setBatchState((prev) => ({ ...prev, isProcessing: false }));
-    setIsLoading(false);
-
-    // 使用量を更新
-    if (successCount > 0) {
-      await refreshUsageInfo();
-    }
   };
 
   // 一括処理: ZIPダウンロード
@@ -809,7 +726,7 @@ export default function Home() {
           if (!result.result?.grading_result) continue;
 
           const gr = result.result.grading_result;
-          const score = gr.score <= 10 ? Math.round(gr.score * 10) : Math.round(gr.score);
+          const score = Math.max(0, Math.min(100, Math.round(gr.score)));
           const today = new Date().toLocaleDateString('ja-JP', {
             year: 'numeric',
             month: 'long',
@@ -818,6 +735,15 @@ export default function Home() {
           const deductions = gr.deduction_details || [];
           const maxPoints = problemPoints[result.label];
           const earnedPoints = maxPoints ? Math.round((score / 100) * maxPoints) : null;
+
+          // XSS対策: ユーザー入力をエスケープ
+          const safeStudentName = escapeHtml(student.name || '');
+          const safeTeacherName = teacherName ? escapeHtml(teacherName) : '';
+          const safeLabel = escapeHtml(result.label || '');
+          const safeFeedbackGoodPoint = escapeHtml(gr.feedback_content?.good_point || '');
+          const safeFeedbackImprovement = escapeHtml(gr.feedback_content?.improvement_advice || '');
+          const safeFeedbackRewrite = escapeHtml(gr.feedback_content?.rewrite_example || '');
+          const safeRecognizedText = escapeHtml(gr.recognized_text || gr.recognized_text_full || '');
 
           // HTMLレポートを作成
           container.innerHTML = `
@@ -834,7 +760,7 @@ export default function Home() {
               <!-- 問題番号 -->
               <div style="margin-bottom: 24px; padding-bottom: 16px; border-bottom: 3px solid #6366f1;">
                 <span style="display: inline-block; background: #4f46e5; color: white; padding: 12px 24px; border-radius: 8px; font-size: 20px; font-weight: bold;">
-                  ${result.label}
+                  ${safeLabel}
                 </span>
               </div>
 
@@ -842,11 +768,11 @@ export default function Home() {
               <div style="display: flex; justify-content: space-between; align-items: flex-end; border-bottom: 2px solid #1e293b; padding-bottom: 16px; margin-bottom: 24px;">
                 <div>
                   <h1 style="font-size: 24px; font-weight: bold; margin: 0 0 8px 0;">採点レポート</h1>
-                  <p style="font-size: 14px; color: #475569; margin: 0;">生徒名: ${student.name}</p>
+                  <p style="font-size: 14px; color: #475569; margin: 0;">生徒名: ${safeStudentName}</p>
                 </div>
                 <div style="text-align: right;">
                   <p style="font-size: 12px; color: #64748b; margin: 0;">実施日: ${today}</p>
-                  ${teacherName ? `<p style="font-size: 12px; color: #475569; margin: 0;">添削担当: ${teacherName}</p>` : ''}
+                  ${safeTeacherName ? `<p style="font-size: 12px; color: #475569; margin: 0;">添削担当: ${safeTeacherName}</p>` : ''}
                 </div>
               </div>
 
@@ -861,28 +787,28 @@ export default function Home() {
                   ${earnedPoints !== null ? `<p style="margin-top: 8px; font-size: 14px; color: #475569; font-weight: 600;">得点: ${earnedPoints} / ${maxPoints} 点</p>` : ''}
                   ${deductions.length > 0 ? `
                     <ul style="margin-top: 12px; font-size: 12px; color: #475569; list-style: none; padding: 0; text-align: left;">
-                      ${deductions.map((d: { reason?: string; deduction_percentage?: number }) => `<li style="margin-bottom: 4px;">・${d.reason} で -${d.deduction_percentage}%</li>`).join('')}
+                      ${deductions.map((d: { reason?: string; deduction_percentage?: number }) => `<li style="margin-bottom: 4px;">・${escapeHtml(d.reason || '')} で -${d.deduction_percentage}%</li>`).join('')}
                     </ul>
                   ` : ''}
                 </div>
                 <div style="width: 67%;">
                   <div style="background: #f0fdf4; border-radius: 12px; padding: 16px; border: 1px solid #bbf7d0; margin-bottom: 16px;">
                     <h3 style="font-weight: bold; color: #166534; margin: 0 0 8px 0; font-size: 14px;">👍 良かった点</h3>
-                    <p style="font-size: 13px; color: #475569; margin: 0;">${gr.feedback_content?.good_point || ''}</p>
+                    <p style="font-size: 13px; color: #475569; margin: 0;">${safeFeedbackGoodPoint}</p>
                   </div>
                   <div style="background: #eef2ff; border-radius: 12px; padding: 16px; border: 1px solid #c7d2fe;">
                     <h3 style="font-weight: bold; color: #3730a3; margin: 0 0 8px 0; font-size: 14px;">💡 改善のアドバイス</h3>
-                    <p style="font-size: 13px; color: #475569; margin: 0;">${gr.feedback_content?.improvement_advice || ''}</p>
+                    <p style="font-size: 13px; color: #475569; margin: 0;">${safeFeedbackImprovement}</p>
                   </div>
                 </div>
               </div>
 
               <!-- AI読み取り結果 -->
-              ${gr.recognized_text || gr.recognized_text_full ? `
+              ${safeRecognizedText ? `
               <div style="margin-bottom: 24px;">
                 <h2 style="font-size: 16px; font-weight: bold; border-left: 4px solid #60a5fa; padding-left: 12px; margin: 0 0 16px 0;">AI読み取り結果（確認用）</h2>
                 <div style="background: #eff6ff; border-radius: 12px; padding: 16px; border: 1px solid #bfdbfe;">
-                  <p style="font-size: 13px; color: #475569; margin: 0; white-space: pre-wrap; font-family: monospace;">${gr.recognized_text || gr.recognized_text_full}</p>
+                  <p style="font-size: 13px; color: #475569; margin: 0; white-space: pre-wrap; font-family: monospace;">${safeRecognizedText}</p>
                 </div>
               </div>
               ` : ''}
@@ -901,7 +827,7 @@ export default function Home() {
                   <tbody>
                     ${deductions.map((d: { reason?: string; deduction_percentage?: number }) => `
                       <tr style="border-bottom: 1px solid #f1f5f9;">
-                        <td style="padding: 12px; color: #475569;">${d.reason}</td>
+                        <td style="padding: 12px; color: #475569;">${escapeHtml(d.reason || '')}</td>
                         <td style="padding: 12px; color: #ef4444; font-weight: bold; text-align: right;">-${d.deduction_percentage}%</td>
                       </tr>
                     `).join('')}
@@ -914,7 +840,7 @@ export default function Home() {
               <div style="margin-bottom: 24px;">
                 <h2 style="font-size: 16px; font-weight: bold; border-left: 4px solid #facc15; padding-left: 12px; margin: 0 0 16px 0;">満点の書き直し例</h2>
                 <div style="background: #fefce8; border-radius: 12px; padding: 24px; border: 1px solid #fef08a;">
-                  <p style="font-size: 14px; color: #1e293b; margin: 0; line-height: 1.8;">${gr.feedback_content?.rewrite_example || ''}</p>
+                  <p style="font-size: 14px; color: #1e293b; margin: 0; line-height: 1.8;">${safeFeedbackRewrite}</p>
                 </div>
               </div>
             </div>
@@ -1009,8 +935,8 @@ export default function Home() {
           // 更新されたgrading_resultを作成
           const updatedGradingResult = {
             ...currentGradingResult,
-            // スコアは0-100形式で保存（normalizeScoreが <= 10 を10倍するので、ここでは10で割る）
-            score: updates.score !== undefined ? updates.score / 10 : currentGradingResult.score,
+            // スコアは0-100形式でそのまま保存
+            score: updates.score !== undefined ? updates.score : currentGradingResult.score,
             recognized_text: updates.recognized_text ?? currentGradingResult.recognized_text,
             feedback_content: {
               ...currentFeedback,
@@ -1062,8 +988,6 @@ export default function Home() {
     }));
 
     for (const student of failedStudents) {
-      const idx = batchStudents.findIndex((s) => s.id === student.id);
-
       setBatchStudents((prev) =>
         prev.map((s) => (s.id === student.id ? { ...s, status: 'processing' } : s))
       );
@@ -1239,8 +1163,7 @@ export default function Home() {
 
     const normalizeScore = (score: number): number => {
       if (typeof score !== 'number' || Number.isNaN(score)) return 0;
-      if (score <= 10) return Math.min(100, Math.round(score * 10));
-      return Math.min(100, Math.round(score));
+      return Math.max(0, Math.min(100, Math.round(score)));
     };
 
     const score = normalizeScore(gradingResult.score);
@@ -1650,10 +1573,6 @@ export default function Home() {
     return foundIndex >= 0 ? foundIndex : 0;
   };
 
-  const MAX_TOTAL_SIZE_BYTES = 4.2 * 1024 * 1024;
-  const MAX_SINGLE_FILE_SIZE_BYTES = 4.3 * 1024 * 1024;
-  const PDF_SIZE_ADVICE = 'PDFはページ番号を指定すると必要ページだけ抽出して軽くできます。難しい場合はオンライン圧縮ツール（iLovePDF等）で圧縮してから再度お試しください。';
-
   const parsePageRange = (input?: string): number[] => {
     if (!input) return [];
     const pages = new Set<number>();
@@ -1709,7 +1628,7 @@ export default function Home() {
     }
   };
 
-  const shouldCompressImages = (files: File[]): boolean => {
+  const shouldCompressImages = useCallback((files: File[]): boolean => {
     const imageFiles = files.filter((file) => isImageFile(file));
     if (imageFiles.length === 0) return false;
 
@@ -1726,32 +1645,26 @@ export default function Home() {
 
     const imageBudget = MAX_TOTAL_SIZE_BYTES - nonImageSize;
     return imageSize > imageBudget;
-  };
+  }, []);
 
-  // 圧縮タイムアウト: ファイル数に応じて動的に設定（PC版で高解像度画像が多い場合に対応）
-  const getCompressionTimeout = (fileCount: number) => {
-    // 基本: 1ファイルあたり6秒 + バッファ10秒（最低15秒、最大60秒）
-    const baseTimeout = Math.min(60000, Math.max(15000, fileCount * 6000 + 10000));
-    return baseTimeout;
-  };
-
-  const compressWithTimeout = async (
+  const compressWithTimeout = useCallback(async (
     files: File[],
     onProgress?: (progress: number, currentFile: string) => void
   ): Promise<File[]> => {
     const startTime = Date.now();
     const totalSize = files.reduce((sum, f) => sum + f.size, 0);
     const timeoutMs = getCompressionTimeout(files.length);
+    let timeoutId: ReturnType<typeof setTimeout> | undefined;
     console.log(`[Page] Compression start: ${files.length} files, ${(totalSize / 1024 / 1024).toFixed(2)}MB, timeout: ${timeoutMs}ms`);
 
     try {
       // 外側タイムアウト（最終防衛線）
-      const timeoutPromise = new Promise<File[]>((resolve) =>
-        setTimeout(() => {
+      const timeoutPromise = new Promise<File[]>((resolve) => {
+        timeoutId = setTimeout(() => {
           console.warn(`[Page] Compression timeout after ${timeoutMs}ms, using original files`);
           resolve(files);
-        }, timeoutMs)
-      );
+        }, timeoutMs);
+      });
 
       const result = await Promise.race([
         compressMultipleImages(files, onProgress),
@@ -1765,8 +1678,12 @@ export default function Home() {
     } catch (err) {
       console.error('[Page] Compression error:', err);
       return files; // エラー時は元ファイル
+    } finally {
+      if (timeoutId) {
+        clearTimeout(timeoutId);
+      }
     }
-  };
+  }, []);
 
   const prepareFilesForUpload = async (
     files: File[],
@@ -1941,6 +1858,9 @@ export default function Home() {
           return Array.from(byLabel.values());
         });
         if (Array.isArray(data.results)) ingestRegradeInfo(data.results);
+        if (data.usageReleaseWarning) {
+          setError('利用回数の返却に問題が発生しました。お問い合わせください。');
+        }
         refreshUsageInfo().catch((err) => {
           console.warn('Failed to refresh usage info:', err);
         });
@@ -1980,11 +1900,6 @@ export default function Home() {
     }
     setIsDragging(false);
   }, []);
-
-  // ファイル処理の共通ロジック
-  const MAX_FILE_SIZE = 50 * 1024 * 1024; // 50MB
-  const MAX_FILES = 10;
-  const VALID_EXTENSIONS = /\.(jpg|jpeg|png|gif|webp|bmp|heic|heif|pdf)$/i;
 
   const processFiles = useCallback(async (files: File[]) => {
     console.log(`[Page] File selected: ${files.length} files`);
@@ -2067,19 +1982,18 @@ export default function Home() {
     // 新しいファイルに対して役割を自動推定（初期値として）
     const initialRoles: Record<number, FileRole> = {};
     processedFiles.forEach((file, i) => {
-      const idx = i; // モーダル内でのインデックス
       const name = file.name.toLowerCase();
       if (/(answer|ans|student|解答|答案|生徒)/.test(name)) {
-        initialRoles[idx] = 'answer';
+        initialRoles[i] = 'answer';
       } else if (/(problem|question|課題|設問|問題|本文)/.test(name)) {
-        initialRoles[idx] = 'problem';
+        initialRoles[i] = 'problem';
       } else if (/(model|key|模範|解説|正解|解答例)/.test(name)) {
-        initialRoles[idx] = 'model';
+        initialRoles[i] = 'model';
       } else {
         // デフォルト: 1つ目は答案、2つ目以降は問題+模範解答
         const existingAnswers = Object.values(initialRoles).filter(r => r === 'answer' || r === 'answer_problem' || r === 'all').length;
-        if (existingAnswers === 0) initialRoles[idx] = 'answer';
-        else initialRoles[idx] = 'problem_model';  // 問題と模範解答が一緒のケースが多い
+        if (existingAnswers === 0) initialRoles[i] = 'answer';
+        else initialRoles[i] = 'problem_model';  // 問題と模範解答が一緒のケースが多い
       }
     });
 
@@ -2089,7 +2003,7 @@ export default function Home() {
       setPendingFileRoles(initialRoles);
       setShowFileRoleModal(true);
     }
-  }, []);
+  }, [compressWithTimeout, shouldCompressImages]);
 
   const handleFileChange = useCallback(async (e: React.ChangeEvent<HTMLInputElement>) => {
     if (e.target.files && e.target.files.length > 0) {
@@ -2380,6 +2294,9 @@ export default function Home() {
       return;
     }
 
+    // バリデーション通過後、即座にボタンを無効化して二重タップを防止
+    setIsLoading(true);
+
     let targetLabels = selectedProblems;
     if (targetLabels.length === 0) {
       const currentLabel = generateProblemLabel();
@@ -2438,6 +2355,7 @@ export default function Home() {
       const hasPdf = filesToUse.some(f => f.type === 'application/pdf');
       const baseMessage = `ファイルの合計サイズが大きすぎます（${totalMB}MB、${fileCount}枚）。合計${maxMB}MB以下になるように、ファイルを分割するか、写真の枚数を減らしてください。`;
       setError(hasPdf ? `${baseMessage} ${PDF_SIZE_ADVICE}` : baseMessage);
+      setIsLoading(false);
       return;
     }
 
@@ -2487,10 +2405,11 @@ export default function Home() {
           } else if (res.status === 504) {
             fallbackMessage = 'OCRサーバーがタイムアウトしました。時間をおいて再試行してください。';
           } else {
-            fallbackMessage = `OCRサーバーの応答が不正です（status ${res.status}）。`;
+            fallbackMessage = 'サーバーからの応答を処理できませんでした。時間をおいて再度お試しください。';
           }
           setError(fallbackMessage);
           setOcrFlowStep('idle');
+          setIsLoading(false);
           return;
         }
 
@@ -2503,22 +2422,25 @@ export default function Home() {
           } else if (res.status === 504) {
             message = 'OCRサーバーがタイムアウトしました。時間をおいて再試行してください。';
           } else {
-            message = `OCRリクエストが失敗しました（status ${res.status}）。`;
+            message = '読み取り処理に失敗しました。時間をおいて再度お試しください。';
           }
           setError(message);
           setOcrFlowStep('idle');
+          setIsLoading(false);
           return;
         }
 
         if (data.status === 'error') {
           setError(data.message ?? 'OCR処理中にエラーが発生しました');
           setOcrFlowStep('idle');
+          setIsLoading(false);
           return;
         }
 
         if (!data.ocrResult) {
           setError('OCR結果が取得できませんでした');
           setOcrFlowStep('idle');
+          setIsLoading(false);
           return;
         }
 
@@ -2540,6 +2462,7 @@ export default function Home() {
         console.error('OCR error:', err);
         setError('OCR処理中にエラーが発生しました。');
         setOcrFlowStep('idle');
+        setIsLoading(false);
         return;
       }
     }
@@ -2547,6 +2470,7 @@ export default function Home() {
     setOcrResults(newOcrResults);
     setOcrFlowStep('confirm');
     setCurrentOcrLabel('');
+    setIsLoading(false);
   };
 
   // 確認済みテキストで採点を実行
@@ -2710,6 +2634,9 @@ export default function Home() {
           return Array.from(byLabel.values());
         });
         if (Array.isArray(data.results)) ingestRegradeInfo(data.results);
+        if (data.usageReleaseWarning) {
+          setError('利用回数の返却に問題が発生しました。お問い合わせください。');
+        }
         refreshUsageInfo().catch((err) => {
           console.warn('Failed to refresh usage info:', err);
         });
@@ -2908,7 +2835,7 @@ export default function Home() {
         data = JSON.parse(responseText);
       } catch (parseError) {
         console.error('[Page] Failed to parse JSON:', parseError);
-        setError(`サーバーエラー: ${responseText.substring(0, 200)}`);
+        setError('サーバーからの応答を処理できませんでした。時間をおいて再度お試しください。');
         return;
       }
       console.log('[Page] Response data:', data);
@@ -2928,15 +2855,8 @@ export default function Home() {
           return Array.from(byLabel.values());
         });
         if (Array.isArray(data.results)) ingestRegradeInfo(data.results);
-
-        // 回数消費情報をログ出力・保存
-        if (data.usageInfo) {
-          // 現在の使用回数を保存（APIから返された最新情報）
-          setUsageConsumed({
-            consumed: true,
-            previousCount: usageInfo?.usageCount ?? null,
-            currentCount: data.usageInfo.usageCount ?? null,
-          });
+        if (data.usageReleaseWarning) {
+          setError('利用回数の返却に問題が発生しました。お問い合わせください。');
         }
 
         // 利用情報を更新（エラーが発生しても続行、非同期で実行）
@@ -2950,8 +2870,8 @@ export default function Home() {
       if (err instanceof Error && err.name === 'AbortError') {
         setError('採点処理がタイムアウトしました（5分経過）。画像ファイルのサイズが大きい場合、圧縮してから再度お試しください。');
       } else {
-        const message = err instanceof Error ? err.message : '通信エラーが発生しました。';
-        setError(message);
+        console.error('[Page] Grading error detail:', err instanceof Error ? err.message : err);
+        setError('採点処理中にエラーが発生しました。ネットワーク接続を確認し、再度お試しください。');
       }
     } finally {
       console.log('[Page] Grading process complete, clearing loading state');
@@ -3057,7 +2977,7 @@ export default function Home() {
       try {
         data = JSON.parse(responseText);
       } catch {
-        setError(`サーバーエラー: ${responseText.substring(0, 200)}`);
+        setError('サーバーからの応答を処理できませんでした。時間をおいて再度お試しください。');
         return;
       }
 
@@ -3091,11 +3011,7 @@ export default function Home() {
 
   const normalizeScore = (score: number): number => {
     if (typeof score !== 'number' || Number.isNaN(score)) return 0;
-    if (score <= 10) {
-      const result = Math.min(100, Math.round(score * 10));
-      return result;
-    }
-    return Math.min(100, Math.round(score));
+    return Math.max(0, Math.min(100, Math.round(score)));
   };
 
   // 次の問題へ進むためのリセット関数（ファイルも全てリセット）
@@ -3119,7 +3035,6 @@ export default function Home() {
     setEditedFeedbacks({});
     setEditingFields({});
     setPdfPageInfo({ answerPage: '', problemPage: '', modelAnswerPage: '' });
-    setUsageConsumed(null);
     setIsLoading(false);
     setRegradingLabel(null);
 
@@ -3159,7 +3074,6 @@ export default function Home() {
     setRegradeByLabel({});
     setEditedFeedbacks({});
     setEditingFields({});
-    setUsageConsumed(null);
     setIsLoading(false);
     setRegradingLabel(null);
 
@@ -3527,8 +3441,18 @@ export default function Home() {
           </div>
         </div>
 
+        {/* Welcome Guide for first-time trial users */}
+        {user && usageInfo?.accessType === 'trial' && usageInfo?.usageCount === 0 && (
+          <WelcomeGuide
+            remainingCount={usageInfo.remainingCount ?? 3}
+            onStartTrial={() => {
+              document.getElementById('grading-form')?.scrollIntoView({ behavior: 'smooth' });
+            }}
+          />
+        )}
+
         {/* Main Card */}
-        <div className="bg-white/70 backdrop-blur-2xl shadow-[0_20px_60px_-15px_rgba(0,0,0,0.1)] rounded-[2.5rem] overflow-hidden border border-white/60 ring-1 ring-white/60 transition-all duration-500 hover:shadow-[0_30px_70px_-15px_rgba(79,70,229,0.15)] relative">
+        <div id="grading-form" className="bg-white/70 backdrop-blur-2xl shadow-[0_20px_60px_-15px_rgba(0,0,0,0.1)] rounded-[2.5rem] overflow-hidden border border-white/60 ring-1 ring-white/60 transition-all duration-500 hover:shadow-[0_30px_70px_-15px_rgba(79,70,229,0.15)] relative">
           <div className="absolute top-0 left-0 w-full h-2 bg-gradient-to-r from-indigo-500 via-violet-500 to-fuchsia-500"></div>
           <div className="p-8 md:p-14">
             {/* ========== Mode Toggle Tabs ========== */}
@@ -4515,6 +4439,7 @@ export default function Home() {
                         </div>
                         <p className="text-sm text-red-700 font-bold">{error}</p>
                       </div>
+                      <p className="text-xs text-red-400 ml-14 mt-1">※通信エラーの場合、利用回数は消費されていません。</p>
                       {requirePlan && (
                         <div className="mt-3 ml-14">
                           <Link
@@ -4539,6 +4464,16 @@ export default function Home() {
                         <span className="flex items-center">
                           <Loader2 className="animate-spin -ml-1 mr-3 h-6 w-6" />
                           {currentOcrLabel ? `「${currentOcrLabel}」を読み取り中...` : '読み取り中...'}
+                        </span>
+                      ) : isCompressing ? (
+                        <span className="flex items-center">
+                          <Loader2 className="animate-spin -ml-1 mr-3 h-6 w-6" />
+                          画像を圧縮中...
+                        </span>
+                      ) : isLoading ? (
+                        <span className="flex items-center">
+                          <Loader2 className="animate-spin -ml-1 mr-3 h-6 w-6" />
+                          準備中...
                         </span>
                       ) : (
                         <span className="flex items-center">
@@ -5234,16 +5169,14 @@ export default function Home() {
 
           // エラーの場合や結果がない場合
           if (!gradingResult || res.error) {
-            if (res.error) {
-              return (
-                <div key={index} className="mt-8 bg-red-50 border border-red-200 rounded-2xl p-6">
-                  <h3 className="text-lg font-bold text-red-800 mb-2">{res.label} - エラー</h3>
-                  <p className="text-red-700">{res.error}</p>
-                </div>
-              );
-            }
-            console.warn(`[Page] No grading result for ${res.label}:`, res);
-            return null;
+            const errorMessage = res.error || res.result?.message || res.result?.user_message || 'AIからの応答を解析できませんでした。もう一度お試しください。';
+            return (
+              <div key={index} className="mt-8 bg-red-50 border border-red-200 rounded-2xl p-6">
+                <h3 className="text-lg font-bold text-red-800 mb-2">{res.label} - エラー</h3>
+                <p className="text-red-700">{errorMessage}</p>
+                <p className="text-sm text-slate-500 mt-3">画像の品質や問題番号の指定を確認して、もう一度お試しください。この回の無料分は消費されていません。</p>
+              </div>
+            );
           }
 
           const deductionDetails: DeductionDetail[] = gradingResult.deduction_details ?? [];

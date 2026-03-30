@@ -47,8 +47,7 @@ interface ResultUpdates {
 const normalizeScore = (score: number | undefined | null): number | null => {
   if (score === undefined || score === null) return null;
   if (typeof score !== 'number' || Number.isNaN(score)) return null;
-  if (score <= 10) return Math.round(score * 10);
-  return Math.round(score);
+  return Math.max(0, Math.min(100, Math.round(score)));
 };
 
 // スコアに応じた色を取得

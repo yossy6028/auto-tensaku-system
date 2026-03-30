@@ -43,11 +43,12 @@ export function UsageStatus({ compact = false, className = '' }: UsageStatusProp
   // 無料体験中のユーザー
   const isTrial = usageInfo.accessType === 'trial';
   const isTrialExpired = freeAccessInfo?.freeAccessType === 'expired';
-  const trialUsageLimit = systemSettings?.freeTrialUsageLimit || 3;
+  const trialUsageLimit = systemSettings?.freeTrialUsageLimit || 5;
 
   // 管理者アカウントの場合はsubscriptionチェックをスキップ
   // 無料体験中のユーザーもsubscriptionチェックをスキップ
-  if (!subscription && !isAdmin && !isTrial && !isTrialExpired) {
+  // canUseがtrueの場合は、プロフィール読み込み中の可能性があるため表示しない
+  if (!subscription && !isAdmin && !isTrial && !isTrialExpired && !usageInfo.canUse) {
     return (
       <div className={`flex items-center text-amber-600 ${className}`}>
         <AlertCircle className="w-4 h-4 mr-2" />

@@ -1,6 +1,6 @@
 -- =====================================================
 -- マイグレーション: 無料体験の時間制限撤廃
--- 目的: 時間ベースの判定を削除し、回数（3回）のみで無料体験を管理
+-- 目的: 時間ベースの判定を削除し、回数（5回）のみで無料体験を管理
 -- 背景: free_trial_started_at がアカウント作成時にセットされ、
 --        7日経過すると usage_count=0 でも期限切れ判定される問題を解消
 -- 適用: Supabase SQL Editor で実行
@@ -31,7 +31,7 @@ BEGIN
     -- システム設定を取得
     SELECT (value = 'true') INTO v_free_access_enabled FROM system_settings WHERE key = 'free_access_enabled';
     SELECT CASE WHEN value = 'null' THEN NULL ELSE value::TIMESTAMPTZ END INTO v_free_access_until FROM system_settings WHERE key = 'free_access_until';
-    SELECT COALESCE(value::INTEGER, 3) INTO v_free_trial_usage_limit FROM system_settings WHERE key = 'free_trial_usage_limit';
+    SELECT COALESCE(value::INTEGER, 5) INTO v_free_trial_usage_limit FROM system_settings WHERE key = 'free_trial_usage_limit';
 
     -- 期間限定無料開放チェック
     IF v_free_access_enabled AND (v_free_access_until IS NULL OR v_free_access_until > NOW()) THEN
@@ -179,8 +179,8 @@ BEGIN
     -- 4. 無料体験チェック（フォールバック・回数のみ）
     SELECT * INTO v_profile FROM user_profiles WHERE id = p_user_id;
 
-    IF v_profile IS NOT NULL AND v_profile.free_trial_started_at IS NOT NULL THEN
-        SELECT COALESCE(value::INTEGER, 3) INTO v_free_trial_usage_limit FROM system_settings WHERE key = 'free_trial_usage_limit';
+    IF FOUND AND v_profile.free_trial_started_at IS NOT NULL THEN
+        SELECT COALESCE(value::INTEGER, 5) INTO v_free_trial_usage_limit FROM system_settings WHERE key = 'free_trial_usage_limit';
 
         -- カスタム設定を優先
         IF v_profile.custom_trial_usage_limit IS NOT NULL THEN
@@ -261,7 +261,7 @@ BEGIN
     -- 2. 無料開放チェック（枠消費不要）
     BEGIN
         SELECT * INTO v_free_access FROM public.check_free_access(p_user_id);
-        IF v_free_access.has_free_access AND v_free_access.free_access_type = 'system_free_access' THEN
+        IF v_free_access.has_free_access AND v_free_access.free_access_type = 'promo' THEN
             RETURN QUERY SELECT
                 TRUE, v_free_access.message,
                 NULL::UUID, NULL::INTEGER, NULL::INTEGER,
@@ -311,8 +311,8 @@ BEGIN
         END IF;
 
         -- アトミックにインクリメント（枠確保）
-        UPDATE public.subscriptions
-        SET usage_count = usage_count + p_count, updated_at = NOW()
+        UPDATE public.subscriptions AS s
+        SET usage_count = s.usage_count + p_count, updated_at = NOW()
         WHERE id = v_subscription.sub_id;
 
         RETURN QUERY SELECT
@@ -329,8 +329,8 @@ BEGIN
     -- 4. 無料体験: FOR UPDATE でロック → 回数のみで判定 → インクリメント
     SELECT * INTO v_profile FROM user_profiles WHERE id = p_user_id FOR UPDATE;
 
-    IF v_profile IS NOT NULL AND v_profile.free_trial_started_at IS NOT NULL THEN
-        SELECT COALESCE(value::INTEGER, 3) INTO v_free_trial_usage_limit
+    IF FOUND AND v_profile.free_trial_started_at IS NOT NULL THEN
+        SELECT COALESCE(value::INTEGER, 5) INTO v_free_trial_usage_limit
         FROM system_settings WHERE key = 'free_trial_usage_limit';
 
         IF v_profile.custom_trial_usage_limit IS NOT NULL THEN

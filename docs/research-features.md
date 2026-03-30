@@ -94,7 +94,7 @@
 1. プラン変更はいつでも可能（アップグレード即時、ダウングレード次回更新日から）
 2. 解約はいつでも可能（契約期間終了まで利用可）
 3. 回数使い切りで次のリセット日まで利用不可
-4. 初回登録で3回分の無料採点
+4. 初回登録で5回分の無料採点
 5. クレジットカード対応（Visa、Mastercard、Amex、JCB）、Stripe決済
 
 #### Checkout状態表示
@@ -359,7 +359,7 @@
 
 | 項目 | 値 |
 |------|-----|
-| 無料体験回数 | 3回（`systemSettings.freeTrialUsageLimit`、デフォルト3） |
+| 無料体験回数 | 5回（`systemSettings.freeTrialUsageLimit`、デフォルト5） |
 | 無料体験期間 | 7日（`systemSettings.freeTrialDays`、デフォルト7） |
 | 体験終了条件 | 回数使い切り **または** 期間終了 |
 

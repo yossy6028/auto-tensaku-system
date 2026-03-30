@@ -13,11 +13,12 @@ const OCR_CONFIG: Record<string, unknown> = {
     mediaResolution: "high"
 };
 
-const GRADING_CONFIG = {
+const GRADING_CONFIG: Record<string, unknown> = {
     temperature: 0,
     topP: 0.4,
     topK: 32,
-    maxOutputTokens: 8192
+    maxOutputTokens: 8192,
+    responseMimeType: "application/json"
 };
 
 export class EduShiftGrader {
@@ -103,26 +104,26 @@ export class EduShiftGrader {
         });
 
         const raw = (await result.response.text()) || "";
-        const cleaned = raw.replace(/```json\\s*|```/g, "").trim();
+        const cleaned = raw.replace(/```json\s*|```/g, "").trim();
 
         try {
             const parsed = JSON.parse(cleaned);
             const text = String(parsed.text ?? "").trim();
             const charCount = Number.isFinite(parsed.char_count)
                 ? Number(parsed.char_count)
-                : text.replace(/\\s+/g, "").length;
+                : text.replace(/\s+/g, "").length;
             return { text, charCount };
         } catch (e) {
             console.error("Failed to parse OCR response, returning raw text", cleaned);
             const fallbackText = cleaned;
-            return { text: fallbackText, charCount: fallbackText.replace(/\\s+/g, "").length };
+            return { text: fallbackText, charCount: fallbackText.replace(/\s+/g, "").length };
         }
     }
 
     private async executeGrading(targetLabel: string, ocr: { text: string; charCount: number }, answerKeyImagePart: any, problemImagePart: any) {
         const sanitizedLabel = targetLabel.replace(/[<>\\\"'`]/g, "").trim() || "target";
         const recognizedText = ocr.text || "";
-        const charCount = ocr.charCount ?? recognizedText.replace(/\\s+/g, "").length;
+        const charCount = ocr.charCount ?? recognizedText.replace(/\s+/g, "").length;
 
         const prompt = `
 Target Problem Label: ${sanitizedLabel}
@@ -155,7 +156,7 @@ character_count_no_spaces: ${charCount}
         const response = await result.response;
         const text = response.text();
 
-        const jsonString = text.replace(/```json\\n|\\n```/g, "").trim();
+        const jsonString = text.replace(/```json\s*|```/g, "").trim();
 
         try {
             const parsedResult = JSON.parse(jsonString);
@@ -186,10 +187,38 @@ character_count_no_spaces: ${charCount}
 
             return parsedResult;
         } catch (e) {
+            // Fallback: try extracting JSON object from the response
+            const braceMatch = text.match(/\{[\s\S]*\}/);
+            if (braceMatch) {
+                try {
+                    const fallbackParsed = JSON.parse(braceMatch[0]);
+                    if (fallbackParsed.grading_result) {
+                        if (!fallbackParsed.grading_result.recognized_text) {
+                            fallbackParsed.grading_result.recognized_text = recognizedText;
+                        }
+                        if (Array.isArray(fallbackParsed.grading_result.deduction_details)) {
+                            let totalDeduction = 0;
+                            fallbackParsed.grading_result.deduction_details = fallbackParsed.grading_result.deduction_details.map((detail: any) => {
+                                const originalDeduction = detail.deduction_percentage || 0;
+                                const roundedDeduction = Math.ceil(originalDeduction / 5) * 5;
+                                const finalDeduction = (originalDeduction > 0 && roundedDeduction === 0) ? 5 : roundedDeduction;
+                                totalDeduction += finalDeduction;
+                                return { ...detail, deduction_percentage: finalDeduction };
+                            });
+                            fallbackParsed.grading_result.score = Math.max(0, 100 - totalDeduction);
+                        }
+                    }
+                    console.warn("Used fallback JSON extraction for grading response");
+                    return fallbackParsed;
+                } catch (_fallbackError) {
+                    // fallback also failed, fall through to error
+                }
+            }
             console.error("Failed to parse JSON response:", text);
             return {
                 status: "error",
-                message: "System Error: Failed to parse AI response.",
+                message: "AIからの応答を解析できませんでした。もう一度お試しください。",
+                user_message: "AIからの応答を解析できませんでした。もう一度お試しください。",
                 debug_info: { raw_response: text }
             };
         }

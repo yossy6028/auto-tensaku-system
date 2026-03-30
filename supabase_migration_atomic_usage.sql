@@ -48,7 +48,7 @@ BEGIN
     -- ★ 2. 無料開放チェック（枠消費不要）
     BEGIN
         SELECT * INTO v_free_access FROM public.check_free_access(p_user_id);
-        IF v_free_access.has_free_access AND v_free_access.free_access_type = 'system_free_access' THEN
+        IF v_free_access.has_free_access AND v_free_access.free_access_type = 'promo' THEN
             RETURN QUERY SELECT
                 TRUE, v_free_access.message,
                 NULL::UUID, NULL::INTEGER, NULL::INTEGER,
@@ -98,8 +98,8 @@ BEGIN
         END IF;
 
         -- ★ アトミックにインクリメント（枠確保）
-        UPDATE public.subscriptions
-        SET usage_count = usage_count + p_count, updated_at = NOW()
+        UPDATE public.subscriptions AS s
+        SET usage_count = s.usage_count + p_count, updated_at = NOW()
         WHERE id = v_subscription.sub_id;
 
         RETURN QUERY SELECT
@@ -116,10 +116,10 @@ BEGIN
     -- ★ 4. 無料体験: FOR UPDATE でロック → 枠確認 → インクリメント
     SELECT * INTO v_profile FROM user_profiles WHERE id = p_user_id FOR UPDATE;
 
-    IF v_profile IS NOT NULL AND v_profile.free_trial_started_at IS NOT NULL THEN
+    IF FOUND AND v_profile.free_trial_started_at IS NOT NULL THEN
         SELECT COALESCE(value::INTEGER, 7) INTO v_free_trial_days
         FROM system_settings WHERE key = 'free_trial_days';
-        SELECT COALESCE(value::INTEGER, 3) INTO v_free_trial_usage_limit
+        SELECT COALESCE(value::INTEGER, 5) INTO v_free_trial_usage_limit
         FROM system_settings WHERE key = 'free_trial_usage_limit';
 
         IF v_profile.custom_trial_days IS NOT NULL THEN
@@ -213,7 +213,7 @@ BEGIN
     -- 無料体験から解放
     SELECT * INTO v_profile FROM user_profiles WHERE id = p_user_id FOR UPDATE;
 
-    IF v_profile IS NOT NULL THEN
+    IF FOUND THEN
         UPDATE user_profiles
         SET free_trial_usage_count = GREATEST(0, free_trial_usage_count - p_count), updated_at = NOW()
         WHERE id = p_user_id;

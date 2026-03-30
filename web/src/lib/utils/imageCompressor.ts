@@ -144,21 +144,6 @@ async function withTimeout<T>(
 }
 
 /**
- * DataURLをBlobに変換
- */
-function dataURLtoBlob(dataURL: string): Blob {
-    const parts = dataURL.split(',');
-    const mime = parts[0].match(/:(.*?);/)?.[1] || 'image/jpeg';
-    const bstr = atob(parts[1]);
-    const n = bstr.length;
-    const u8arr = new Uint8Array(n);
-    for (let i = 0; i < n; i++) {
-        u8arr[i] = bstr.charCodeAt(i);
-    }
-    return new Blob([u8arr], { type: mime });
-}
-
-/**
  * 画像を読み込む（タイムアウト付き）
  */
 function loadImage(file: File, timeoutMs: number = 3000): Promise<HTMLImageElement> {
@@ -205,7 +190,7 @@ async function canvasToJpegBlob(
     canvas: HTMLCanvasElement,
     quality: number
 ): Promise<Blob | null> {
-    const toBlobPromise = new Promise<Blob | null>((resolve, reject) => {
+    const toBlobPromise = new Promise<Blob | null>((resolve) => {
         if (!canvas.toBlob) {
             resolve(null);
             return;

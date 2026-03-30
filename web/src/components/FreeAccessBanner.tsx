@@ -67,7 +67,7 @@ export function FreeAccessBanner() {
   // 無料体験中
   if (usageInfo?.accessType === 'trial') {
     const usageRemaining = usageInfo.remainingCount ?? 0;
-    const usageLimit = systemSettings?.freeTrialUsageLimit || 3;
+    const usageLimit = systemSettings?.freeTrialUsageLimit || 5;
     const usageCount = usageLimit - usageRemaining;
 
     return (

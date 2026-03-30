@@ -16,9 +16,6 @@ import {
   LayoutInfo,
   LowConfidenceRegion,
   AnswerSheetAnalysis,
-  GridAnalysis,
-  LinedAnalysis,
-  BlankAnalysis,
 } from './types';
 import { ANSWER_SHEET_ANALYSIS_PROMPT } from './prompts';
 

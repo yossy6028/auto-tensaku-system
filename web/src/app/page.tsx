@@ -1,11 +1,12 @@
 import { LPHeader } from '@/components/lp/LPHeader';
 import { HeroSection } from '@/components/lp/HeroSection';
-
+import { RealSampleSection } from '@/components/lp/RealSampleSection';
 import { ProblemSection } from '@/components/lp/ProblemSection';
 import { SolutionSection } from '@/components/lp/SolutionSection';
 import { FeaturesSection } from '@/components/lp/FeaturesSection';
 import { ProductHighlights } from '@/components/lp/ProductHighlights';
 import { HowItWorksSection } from '@/components/lp/HowItWorksSection';
+import { ThreeStepsSection } from '@/components/lp/ThreeStepsSection';
 import { VideoPlaceholder } from '@/components/lp/VideoPlaceholder';
 import { PricingPreview } from '@/components/lp/PricingPreview';
 import { FAQSection } from '@/components/lp/FAQSection';
@@ -17,11 +18,13 @@ export default function LandingPage() {
     <main className="overflow-x-hidden">
       <LPHeader />
       <HeroSection />
+      <RealSampleSection />
       <ProductHighlights />
       <ProblemSection />
       <SolutionSection />
       <FeaturesSection />
       <HowItWorksSection />
+      <ThreeStepsSection />
       <VideoPlaceholder />
       <PricingPreview />
       <FAQSection />

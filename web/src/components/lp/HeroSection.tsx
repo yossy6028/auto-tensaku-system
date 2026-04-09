@@ -77,7 +77,7 @@ export function HeroSection() {
               transition={{ duration: 0.8, delay: 0.2 }}
               className="mb-6 text-3xl font-bold tracking-tight bg-gradient-to-r from-blue-600 to-indigo-600 bg-clip-text text-transparent sm:text-4xl md:text-5xl"
             >
-              どんな国語の答案も<br />3分でプロ視点の添削が完了
+              疲れていても、22時でも。<br />採点基準はブレない。
             </motion.h1>
           </motion.div>
 
@@ -92,8 +92,8 @@ export function HeroSection() {
               国語の作文・論述問題もしっかりサポートします。
             </p>
             <p className="text-base text-slate-700">
-              学習塾、学校、家庭教師、保護者様など、<br className="hidden sm:inline" />
-              記述の採点に取り組まれる様々な方にご利用いただけます。
+              学習塾・個人家庭教師の先生のための、<br className="hidden sm:inline" />
+              国語記述専用AI自動添削システム。
             </p>
           </motion.div>
 

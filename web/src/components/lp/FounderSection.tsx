@@ -2,7 +2,7 @@
 
 import Image from 'next/image';
 import { motion } from 'framer-motion';
-import { BookOpen, Award, Users } from 'lucide-react';
+import { Award, Users } from 'lucide-react';
 import { useReducedMotion } from '@/hooks/useMediaQuery';
 
 export function FounderSection() {
@@ -46,12 +46,12 @@ export function FounderSection() {
                 吉井 勝彦
               </h3>
               <p className="mt-1 text-sm font-medium text-es-teal">
-                EduShift 代表 / 中学受験専門 国語講師
+                EduShift 代表 / 国語指導歴20年超
               </p>
 
               <div className="mt-4 space-y-3 leading-relaxed text-slate-700">
                 <p>
-                  大手進学塾で20年以上、教室長・管理職を歴任。現在は独立し、Zoomを使った中学受験国語のオンライン家庭教師として、小4〜小6の生徒をマンツーマンで指導しています。
+                  大手進学塾で20年以上、管理職を歴任。現在は独立し、Zoomを使った中学受験国語のオンライン家庭教師として、小4〜小6の生徒をマンツーマンで指導しています。
                 </p>
                 <p>
                   国語の指導で最も負担になるのが添削指導です。授業が終わった後に夜遅くまで、一人ひとりの記述問題をどのように直せばよいか、それぞれの思考の癖を踏まえながらアドバイスを書いていく。大変時間がかかり、添削の在り方には個人差があるため、なかなか他人に依頼することも難しい作業でした。
@@ -62,17 +62,13 @@ export function FounderSection() {
               </div>
 
               <div className="mt-6 flex flex-wrap justify-center gap-4 sm:justify-start">
-                <div className="flex items-center gap-2 rounded-full bg-es-teal-light px-4 py-2">
-                  <BookOpen className="h-4 w-4 text-es-teal" />
-                  <span className="text-sm font-medium text-es-teal">指導歴20年超</span>
-                </div>
                 <div className="flex items-center gap-2 rounded-full bg-es-blue-light px-4 py-2">
                   <Award className="h-4 w-4 text-es-blue" />
-                  <span className="text-sm font-medium text-es-blue">大手進学塾 教室長経験</span>
+                  <span className="text-sm font-medium text-es-blue">大手進学塾 管理職経験</span>
                 </div>
                 <div className="flex items-center gap-2 rounded-full bg-indigo-50 px-4 py-2">
                   <Users className="h-4 w-4 text-indigo-600" />
-                  <span className="text-sm font-medium text-indigo-600">中学受験 国語専門</span>
+                  <span className="text-sm font-medium text-indigo-600">国語指導歴20年超</span>
                 </div>
               </div>
             </div>

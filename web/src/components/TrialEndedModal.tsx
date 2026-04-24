@@ -6,12 +6,17 @@ import { useAuth } from './AuthProvider';
 import Link from 'next/link';
 
 export function TrialEndedModal() {
-  const { showTrialEndedModal, setShowTrialEndedModal, freeAccessInfo, systemSettings, plans } = useAuth();
+  const { showTrialEndedModal, setShowTrialEndedModal, freeAccessInfo, systemSettings, plans, usageInfo } = useAuth();
 
   if (!showTrialEndedModal) return null;
 
   const isExpired = freeAccessInfo?.freeAccessType === 'expired';
   const recommendedPlan = plans.find(p => p.id === 'plan_15') || plans[0];
+  const fallbackTrialUsageLimit = systemSettings?.freeTrialUsageLimit || 5;
+  const trialUsageLimit = usageInfo?.usageLimit
+    ?? (usageInfo && usageInfo.usageCount !== null && usageInfo.remainingCount !== null
+      ? usageInfo.usageCount + usageInfo.remainingCount
+      : fallbackTrialUsageLimit);
 
   const formatPrice = (price: number) => {
     return new Intl.NumberFormat('ja-JP', {
@@ -46,12 +51,12 @@ export function TrialEndedModal() {
               <Clock className="w-8 h-8" />
             </div>
             <h2 className="text-2xl font-bold mb-2">
-              {isExpired ? '無料体験期間が終了しました' : '無料体験をご利用いただきありがとうございます'}
+              {isExpired ? '無料体験が終了しました' : '無料体験をご利用いただきありがとうございます'}
             </h2>
             <p className="text-amber-100">
               {isExpired 
                 ? 'プランを購入して引き続きご利用ください'
-                : `${systemSettings?.freeTrialDays || 7}日間の無料体験をお楽しみいただけます`
+                : `最大${trialUsageLimit}回まで無料でお試しいただけます`
               }
             </p>
           </div>
@@ -63,9 +68,9 @@ export function TrialEndedModal() {
           {isExpired && (
             <div className="bg-slate-50 rounded-2xl p-4 mb-6">
               <p className="text-sm text-slate-600 text-center">
-                無料体験期間（{systemSettings?.freeTrialDays || 7}日間）での利用回数：
+                無料体験での利用回数：
                 <span className="font-bold text-slate-800 ml-1">
-                  {systemSettings?.freeTrialUsageLimit || 5}回
+                  {trialUsageLimit}回
                 </span>
               </p>
             </div>
@@ -140,6 +145,3 @@ export function TrialEndedModal() {
     </div>
   );
 }
-
-
-

@@ -22,6 +22,8 @@ function translateAuthError(message: string): string {
     'Email rate limit exceeded': 'メール送信の制限に達しました。しばらくしてからお試しください。',
     'Password should be at least 6 characters': 'パスワードは6文字以上で入力してください。',
     'Signups not allowed for this instance': '現在新規登録を受け付けていません。',
+    'User not found': 'このメールアドレスのアカウントが見つかりません。先に新規登録してください。',
+    'Signup requires a valid password': '先に新規登録してください。',
     'Email link is invalid or has expired': 'メールリンクが無効または期限切れです。再度お試しください。',
     'For security purposes, you can only request this after 60 seconds': 'セキュリティのため、60秒後に再度お試しください。',
   };
@@ -332,5 +334,4 @@ export function AuthModal({ isOpen, onClose, initialMode = 'signin' }: AuthModal
     </div>
   );
 }
-
 

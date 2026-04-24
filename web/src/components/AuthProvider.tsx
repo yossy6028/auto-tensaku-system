@@ -7,7 +7,12 @@ import type { UserProfile, Subscription, PricingPlan, Database, DeviceInfo, Devi
 import { getDeviceInfo, markDeviceAsRegistered, clearDeviceRegistration } from '@/lib/utils/deviceFingerprint';
 
 // Auth リダイレクト用ベースURL（NEXT_PUBLIC_APP_URL が設定済みならそちらを優先）
-const SITE_URL = (process.env.NEXT_PUBLIC_APP_URL || (typeof window !== 'undefined' ? window.location.origin : '')).trim();
+function getSiteUrl() {
+  const rawUrl = process.env.NEXT_PUBLIC_APP_URL || (typeof window !== 'undefined' ? window.location.origin : '');
+  return rawUrl.trim().replace(/\/+$/, '');
+}
+
+const SITE_URL = getSiteUrl();
 
 // デバイス情報の型（RPC関数の戻り値）
 type UserDeviceInfo = Database['public']['Functions']['get_user_devices']['Returns'][0];
@@ -19,7 +24,7 @@ interface UsageInfo {
   usageLimit: number | null;
   remainingCount: number | null;
   planName: string | null;
-  accessType: 'subscription' | 'trial' | 'promo' | 'none' | 'admin';
+  accessType: 'subscription' | 'trial' | 'promo' | 'expired' | 'none' | 'admin';
 }
 
 interface FreeAccessInfo {
@@ -40,6 +45,56 @@ interface SystemSettings {
 }
 
 type SystemSettingRow = Database['public']['Tables']['system_settings']['Row'];
+
+type CheckFreeAccessRow = {
+  has_free_access: boolean;
+  free_access_type: FreeAccessInfo['freeAccessType'] | string | null;
+  message: string | null;
+  trial_days_remaining: number | null;
+  trial_usage_remaining: number | null;
+  free_access_until?: string | null;
+  promo_end_date?: string | null;
+};
+
+type CanUseServiceRow = {
+  can_use: boolean;
+  message: string;
+  usage_count: number | null;
+  usage_limit: number | null;
+  remaining_count: number | null;
+  plan_name: string | null;
+  access_type?: UsageInfo['accessType'] | string | null;
+};
+
+function deriveAccessType(info: CanUseServiceRow): UsageInfo['accessType'] {
+  if (
+    info.access_type === 'subscription'
+    || info.access_type === 'trial'
+    || info.access_type === 'promo'
+    || info.access_type === 'expired'
+    || info.access_type === 'admin'
+    || info.access_type === 'none'
+  ) {
+    return info.access_type;
+  }
+
+  switch (info.plan_name) {
+    case 'admin':
+      return 'admin';
+    case 'promo':
+    case '無料開放':
+      return 'promo';
+    case 'trial':
+    case '無料体験':
+    case 'free_trial':
+      return info.can_use ? 'trial' : 'expired';
+    case 'free_trial_expired':
+    case 'expired':
+      return 'expired';
+    default:
+      return info.plan_name ? 'subscription' : 'none';
+  }
+}
 
 // デバイス制限関連
 interface DeviceLimitInfo {
@@ -324,14 +379,14 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       }
 
       if (data && Array.isArray(data) && data.length > 0) {
-        const info = data[0];
+        const info = data[0] as CheckFreeAccessRow;
         const freeInfo: FreeAccessInfo = {
           hasFreeAccess: info.has_free_access,
-          freeAccessType: info.free_access_type,
-          message: info.message,
+          freeAccessType: (info.free_access_type as FreeAccessInfo['freeAccessType']) ?? 'none',
+          message: info.message ?? '',
           trialDaysRemaining: info.trial_days_remaining,
           trialUsageRemaining: info.trial_usage_remaining,
-          promoEndDate: info.promo_end_date,
+          promoEndDate: info.free_access_until ?? info.promo_end_date ?? null,
         };
         setFreeAccessInfo(freeInfo);
 
@@ -554,14 +609,9 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       }
 
       if (data && Array.isArray(data) && data.length > 0) {
-        const info = data[0];
-        // can_use_service は access_type カラムを返さないため、plan_name から推定する
-        // plan_name の値: 'trial'（トライアル経由）, '無料体験'（直接判定）, 'admin', 実際のプラン名
-        const derivedAccessType = info.access_type
-          || (info.plan_name === 'trial' || info.plan_name === '無料体験' || info.plan_name === 'free_trial' ? 'trial'
-            : info.plan_name === 'admin' ? 'admin'
-            : info.plan_name === 'free_trial_expired' ? 'expired'
-            : 'none');
+        const info = data[0] as CanUseServiceRow;
+        // can_use_service は古いDBでは access_type を返さないため、plan_name から推定する。
+        const derivedAccessType = deriveAccessType(info);
         setUsageInfo({
           canUse: info.can_use,
           message: info.message,
@@ -573,7 +623,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         });
 
         // 無料体験終了チェック
-        if (!info.can_use && derivedAccessType === 'none') {
+        if (!info.can_use && (derivedAccessType === 'none' || derivedAccessType === 'expired')) {
           await fetchFreeAccessInfo(targetUser.id).catch(() => {});
         }
       } else {
@@ -772,7 +822,10 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     if (!supabase) return { error: new Error('Supabase is not configured') };
     const { error } = await supabase.auth.signInWithOtp({
       email,
-      options: { emailRedirectTo: `${SITE_URL}/auth/callback` },
+      options: {
+        emailRedirectTo: `${SITE_URL}/auth/callback`,
+        shouldCreateUser: false,
+      },
     });
     return { error };
   };

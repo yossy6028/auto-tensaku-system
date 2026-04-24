@@ -47,28 +47,43 @@ export interface Database {
       user_profiles: {
         Row: {
           id: string;
-          email: string;
+          email: string | null;
+          normalized_email: string | null;
           display_name: string | null;
           role: 'user' | 'admin';
           stripe_customer_id: string | null;
+          free_trial_started_at: string | null;
+          free_trial_usage_count: number | null;
+          custom_trial_days: number | null;
+          custom_trial_usage_limit: number | null;
           created_at: string;
           updated_at: string;
         };
         Insert: {
           id: string;
-          email: string;
+          email?: string | null;
+          normalized_email?: string | null;
           display_name?: string | null;
           role?: 'user' | 'admin';
           stripe_customer_id?: string | null;
+          free_trial_started_at?: string | null;
+          free_trial_usage_count?: number | null;
+          custom_trial_days?: number | null;
+          custom_trial_usage_limit?: number | null;
           created_at?: string;
           updated_at?: string;
         };
         Update: {
           id?: string;
-          email?: string;
+          email?: string | null;
+          normalized_email?: string | null;
           display_name?: string | null;
           role?: 'user' | 'admin';
           stripe_customer_id?: string | null;
+          free_trial_started_at?: string | null;
+          free_trial_usage_count?: number | null;
+          custom_trial_days?: number | null;
+          custom_trial_usage_limit?: number | null;
           created_at?: string;
           updated_at?: string;
         };
@@ -133,25 +148,25 @@ export interface Database {
         Row: {
           id: string;
           user_id: string;
-          subscription_id: string;
+          subscription_id: string | null;
           action_type: 'grading';
-          metadata: Json;
+          metadata: Json | null;
           created_at: string;
         };
         Insert: {
           id?: string;
           user_id: string;
-          subscription_id: string;
+          subscription_id?: string | null;
           action_type?: 'grading';
-          metadata?: Json;
+          metadata?: Json | null;
           created_at?: string;
         };
         Update: {
           id?: string;
           user_id?: string;
-          subscription_id?: string;
+          subscription_id?: string | null;
           action_type?: 'grading';
-          metadata?: Json;
+          metadata?: Json | null;
           created_at?: string;
         };
       };
@@ -159,18 +174,21 @@ export interface Database {
         Row: {
           key: string;
           value: string | null;
+          description: string | null;
           created_at: string | null;
           updated_at: string | null;
         };
         Insert: {
           key: string;
           value?: string | null;
+          description?: string | null;
           created_at?: string | null;
           updated_at?: string | null;
         };
         Update: {
           key?: string;
           value?: string | null;
+          description?: string | null;
           created_at?: string | null;
           updated_at?: string | null;
         };
@@ -228,7 +246,7 @@ export interface Database {
           message: string | null;
           trial_days_remaining: number | null;
           trial_usage_remaining: number | null;
-          promo_end_date: string | null;
+          free_access_until: string | null;
         }[];
       };
       increment_usage: {
@@ -349,4 +367,3 @@ export interface DeviceAccessResult {
   deviceCount: number;
   maxDevices: number | null;
 }
-

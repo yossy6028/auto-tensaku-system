@@ -14,7 +14,7 @@ export default async function AdminLayout({
   } = await supabase.auth.getUser();
 
   if (authError || !user) {
-    redirect('/auth/callback?next=/admin');
+    redirect('/grading?auth=required&next=/admin');
   }
 
   // サーバーサイドで管理者権限を検証

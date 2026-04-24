@@ -99,7 +99,16 @@ export default function SubscriptionPage() {
 
   const PlanIcon = getPlanIcon(usageInfo?.planName ?? null);
   const planColor = getPlanColor(usageInfo?.planName ?? null);
-  const isUnlimited = usageInfo?.usageLimit === null;
+  const isTrialLike = usageInfo?.accessType === 'trial' || usageInfo?.accessType === 'expired' || freeAccessInfo?.freeAccessType === 'expired';
+  const isUnlimited = usageInfo?.usageLimit === null && !isTrialLike;
+  const fallbackTrialUsageLimit = systemSettings?.freeTrialUsageLimit || 5;
+  const trialUsageLimit = usageInfo?.usageLimit
+    ?? (usageInfo && usageInfo.usageCount !== null && usageInfo.remainingCount !== null
+      ? usageInfo.usageCount + usageInfo.remainingCount
+      : fallbackTrialUsageLimit);
+  const trialUsageCount = usageInfo?.usageCount
+    ?? Math.max(0, trialUsageLimit - (usageInfo?.remainingCount ?? freeAccessInfo?.trialUsageRemaining ?? 0));
+  const trialRemaining = usageInfo?.remainingCount ?? freeAccessInfo?.trialUsageRemaining ?? Math.max(0, trialUsageLimit - trialUsageCount);
 
   return (
     <main className="min-h-screen bg-slate-50 relative overflow-hidden selection:bg-indigo-100 selection:text-indigo-900 font-sans text-slate-900">
@@ -295,7 +304,7 @@ export default function SubscriptionPage() {
                     プランを購入すると、採点機能をご利用いただけます。
                     {usageInfo?.accessType === 'trial' && (
                       <span className="block mt-2 text-indigo-600 font-medium">
-                        現在、無料トライアル期間中です。
+                        現在、無料トライアル中です。
                       </span>
                     )}
                   </p>
@@ -312,7 +321,7 @@ export default function SubscriptionPage() {
           </div>
 
           {/* Free Trial Section - Enhanced */}
-          {(usageInfo?.accessType === 'trial' || freeAccessInfo?.freeAccessType === 'expired') && (
+          {isTrialLike && (
             <div className={`backdrop-blur-2xl shadow-[0_8px_30px_rgb(0,0,0,0.04)] rounded-[2rem] overflow-hidden border ring-1 ring-white/50 ${
               freeAccessInfo?.freeAccessType === 'expired'
                 ? 'bg-amber-50/80 border-amber-200'
@@ -349,7 +358,7 @@ export default function SubscriptionPage() {
                         ? 'プランを購入して引き続きご利用ください'
                         : usageInfo?.remainingCount === 0
                           ? 'プランを購入すると引き続き採点できます'
-                          : `最大${systemSettings?.freeTrialUsageLimit || 5}回まで無料でお試しいただけます`}
+                          : `最大${trialUsageLimit}回まで無料でお試しいただけます`}
                     </p>
                   </div>
                 </div>
@@ -377,16 +386,16 @@ export default function SubscriptionPage() {
                     <div className="flex items-baseline justify-between mb-2">
                       <div className="flex items-baseline">
                         <span className="text-3xl font-black text-slate-800">
-                          {usageInfo?.usageCount ?? ((systemSettings?.freeTrialUsageLimit || 3) - (freeAccessInfo?.trialUsageRemaining ?? 0))}
+                          {trialUsageCount}
                         </span>
-                        <span className="text-slate-500 ml-2">/ {systemSettings?.freeTrialUsageLimit || 5}回使用</span>
+                        <span className="text-slate-500 ml-2">/ {trialUsageLimit}回使用</span>
                       </div>
                       <span className={`font-bold ${
                         usageInfo?.remainingCount === 0 || freeAccessInfo?.freeAccessType === 'expired'
                           ? 'text-red-600'
                           : 'text-indigo-600'
                       }`}>
-                        残り {usageInfo?.remainingCount ?? freeAccessInfo?.trialUsageRemaining ?? 0}回
+                        残り {trialRemaining}回
                       </span>
                     </div>
                     <div className="w-full bg-slate-200 rounded-full h-3 overflow-hidden">
@@ -398,8 +407,7 @@ export default function SubscriptionPage() {
                         }`}
                         style={{
                           width: `${Math.min(
-                            ((usageInfo?.usageCount ?? ((systemSettings?.freeTrialUsageLimit || 3) - (freeAccessInfo?.trialUsageRemaining ?? 0)))
-                            / (systemSettings?.freeTrialUsageLimit || 3)) * 100,
+                            (trialUsageCount / trialUsageLimit) * 100,
                             100
                           )}%`
                         }}
@@ -474,4 +482,3 @@ export default function SubscriptionPage() {
     </main>
   );
 }
-

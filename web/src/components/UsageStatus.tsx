@@ -42,8 +42,14 @@ export function UsageStatus({ compact = false, className = '' }: UsageStatusProp
 
   // 無料体験中のユーザー
   const isTrial = usageInfo.accessType === 'trial';
-  const isTrialExpired = freeAccessInfo?.freeAccessType === 'expired';
-  const trialUsageLimit = systemSettings?.freeTrialUsageLimit || 5;
+  const isTrialExpired = usageInfo.accessType === 'expired' || freeAccessInfo?.freeAccessType === 'expired';
+  const fallbackTrialUsageLimit = systemSettings?.freeTrialUsageLimit || 5;
+  const trialUsageLimit = usageInfo.usageLimit
+    ?? (usageInfo.usageCount !== null && usageInfo.remainingCount !== null
+      ? usageInfo.usageCount + usageInfo.remainingCount
+      : fallbackTrialUsageLimit);
+  const trialUsageCount = usageInfo.usageCount ?? Math.max(0, trialUsageLimit - (usageInfo.remainingCount ?? 0));
+  const trialRemaining = usageInfo.remainingCount ?? Math.max(0, trialUsageLimit - trialUsageCount);
 
   // 管理者アカウントの場合はsubscriptionチェックをスキップ
   // 無料体験中のユーザーもsubscriptionチェックをスキップ
@@ -86,7 +92,7 @@ export function UsageStatus({ compact = false, className = '' }: UsageStatusProp
           <div className="flex justify-between text-sm mb-1">
             <span className="text-slate-500">使用回数</span>
             <span className="font-medium text-slate-700">
-              {trialUsageLimit} / {trialUsageLimit}回（全て使用済み）
+              {trialUsageCount} / {trialUsageLimit}回（全て使用済み）
             </span>
           </div>
           <div className="w-full bg-slate-200 rounded-full h-2 overflow-hidden">
@@ -104,7 +110,7 @@ export function UsageStatus({ compact = false, className = '' }: UsageStatusProp
     );
   }
 
-  const isUnlimited = usageInfo.usageLimit === null;
+  const isUnlimited = usageInfo.usageLimit === null && !isTrial && !isTrialExpired;
   const usagePercent = isUnlimited 
     ? 0 
     : ((usageInfo.usageCount ?? 0) / (usageInfo.usageLimit ?? 1)) * 100;
@@ -117,7 +123,7 @@ export function UsageStatus({ compact = false, className = '' }: UsageStatusProp
         <div className={`flex items-center ${className}`}>
           <Gift className="w-4 h-4 text-amber-500 mr-2" />
           <span className="text-sm font-medium text-amber-600">
-            無料体験 {usageInfo.usageCount ?? 0}/{trialUsageLimit}回使用
+            無料体験 {trialUsageCount}/{trialUsageLimit}回使用
           </span>
         </div>
       );
@@ -146,8 +152,6 @@ export function UsageStatus({ compact = false, className = '' }: UsageStatusProp
 
   // 無料体験中の通常表示
   if (isTrial) {
-    const trialUsageCount = usageInfo.usageCount ?? 0;
-    const trialRemaining = usageInfo.remainingCount ?? 0;
     const trialPercent = (trialUsageCount / trialUsageLimit) * 100;
 
     return (
@@ -296,6 +300,4 @@ export function UsageStatus({ compact = false, className = '' }: UsageStatusProp
     </div>
   );
 }
-
-
 

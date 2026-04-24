@@ -41,7 +41,7 @@ export function FreeAccessBanner() {
   }
 
   // 無料体験終了（回数使い切り or 期間終了）
-  if (freeAccessInfo?.freeAccessType === 'expired' || (usageInfo?.accessType === 'trial' && usageInfo?.remainingCount === 0)) {
+  if (usageInfo?.accessType === 'expired' || freeAccessInfo?.freeAccessType === 'expired' || (usageInfo?.accessType === 'trial' && usageInfo?.remainingCount === 0)) {
     return (
       <div className="bg-gradient-to-r from-red-500 to-orange-500 text-white py-3 px-4 relative">
         <div className="max-w-5xl mx-auto flex items-center justify-center gap-3 flex-wrap">
@@ -67,8 +67,12 @@ export function FreeAccessBanner() {
   // 無料体験中
   if (usageInfo?.accessType === 'trial') {
     const usageRemaining = usageInfo.remainingCount ?? 0;
-    const usageLimit = systemSettings?.freeTrialUsageLimit || 5;
-    const usageCount = usageLimit - usageRemaining;
+    const fallbackUsageLimit = systemSettings?.freeTrialUsageLimit || 5;
+    const usageLimit = usageInfo.usageLimit
+      ?? (usageInfo.usageCount !== null && usageInfo.remainingCount !== null
+        ? usageInfo.usageCount + usageInfo.remainingCount
+        : fallbackUsageLimit);
+    const usageCount = usageInfo.usageCount ?? Math.max(0, usageLimit - usageRemaining);
 
     return (
       <div className="bg-gradient-to-r from-amber-500 to-orange-500 text-white py-3 px-4 relative">
@@ -93,5 +97,3 @@ export function FreeAccessBanner() {
 
   return null;
 }
-
-

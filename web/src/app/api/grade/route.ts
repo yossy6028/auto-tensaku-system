@@ -1012,7 +1012,7 @@ export async function POST(req: NextRequest) {
                                 strictness,
                                 incompleteGrading: true,
                                 missingFields: resultObj?.missing_fields,
-                                error: resultObj?.missing_fields ? `採点結果が不完全: ${resultObj.missing_fields.join(', ')}` : (resultObj as any)?.message || '採点結果が不完全です'
+                                error: resultObj?.missing_fields ? `採点結果が不完全: ${resultObj.missing_fields.join(', ')}` : resultObj?.message || '採点結果が不完全です'
                             };
                         } else {
                             return { label, result, strictness };

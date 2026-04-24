@@ -45,7 +45,12 @@ export function UserMenu({ onAuthClick }: UserMenuProps) {
 
   const displayName = profile?.display_name || user.email?.split('@')[0] || 'ユーザー';
   const isAdmin = profile?.role === 'admin';
-  const isUnlimited = usageInfo?.usageLimit === null;
+  const isTrialLike = usageInfo?.accessType === 'trial' || usageInfo?.accessType === 'expired';
+  const isUnlimited = usageInfo?.usageLimit === null && !isTrialLike;
+  const usageLimitForDisplay = usageInfo?.usageLimit
+    ?? (isTrialLike && usageInfo?.usageCount !== null && usageInfo?.remainingCount !== null
+      ? usageInfo.usageCount + usageInfo.remainingCount
+      : null);
 
   return (
     <div ref={menuRef} className="relative">
@@ -101,19 +106,19 @@ export function UserMenu({ onAuthClick }: UserMenuProps) {
             <div className="p-4 border-b border-slate-100">
               <p className="text-xs text-slate-500 mb-1">現在のプラン</p>
               <p className="font-medium text-slate-800">{usageInfo.planName || 'プランなし'}</p>
-              {usageInfo.canUse && !isUnlimited && (
+              {usageInfo.canUse && !isUnlimited && usageLimitForDisplay !== null && (
                 <div className="mt-2">
                   <div className="flex justify-between text-xs mb-1">
                     <span className="text-slate-500">残り回数</span>
                     <span className="font-medium text-slate-700">
-                      {usageInfo.remainingCount} / {usageInfo.usageLimit}
+                      {usageInfo.remainingCount} / {usageLimitForDisplay}
                     </span>
                   </div>
                   <div className="w-full bg-slate-200 rounded-full h-1.5">
                     <div
                       className="bg-gradient-to-r from-indigo-500 to-violet-500 h-full rounded-full"
                       style={{
-                        width: `${((usageInfo.usageLimit! - (usageInfo.remainingCount ?? 0)) / usageInfo.usageLimit!) * 100}%`
+                        width: `${((usageLimitForDisplay - (usageInfo.remainingCount ?? 0)) / usageLimitForDisplay) * 100}%`
                       }}
                     />
                   </div>
@@ -195,6 +200,5 @@ export function UserMenu({ onAuthClick }: UserMenuProps) {
     </div>
   );
 }
-
 
 

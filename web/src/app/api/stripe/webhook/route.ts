@@ -313,8 +313,16 @@ export async function POST(request: NextRequest) {
       .select('id')
       .maybeSingle();
 
+    if (eventInsertError) {
+      logger.error('Failed to persist Stripe event for idempotency:', eventInsertError);
+      return NextResponse.json(
+        { error: 'Webhook idempotency check failed' },
+        { status: 500 }
+      );
+    }
+
     // upsert で行が返らない = 既に処理済み
-    if (!insertedEvent && !eventInsertError) {
+    if (!insertedEvent) {
       logger.info('Duplicate event skipped:', event.id);
       return NextResponse.json({ received: true });
     }

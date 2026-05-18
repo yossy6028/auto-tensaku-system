@@ -1,4 +1,4 @@
-import { NextRequest, NextResponse } from 'next/server';
+import { NextResponse } from 'next/server';
 import { getStripe, getPlanIdFromStripePriceId } from '@/lib/stripe/config';
 import { createClient } from '@/lib/supabase/server';
 
@@ -22,7 +22,21 @@ const mapStripeStatus = (stripeStatus?: string | null): SubscriptionStatus => {
   return 'past_due';
 };
 
-export async function POST(_request: NextRequest) {
+function getSubscriptionPeriod(subscription: Record<string, unknown>): { start: string | null; end: string | null } {
+  // Stripe API 2025-03-31+ exposes billing periods on subscription items.
+  // Keep top-level fallback for older objects or pinned API versions.
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const item = (subscription.items as any)?.data?.[0];
+  const startTs = (subscription.current_period_start as number | undefined) ?? (item?.current_period_start as number | undefined);
+  const endTs = (subscription.current_period_end as number | undefined) ?? (item?.current_period_end as number | undefined);
+
+  return {
+    start: startTs ? new Date(startTs * 1000).toISOString() : null,
+    end: endTs ? new Date(endTs * 1000).toISOString() : null,
+  };
+}
+
+export async function POST() {
   try {
     if (!process.env.NEXT_PUBLIC_SUPABASE_URL || !process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY) {
       return NextResponse.json({ error: 'Supabase設定が不足しています' }, { status: 503 });
@@ -93,12 +107,7 @@ export async function POST(_request: NextRequest) {
     const usageLimit = PLAN_LIMITS[planId] ?? null;
     const pricePaid = PLAN_PRICES[planId] ?? PLAN_PRICES.light;
 
-    const currentPeriodStart = subscription.current_period_start
-      ? new Date(subscription.current_period_start * 1000).toISOString()
-      : null;
-    const currentPeriodEnd = subscription.current_period_end
-      ? new Date(subscription.current_period_end * 1000).toISOString()
-      : null;
+    const { start: currentPeriodStart, end: currentPeriodEnd } = getSubscriptionPeriod(subscription);
 
     const status: SubscriptionStatus = mapStripeStatus(subscription.status);
     const cancelAtPeriodEnd = subscription.cancel_at_period_end || false;

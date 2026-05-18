@@ -11,7 +11,7 @@
     "e2e:headed": "playwright test --headed"
   },
   "dependencies": {
-    "@google/genai": "^1.30.0",
+    "@google/genai": "^2.4.0",
     "@stripe/stripe-js": "^8.6.0",
     "@supabase/ssr": "^0.7.0",
     "@supabase/supabase-js": "^2.86.0",
@@ -21,10 +21,10 @@
     "framer-motion": "^12.34.0",
     "heic2any": "^0.0.4",
     "html2canvas": "^1.4.1",
-    "jspdf": "^3.0.4",
+    "jspdf": "^4.2.1",
     "jszip": "^3.10.1",
     "lucide-react": "^0.554.0",
-    "next": "16.0.8",
+    "next": "16.2.6",
     "pdf-lib": "^1.17.1",
     "react": "19.2.1",
     "react-dom": "19.2.1",
@@ -41,7 +41,7 @@
     "@types/react-dom": "^19",
     "@types/sharp": "^0.31.1",
     "eslint": "^9",
-    "eslint-config-next": "16.0.8",
+    "eslint-config-next": "16.2.6",
     "tailwindcss": "^4",
     "typescript": "^5"
   }

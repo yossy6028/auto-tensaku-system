@@ -2,7 +2,7 @@
 
 import { useState } from 'react';
 import { motion } from 'framer-motion';
-import { Camera, Sparkles, ChevronRight, BookOpen, PenTool, FileText } from 'lucide-react';
+import { Camera, Sparkles, BookOpen, PenTool, FileText } from 'lucide-react';
 
 // =============================================================================
 // TODO(human): 添削サンプルデータを記入してください
@@ -99,7 +99,6 @@ function ScoreBar({ label, score, color }: { label: string; score: number; color
 export function BeforeAfterSection() {
   const [activeIndex, setActiveIndex] = useState(0);
   const active = samples[activeIndex];
-  const Icon = active.icon;
 
   return (
     <section id="before-after" className="py-20 bg-es-surface-light md:py-28">

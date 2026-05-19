@@ -4,7 +4,7 @@ import { EduShiftGrader } from "../src/core/grader";
 jest.mock('../src/config', () => ({
     CONFIG: {
         GEMINI_API_KEY: 'dummy_key',
-        MODEL_NAME: 'gemini-1.5-pro'
+        MODEL_NAME: 'gemini-3.5-flash'
     }
 }));
 

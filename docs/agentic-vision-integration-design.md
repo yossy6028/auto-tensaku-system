@@ -202,7 +202,7 @@ interface BoundingBox {
 ```typescript
 // Gemini 3 Flash でAgentic Visionを有効化
 const response = await genai.models.generateContent({
-  model: 'gemini-3-flash',
+  model: 'gemini-3.5-flash',
   contents: [
     {
       role: 'user',

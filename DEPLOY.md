@@ -28,7 +28,7 @@ Vercelのプロジェクト設定で以下の環境変数を設定：
 
 ```
 GEMINI_API_KEY=<あなたのGemini APIキー>
-MODEL_NAME=gemini-3-pro-image-preview
+MODEL_NAME=gemini-3.5-flash
 NEXT_PUBLIC_SUPABASE_URL=<あなたのSupabase URL>
 NEXT_PUBLIC_SUPABASE_ANON_KEY=<あなたのSupabase Anon Key>
 ```
@@ -116,4 +116,3 @@ NEXT_PUBLIC_SUPABASE_ANON_KEY=<あなたのSupabase Anon Key>
 ### PDF変換エラー
 - `pdf-to-img`ライブラリが動作しない場合、PDFを直接Geminiに送信します
 - 本番環境では問題ありません（GeminiがPDFを直接読めます）
-

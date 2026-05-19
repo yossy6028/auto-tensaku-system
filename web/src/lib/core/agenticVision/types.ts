@@ -1,7 +1,7 @@
 /**
  * Agentic Vision 型定義
  *
- * Gemini 3 Flash の Agentic Vision 機能を使用した
+ * Gemini 3.5 Flash の Agentic Vision 機能を使用した
  * 画像前処理の入出力型を定義
  */
 
@@ -217,7 +217,7 @@ export interface AgenticVisionConfig {
  * デフォルト設定
  */
 export const DEFAULT_AGENTIC_VISION_CONFIG: AgenticVisionConfig = {
-  model: 'gemini-3-flash-preview',
+  model: 'gemini-3.5-flash',
   timeoutMs: 60_000,  // 60秒
   enabled: true,
   qualityThreshold: 40,  // 40点以下で再撮影推奨

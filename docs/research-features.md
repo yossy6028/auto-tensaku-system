@@ -532,10 +532,10 @@ IndexedDB（ブラウザローカル）に保存:
 
 | 設定 | デフォルト値 | 説明 |
 |------|------------|------|
-| MODEL_NAME | `gemini-3-pro-preview` | メイン採点モデル |
+| MODEL_NAME | `gemini-3.5-flash` | メイン採点モデル |
 | OCR_MODEL_NAME | 空（MODEL_NAME使用） | OCR専用モデル |
 | OCR_FALLBACK_MODEL_NAME | 空（無効） | OCR失敗時フォールバック |
-| RATE_LIMIT_FALLBACK_MODEL | `gemini-2.5-pro-preview-05-06` | レート制限時の代替モデル |
+| RATE_LIMIT_FALLBACK_MODEL | `gemini-3.5-flash` | レート制限時の代替モデル |
 
 ---
 

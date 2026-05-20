@@ -242,9 +242,9 @@ USER_GUIDE.md
 | 対応ファイル形式 | JPEG, PNG, GIF, WebP, BMP, HEIC/HEIF, PDF | page.tsx, route.ts |
 | 最大デバイス数 | 2台 | system_settings |
 | 再採点回数（無料） | 2回 | route.ts:102 |
-| ライトプラン | 月額980円 / 月10回 | pricing/page.tsx:13 |
-| スタンダードプラン | 月額2,980円 / 月30回 | pricing/page.tsx:36 |
-| 無制限プラン | 月額5,980円 / 無制限 | pricing/page.tsx:59 |
+| ライトプラン | 月額480円 / 月10回 | pricing/page.tsx:13 |
+| スタンダードプラン | 月額980円 / 月30回 | pricing/page.tsx:36 |
+| 無制限プラン | 月額1,580円 / 無制限 | pricing/page.tsx:59 |
 
 ---
 

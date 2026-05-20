@@ -10,8 +10,8 @@ import { AuthModal } from '@/components/AuthModal';
 const plans = [
   {
     name: 'ライト',
-    originalPrice: 1480,
-    price: 980,
+    originalPrice: 980,
+    price: 480,
     period: '月額',
     description: '家庭での自己採点向け',
     features: [
@@ -33,8 +33,8 @@ const plans = [
   },
   {
     name: 'スタンダード',
-    originalPrice: 3980,
-    price: 1980,
+    originalPrice: 1980,
+    price: 980,
     period: '月額',
     description: '中小規模の個人塾・フリーランス講師向け',
     features: [
@@ -56,8 +56,8 @@ const plans = [
   },
   {
     name: '無制限',
-    originalPrice: 9800,
-    price: 4980,
+    originalPrice: 4980,
+    price: 1580,
     period: '月額',
     description: '中規模・大規模の集団塾向け',
     features: [

@@ -7,6 +7,7 @@ import { useReducedMotion, useIsMobile } from '@/hooks/useMediaQuery';
 type Plan = {
   name: string;
   price: string;
+  originalPrice: string;
   frequency: string;
   description: string;
   features: string[];
@@ -19,7 +20,8 @@ type Plan = {
 const plans: Plan[] = [
   {
     name: 'ライト',
-    price: '¥980',
+    price: '¥480',
+    originalPrice: '¥980',
     frequency: '月10回',
     description: '家庭での自己採点向け',
     features: ['AI自動添削', '3軸評価', '写真アップロード'],
@@ -28,7 +30,8 @@ const plans: Plan[] = [
   },
   {
     name: 'スタンダード',
-    price: '¥1,980',
+    price: '¥980',
+    originalPrice: '¥1,980',
     frequency: '月30回',
     description: '中小規模の個人塾・フリーランス講師向け',
     features: ['AI自動添削', '3軸評価', '写真アップロード', '一括添削'],
@@ -39,7 +42,8 @@ const plans: Plan[] = [
   },
   {
     name: '無制限',
-    price: '¥4,980',
+    price: '¥1,580',
+    originalPrice: '¥4,980',
     frequency: '回数無制限',
     description: '中規模・大規模の集団塾向け',
     features: ['AI自動添削', '3軸評価', '写真アップロード', '一括添削'],
@@ -83,8 +87,19 @@ export function PricingPreview() {
           viewport={{ once: true }}
           transition={{ duration: 0.5 }}
         >
-          シンプルな料金プラン
+          期間限定の料金プラン
         </motion.h2>
+
+        <motion.p
+          className="mx-auto mt-4 max-w-2xl text-center text-sm leading-6 text-slate-300 sm:text-base"
+          initial={{ opacity: 0, y: 12 }}
+          animate={skipAnimation ? { opacity: 1, y: 0 } : undefined}
+          whileInView={skipAnimation ? undefined : { opacity: 1, y: 0 }}
+          viewport={{ once: true }}
+          transition={{ duration: 0.5, delay: 0.1 }}
+        >
+          今だけ月額480円から。採点回数に合わせて無理なく選べます。
+        </motion.p>
 
         <motion.div
           className="mt-16 grid items-center gap-8 sm:grid-cols-2 lg:grid-cols-3"
@@ -117,12 +132,20 @@ export function PricingPreview() {
                   {plan.name}
                 </h3>
                 <p className="mt-1 text-sm text-slate-400">{plan.description}</p>
+                <div className="mt-4">
+                  <span className="rounded-full border border-amber-300/40 bg-amber-300/10 px-3 py-1 text-xs font-semibold text-amber-200">
+                    期間限定価格
+                  </span>
+                </div>
                 <div className="mt-4 flex items-baseline">
                   <span className="text-4xl font-bold text-white">
                     {plan.price}
                   </span>
                   <span className="ml-1 text-sm text-slate-400">/月</span>
                 </div>
+                <p className="mt-1 text-sm text-slate-500">
+                  通常 {plan.originalPrice}/月
+                </p>
                 <p className="mt-2 text-sm text-slate-400">{plan.frequency}</p>
 
                 <ul className="mt-8 flex-1 space-y-3">

@@ -26,9 +26,9 @@ const PLAN_LIMITS: Record<string, number> = {
 };
 
 const PLAN_PRICES: Record<string, number> = {
-  light: 980,
-  standard: 1980,
-  unlimited: 4980,
+  light: 480,
+  standard: 980,
+  unlimited: 1580,
 };
 
 interface PlanResolution {

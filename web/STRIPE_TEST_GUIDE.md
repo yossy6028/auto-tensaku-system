@@ -55,7 +55,7 @@ STRIPE_PRICE_UNLIMITED_ID=price_xxx
 
 1. **プランを選択**
    - 料金ページで「このプランを選択」ボタンをクリック
-   - 例: 「ライト」プラン（¥980/月）
+   - 例: 「ライト」プラン（¥480/月）
 
 2. **Stripe Checkoutページにリダイレクト**
    - Stripeの決済ページが表示されることを確認
@@ -263,4 +263,3 @@ WHERE id = 'your-user-id';
 - [Stripeテストカード一覧](https://stripe.com/docs/testing)
 - [Stripe Webhookテスト](https://stripe.com/docs/webhooks/test)
 - [Stripe CLIドキュメント](https://stripe.com/docs/stripe-cli)
-

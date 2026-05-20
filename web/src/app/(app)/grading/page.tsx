@@ -183,7 +183,7 @@ export default function Home() {
     label: string;
     text: string;
     strictness: GradingStrictness;
-    problemCondition: string;  // 字数制限などの問題条件（例: "40字以上50字以内"）
+    problemCondition: string;  // 字数制限・指定語句などの問題条件（例: "40字以上50字以内", "「勇気」を入れる"）
   } | null>(null);
 
   // PDFページ番号指定（複数ページPDF対応）
@@ -5707,7 +5707,7 @@ export default function Home() {
                   問題条件の修正（オプション）
                 </label>
                 <p className="text-xs text-amber-700 mb-3">
-                  AIが字数制限などの問題条件を誤読した場合、ここで正しい条件を入力してください。
+                  AIが字数制限や指定語句などの問題条件を誤読した場合、ここで正しい条件を入力してください。
                   空欄の場合は画像から読み取った条件をそのまま使用します。
                 </p>
                 <input
@@ -5715,10 +5715,10 @@ export default function Home() {
                   value={ocrEditModal.problemCondition}
                   onChange={(e) => setOcrEditModal(prev => prev ? { ...prev, problemCondition: e.target.value } : prev)}
                   className="w-full p-3 border border-amber-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-amber-500 bg-white text-slate-800"
-                  placeholder="例: 40字以上50字以内、〜から始め〜で終わる形式"
+                  placeholder="例: 40字以上50字以内、〜から始め〜で終わる形式、「勇気」を入れる"
                 />
                 <p className="mt-2 text-xs text-amber-600">
-                  ※ 字数制限、形式要件、開始・終了の指定など、AIに採点時に適用してほしい条件を入力
+                  ※ 字数制限、形式要件、開始・終了、指定語句など、AIに採点時に適用してほしい条件を入力
                 </p>
               </div>
             </div>

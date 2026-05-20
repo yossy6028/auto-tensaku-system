@@ -996,10 +996,14 @@ export async function POST(req: NextRequest) {
                             result = await grader.gradeWithConfirmedText(label, confirmedTexts[label], fileBuffers, pdfPageInfo, fileRoles, strictness, problemCondition, layout, modelAnswerText || undefined);
                         } else {
                             // 従来通りOCR + 採点
+                            const problemCondition = problemConditions[label] || undefined;
+                            if (problemCondition) {
+                                logger.info(`[API] Problem condition override for ${label}: ${problemCondition}`);
+                            }
                             if (modelAnswerText) {
                                 logger.info(`[API] Using manual model answer text for ${label}: ${modelAnswerText.length} chars`);
                             }
-                            result = await grader.gradeAnswerFromMultipleFiles(label, fileBuffers, pdfPageInfo, fileRoles, strictness, modelAnswerText || undefined);
+                            result = await grader.gradeAnswerFromMultipleFiles(label, fileBuffers, pdfPageInfo, fileRoles, strictness, problemCondition, modelAnswerText || undefined);
                         }
 
                         // 不完全な採点結果のチェック（課金対象外）

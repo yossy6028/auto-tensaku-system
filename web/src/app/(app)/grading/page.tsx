@@ -3,7 +3,7 @@
 
 import React, { useState, useRef, useEffect, useCallback, useMemo } from 'react';
 import { GradingReport } from '@/components/GradingReport';
-import { FileText, CheckCircle, AlertCircle, AlertTriangle, Loader2, Sparkles, ArrowRight, BookOpen, PenTool, GraduationCap, Plus, Trash2, CreditCard, LogIn, UserPlus, Edit3, Save, X, User, UserCheck, ImageIcon, Camera } from 'lucide-react';
+import { FileText, CheckCircle, AlertCircle, AlertTriangle, Loader2, Sparkles, ArrowRight, BookOpen, PenTool, GraduationCap, Plus, Trash2, CreditCard, LogIn, UserPlus, Edit3, Save, X, User, UserCheck, ImageIcon, Camera, Menu } from 'lucide-react';
 import { clsx } from 'clsx';
 import { useAuth } from '@/components/AuthProvider';
 import { UserMenu } from '@/components/UserMenu';
@@ -83,6 +83,11 @@ const PDF_SIZE_ADVICE = 'PDFはページ番号を指定すると必要ページ�
 const MAX_FILE_SIZE = 50 * 1024 * 1024; // 50MB
 const MAX_FILES = 10;
 const VALID_EXTENSIONS = /\.(jpg|jpeg|png|gif|webp|bmp|heic|heif|pdf)$/i;
+const APP_STEPS = [
+  { step: '1', title: '問題を選ぶ', body: '大問・問番号と配点だけ決めます。' },
+  { step: '2', title: 'ファイルを入れる', body: '答案・問題・模範解答をまとめてアップロードします。' },
+  { step: '3', title: '読み取りを確認', body: '文字を直してから採点します。' },
+];
 
 const getCompressionTimeout = (fileCount: number) => {
   // 基本: 1ファイルあたり6秒 + バッファ10秒（最低15秒、最大60秒）
@@ -3285,34 +3290,42 @@ export default function Home() {
 
       {/* Header with User Menu */}
       <header className="sticky top-0 z-40 bg-white/70 backdrop-blur-xl border-b border-white/20 shadow-sm supports-[backdrop-filter]:bg-white/60">
-        <div className="max-w-5xl mx-auto px-4 sm:px-6 lg:px-8 py-4 flex items-center justify-between">
+        <div className="max-w-5xl mx-auto px-4 sm:px-6 lg:px-8 py-3 flex items-center justify-between">
           <div className="flex items-center group cursor-pointer">
             <div className="relative">
               <div className="absolute inset-0 bg-indigo-500 blur-lg opacity-20 group-hover:opacity-40 transition-opacity rounded-full"></div>
-              <img src="/taskal-main-logo.png" alt="Taskal AI" className="h-16 w-auto relative z-10 mix-blend-multiply group-hover:scale-105 transition-transform duration-300" />
+              <img src="/taskal-main-logo.png" alt="Taskal AI" className="h-11 sm:h-12 w-auto relative z-10 mix-blend-multiply group-hover:scale-105 transition-transform duration-300" />
             </div>
           </div>
 
-          <div className="flex items-center gap-4">
+          <div className="flex items-center gap-2 sm:gap-3">
             {user && session && usageInfo && (
               <UsageStatus compact className="hidden md:flex" />
             )}
-            {user && (
-              <Link
-                href="/usage"
-                className="flex items-center text-sm font-bold text-indigo-700 bg-gradient-to-r from-indigo-50 to-violet-50 border-2 border-indigo-200 hover:border-indigo-400 hover:from-indigo-100 hover:to-violet-100 transition-all px-4 py-2 rounded-xl shadow-sm hover:shadow-md"
-              >
-                <BookOpen className="w-4 h-4 mr-2" />
-                <span className="hidden sm:inline">使い方</span>
-              </Link>
-            )}
-            <Link
-              href="/pricing"
-              className="flex items-center text-sm font-medium text-slate-600 hover:text-indigo-600 transition-colors px-3 py-2 rounded-lg hover:bg-indigo-50/50"
-            >
-              <CreditCard className="w-4 h-4 mr-2" />
-              <span className="hidden sm:inline">料金プラン</span>
-            </Link>
+            <details className="relative group">
+              <summary className="list-none flex items-center gap-2 text-sm font-bold text-slate-700 bg-white border border-slate-200 hover:border-indigo-300 hover:bg-indigo-50 transition-all px-3 py-2 rounded-xl shadow-sm cursor-pointer">
+                <Menu className="w-4 h-4 text-indigo-600" />
+                <span>メニュー</span>
+              </summary>
+              <div className="absolute right-0 mt-2 w-56 rounded-2xl border border-slate-200 bg-white shadow-xl p-2 z-50">
+                {user && (
+                  <Link
+                    href="/usage"
+                    className="flex items-center gap-2 rounded-xl px-3 py-2 text-sm font-semibold text-slate-700 hover:bg-indigo-50 hover:text-indigo-700"
+                  >
+                    <BookOpen className="w-4 h-4" />
+                    使い方を見る
+                  </Link>
+                )}
+                <Link
+                  href="/pricing"
+                  className="flex items-center gap-2 rounded-xl px-3 py-2 text-sm font-semibold text-slate-700 hover:bg-indigo-50 hover:text-indigo-700"
+                >
+                  <CreditCard className="w-4 h-4" />
+                  料金プラン
+                </Link>
+              </div>
+            </details>
             <UserMenu onAuthClick={() => openAuthModal('signin')} />
           </div>
         </div>
@@ -3329,7 +3342,7 @@ export default function Home() {
       <div className="max-w-5xl mx-auto py-12 px-4 sm:px-6 lg:px-8 relative z-10">
 
         {/* Header Section */}
-        <div className="text-center mb-16 animate-fade-in relative">
+        <div className="text-center mb-8 animate-fade-in relative">
           {/* Floating Icons */}
           <div className="absolute top-10 left-[10%] text-indigo-200/60 hidden lg:block animate-float-slow">
             <BookOpen className="w-16 h-16" />
@@ -3341,22 +3354,21 @@ export default function Home() {
             <GraduationCap className="w-12 h-12" />
           </div>
 
-          <div className="flex justify-center mb-10 transform hover:scale-105 transition-transform duration-700 ease-out">
+          <div className="flex justify-center mb-6 transform hover:scale-105 transition-transform duration-700 ease-out">
             <div className="relative h-auto drop-shadow-2xl">
               <img
                 src="/taskal-main-logo.png"
                 alt="Taskal AI"
-                className="h-72 w-auto object-contain mix-blend-multiply relative z-10"
+                className="h-28 sm:h-36 w-auto object-contain mix-blend-multiply relative z-10"
               />
             </div>
           </div>
-          <p className="text-lg md:text-xl text-slate-600 max-w-2xl mx-auto leading-relaxed font-medium">
-            指導歴20年超のベテラン国語講師のノウハウと<br className="hidden sm:block" />
-            最新AIによる解析で、あなたの思考に寄り添うフィードバックを。
+          <p className="text-base md:text-lg text-slate-600 max-w-2xl mx-auto leading-relaxed font-medium">
+            問題を選び、ファイルを入れて、読み取り結果を確認するだけで添削できます。
           </p>
 
           {/* Handwritten Answer Support Highlight */}
-          <div className="mt-12 mb-12 relative group max-w-4xl mx-auto">
+          <div className="hidden mt-12 mb-12 relative group max-w-4xl mx-auto">
             <div className="absolute inset-0 bg-gradient-to-r from-indigo-500/20 via-purple-500/20 to-pink-500/20 blur-xl rounded-3xl transform group-hover:scale-105 transition-transform duration-500"></div>
             <div className="relative bg-white/60 backdrop-blur-xl border border-white/60 rounded-3xl p-8 shadow-xl flex flex-col md:flex-row items-center gap-8">
               <div className="flex-shrink-0 relative">
@@ -3402,7 +3414,7 @@ export default function Home() {
           </div>
 
           {/* ホーム画面に追加する案内など */}
-          <div className="mt-8 max-w-3xl mx-auto space-y-4">
+          <div className="hidden mt-8 max-w-3xl mx-auto space-y-4">
             {/* ホーム画面に追加する案内 */}
             <div className="bg-sky-50/80 backdrop-blur-sm border-2 border-sky-200 rounded-2xl p-6 shadow-lg">
               <div className="flex items-start">
@@ -3451,41 +3463,63 @@ export default function Home() {
           />
         )}
 
+        <div className="grid gap-3 sm:grid-cols-3 mb-6">
+          {APP_STEPS.map((item) => (
+            <div key={item.step} className="rounded-2xl border border-indigo-100 bg-white/80 p-4 shadow-sm">
+              <div className="flex items-center gap-3">
+                <span className="flex h-9 w-9 items-center justify-center rounded-full bg-indigo-600 text-sm font-black text-white">
+                  {item.step}
+                </span>
+                <div>
+                  <p className="font-bold text-slate-800">{item.title}</p>
+                  <p className="text-xs leading-5 text-slate-500">{item.body}</p>
+                </div>
+              </div>
+            </div>
+          ))}
+        </div>
+
         {/* Main Card */}
         <div id="grading-form" className="bg-white/70 backdrop-blur-2xl shadow-[0_20px_60px_-15px_rgba(0,0,0,0.1)] rounded-[2.5rem] overflow-hidden border border-white/60 ring-1 ring-white/60 transition-all duration-500 hover:shadow-[0_30px_70px_-15px_rgba(79,70,229,0.15)] relative">
           <div className="absolute top-0 left-0 w-full h-2 bg-gradient-to-r from-indigo-500 via-violet-500 to-fuchsia-500"></div>
           <div className="p-8 md:p-14">
             {/* ========== Mode Toggle Tabs ========== */}
-            <div className="flex justify-center mb-8">
-              <div className="inline-flex bg-slate-100 rounded-xl p-1">
-                <button
-                  type="button"
-                  onClick={() => setBatchMode('single')}
-                  className={clsx(
-                    'flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-bold transition-all',
-                    batchMode === 'single'
-                      ? 'bg-white text-indigo-600 shadow-md'
-                      : 'text-slate-600 hover:text-slate-800'
-                  )}
-                >
-                  <User className="w-4 h-4" />
-                  個別採点
-                </button>
-                <button
-                  type="button"
-                  onClick={() => setBatchMode('batch')}
-                  className={clsx(
-                    'flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-bold transition-all',
-                    batchMode === 'batch'
-                      ? 'bg-white text-indigo-600 shadow-md'
-                      : 'text-slate-600 hover:text-slate-800'
-                  )}
-                >
-                  <Users className="w-4 h-4" />
-                  一括採点 (最大{MAX_STUDENTS}名)
-                </button>
+            <details className="mb-8 rounded-2xl border border-slate-200 bg-slate-50/80 p-4">
+              <summary className="cursor-pointer list-none text-center text-sm font-bold text-slate-700">
+                詳細メニューを開く
+                <span className="ml-2 text-xs font-medium text-slate-400">一括採点など</span>
+              </summary>
+              <div className="flex justify-center pt-4">
+                <div className="inline-flex bg-slate-100 rounded-xl p-1">
+                  <button
+                    type="button"
+                    onClick={() => setBatchMode('single')}
+                    className={clsx(
+                      'flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-bold transition-all',
+                      batchMode === 'single'
+                        ? 'bg-white text-indigo-600 shadow-md'
+                        : 'text-slate-600 hover:text-slate-800'
+                    )}
+                  >
+                    <User className="w-4 h-4" />
+                    個別採点
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setBatchMode('batch')}
+                    className={clsx(
+                      'flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-bold transition-all',
+                      batchMode === 'batch'
+                        ? 'bg-white text-indigo-600 shadow-md'
+                        : 'text-slate-600 hover:text-slate-800'
+                    )}
+                  >
+                    <Users className="w-4 h-4" />
+                    一括採点 (最大{MAX_STUDENTS}名)
+                  </button>
+                </div>
               </div>
-            </div>
+            </details>
 
             {batchMode === 'single' && (
               <>
@@ -3511,12 +3545,16 @@ export default function Home() {
                   </div>
 
                   {/* 生徒名・添削担当者名入力 */}
-                  <div className="max-w-2xl mx-auto">
-                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  <details className="max-w-2xl mx-auto rounded-2xl border border-slate-200 bg-slate-50/70 p-4">
+                    <summary className="cursor-pointer list-none text-center text-sm font-bold text-slate-700">
+                      名前を入れる
+                      <span className="ml-2 text-xs font-medium text-slate-400">任意</span>
+                    </summary>
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4 pt-4">
                       <div>
                         <label className="block text-sm font-bold text-slate-600 mb-2 flex items-center">
                           <User className="w-4 h-4 mr-2 text-indigo-500" />
-                          生徒名（任意）
+                          生徒名
                         </label>
                         <input
                           type="text"
@@ -3529,7 +3567,7 @@ export default function Home() {
                       <div>
                         <label className="block text-sm font-bold text-slate-600 mb-2 flex items-center">
                           <UserCheck className="w-4 h-4 mr-2 text-violet-500" />
-                          添削担当者名（任意）
+                          添削担当者名
                         </label>
                         <input
                           type="text"
@@ -3541,49 +3579,56 @@ export default function Home() {
                       </div>
                     </div>
                     <p className="text-xs text-slate-500 mt-2 text-center">
-                      ※ PDF出力時にレポートに表示されます
+                      PDF出力時にレポートに表示されます。
                     </p>
-                  </div>
+                  </details>
 
                   {/* Problem Selector */}
                   <div className="max-w-2xl mx-auto">
                     <label className="block text-sm font-bold text-slate-600 mb-3 text-center tracking-wide">
+                      <span className="inline-flex h-7 w-7 items-center justify-center rounded-full bg-indigo-600 text-white mr-2">1</span>
                       採点対象の問題を選択
                     </label>
 
-                    {/* 問題形式の選択 */}
-                    <div className="flex flex-wrap gap-2 justify-center mb-4">
-                      <button
-                        type="button"
-                        onClick={() => setProblemFormat('big-small')}
-                        className={`px-4 py-2 rounded-lg text-sm font-bold transition-all ${problemFormat === 'big-small'
-                          ? 'bg-indigo-600 text-white shadow-md'
-                          : 'bg-slate-100 text-slate-600 hover:bg-slate-200'
-                          }`}
-                      >
-                        大問＋小問
-                      </button>
-                      <button
-                        type="button"
-                        onClick={() => setProblemFormat('small-only')}
-                        className={`px-4 py-2 rounded-lg text-sm font-bold transition-all ${problemFormat === 'small-only'
-                          ? 'bg-indigo-600 text-white shadow-md'
-                          : 'bg-slate-100 text-slate-600 hover:bg-slate-200'
-                          }`}
-                      >
-                        問のみ
-                      </button>
-                      <button
-                        type="button"
-                        onClick={() => setProblemFormat('free')}
-                        className={`px-4 py-2 rounded-lg text-sm font-bold transition-all ${problemFormat === 'free'
-                          ? 'bg-indigo-600 text-white shadow-md'
-                          : 'bg-slate-100 text-slate-600 hover:bg-slate-200'
-                          }`}
-                      >
-                        自由入力
-                      </button>
-                    </div>
+                    <details className="mb-5 rounded-2xl border border-slate-200 bg-slate-50/70 p-4">
+                      <summary className="cursor-pointer list-none text-center text-sm font-bold text-slate-700">
+                        問題番号の詳細設定
+                        <span className="ml-2 text-xs font-medium text-slate-400">形式・一括追加</span>
+                      </summary>
+                      <div className="mt-4">
+                        {/* 問題形式の選択 */}
+                        <div className="flex flex-wrap gap-2 justify-center mb-4">
+                          <button
+                            type="button"
+                            onClick={() => setProblemFormat('big-small')}
+                            className={`px-4 py-2 rounded-lg text-sm font-bold transition-all ${problemFormat === 'big-small'
+                              ? 'bg-indigo-600 text-white shadow-md'
+                              : 'bg-slate-100 text-slate-600 hover:bg-slate-200'
+                              }`}
+                          >
+                            大問＋小問
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => setProblemFormat('small-only')}
+                            className={`px-4 py-2 rounded-lg text-sm font-bold transition-all ${problemFormat === 'small-only'
+                              ? 'bg-indigo-600 text-white shadow-md'
+                              : 'bg-slate-100 text-slate-600 hover:bg-slate-200'
+                              }`}
+                          >
+                            問のみ
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => setProblemFormat('free')}
+                            className={`px-4 py-2 rounded-lg text-sm font-bold transition-all ${problemFormat === 'free'
+                              ? 'bg-indigo-600 text-white shadow-md'
+                              : 'bg-slate-100 text-slate-600 hover:bg-slate-200'
+                              }`}
+                          >
+                            自由入力
+                          </button>
+                        </div>
 
                     {/* 小問の表記形式（自由入力以外で表示） */}
                     {problemFormat !== 'free' && (
@@ -3633,20 +3678,22 @@ export default function Home() {
                     )}
 
                     {/* 一括追加モード切替（小問なしの場合は非表示） */}
-                    {problemFormat !== 'free' && !(problemFormat === 'big-small' && currentSmall === 0) && (
-                      <div className="flex justify-center mb-3">
-                        <button
-                          type="button"
-                          onClick={() => setIsBatchMode(!isBatchMode)}
-                          className={`text-xs px-3 py-1.5 rounded-full font-bold transition-all duration-300 ${isBatchMode
-                              ? 'bg-emerald-600 text-white shadow-lg shadow-emerald-200'
-                              : 'bg-slate-100 text-slate-600 hover:bg-slate-200'
-                            }`}
-                        >
-                          {isBatchMode ? '✨ 一括追加モード ON' : '📋 一括追加モード'}
-                        </button>
+                        {problemFormat !== 'free' && !(problemFormat === 'big-small' && currentSmall === 0) && (
+                          <div className="flex justify-center mb-3">
+                            <button
+                              type="button"
+                              onClick={() => setIsBatchMode(!isBatchMode)}
+                              className={`text-xs px-3 py-1.5 rounded-full font-bold transition-all duration-300 ${isBatchMode
+                                  ? 'bg-emerald-600 text-white shadow-lg shadow-emerald-200'
+                                  : 'bg-slate-100 text-slate-600 hover:bg-slate-200'
+                                }`}
+                            >
+                              {isBatchMode ? '一括追加モード ON' : '一括追加モード'}
+                            </button>
+                          </div>
+                        )}
                       </div>
-                    )}
+                    </details>
 
                     {/* 問題番号入力 */}
                     <div className="flex gap-3 items-center justify-center mb-4 flex-wrap">
@@ -3887,11 +3934,12 @@ export default function Home() {
                     </div>
 
                     {/* 採点の厳しさ（3段階） */}
-                    <div className="mt-6">
-                      <label className="block text-sm font-bold text-slate-600 mb-3 text-center tracking-wide">
-                        採点の厳しさ
-                      </label>
-                      <div className="flex flex-wrap gap-2 justify-center">
+                    <details className="mt-6 rounded-2xl border border-slate-200 bg-slate-50/70 p-4">
+                      <summary className="cursor-pointer list-none text-center text-sm font-bold text-slate-700">
+                        採点の厳しさを変更する
+                        <span className="ml-2 text-xs font-medium text-slate-400">現在: {gradingStrictness === 'lenient' ? '甘め' : gradingStrictness === 'strict' ? '厳しめ' : '標準'}</span>
+                      </summary>
+                      <div className="flex flex-wrap gap-2 justify-center pt-4">
                         <button
                           type="button"
                           onClick={() => setGradingStrictness('lenient')}
@@ -3924,56 +3972,55 @@ export default function Home() {
                         </button>
                       </div>
                       <p className="text-xs text-slate-500 mt-2 text-center">
-                        ※ 採点結果に納得できない場合、「もっと厳しく/甘く」で無料再採点できます
+                        採点結果に納得できない場合は、結果画面から無料で再採点できます。
                       </p>
-                    </div>
+                    </details>
                   </div>
 
                   {/* File Upload Section */}
                   <div className="space-y-4">
                     <div className="text-center">
                       <label className="block text-sm font-bold text-slate-600 mb-3">
-                        <span className="w-2.5 h-2.5 rounded-full bg-indigo-500 mr-2 shadow-[0_0_10px_rgba(99,102,241,0.5)] inline-block"></span>
+                        <span className="inline-flex h-7 w-7 items-center justify-center rounded-full bg-indigo-600 text-white mr-2">2</span>
                         答案・問題・模範解答のファイルをアップロード
                       </label>
+                      <p className="text-sm text-slate-500 mb-4">
+                        基本は、答案・問題文・模範解答をまとめて入れれば使えます。
+                      </p>
 
                       {/* 必須確認事項 */}
-                      <div className="bg-amber-50 border-2 border-amber-300 rounded-xl p-4 mb-4 max-w-xl mx-auto">
-                        <h4 className="text-sm font-bold text-amber-800 mb-2 flex items-center justify-center">
-                          <AlertCircle className="w-4 h-4 mr-2" />
+                      <details className="mb-4 max-w-xl mx-auto rounded-2xl border border-amber-200 bg-amber-50/80 p-4">
+                        <summary className="cursor-pointer list-none text-sm font-bold text-amber-800">
                           アップロード前の確認事項
-                        </h4>
-                        <ul className="text-sm text-amber-700 space-y-1 text-left">
-                          <li className="flex items-start">
-                            <span className="text-amber-500 mr-2">✓</span>
-                            <span><strong>①本人の答案</strong>が含まれている</span>
-                          </li>
-                          <li className="flex items-start">
-                            <span className="text-amber-500 mr-2">✓</span>
-                            <span><strong>②模範解答</strong>が含まれている</span>
-                          </li>
-                          <li className="flex items-start">
-                            <span className="text-amber-500 mr-2">✓</span>
-                            <span><strong>③問題文</strong>が含まれている</span>
-                          </li>
-                          <li className="flex items-start mt-2 pt-2 border-t border-amber-200">
-                            <span className="text-amber-500 mr-2">📷</span>
-                            <span><strong>文字がはっきりと読み取れる</strong>画質であること</span>
-                          </li>
-                          <li className="flex items-start mt-2 pt-2 border-t border-amber-200">
-                            <span className="text-amber-500 mr-2">📝</span>
-                            <span><strong>問題の文章は全て含める</strong>こと。該当問題と関係ない部分はできるだけ含めないこと</span>
-                          </li>
-                          <li className="flex items-start mt-2 pt-2 border-t border-amber-200">
-                            <span className="text-amber-500 mr-2">⏱️</span>
-                            <span><strong>ファイルの読み込みに時間がかかる場合は複数回に分けて処理してください</strong></span>
-                          </li>
-                        </ul>
-                      </div>
-
-                      <p className="text-xs text-blue-600 font-medium bg-blue-50 px-3 py-2 rounded-lg inline-block border border-blue-200">
-                        🔒 アップロードされた画像は採点完了後に自動削除され、AIの学習には一切利用されません
-                      </p>
+                        </summary>
+                        <div className="mt-3">
+                          <ul className="text-sm text-amber-700 space-y-1 text-left">
+                            <li className="flex items-start">
+                              <span className="text-amber-500 mr-2">✓</span>
+                              <span><strong>本人の答案</strong>が含まれている</span>
+                            </li>
+                            <li className="flex items-start">
+                              <span className="text-amber-500 mr-2">✓</span>
+                              <span><strong>模範解答</strong>が含まれている</span>
+                            </li>
+                            <li className="flex items-start">
+                              <span className="text-amber-500 mr-2">✓</span>
+                              <span><strong>問題文</strong>が含まれている</span>
+                            </li>
+                            <li className="flex items-start mt-2 pt-2 border-t border-amber-200">
+                              <span className="text-amber-500 mr-2">✓</span>
+                              <span><strong>文字がはっきりと読み取れる</strong>画質であること</span>
+                            </li>
+                            <li className="flex items-start mt-2 pt-2 border-t border-amber-200">
+                              <span className="text-amber-500 mr-2">✓</span>
+                              <span><strong>問題の文章は全て含める</strong>こと。該当問題と関係ない部分はできるだけ含めないこと</span>
+                            </li>
+                          </ul>
+                          <p className="text-xs text-blue-600 font-medium bg-blue-50 px-3 py-2 rounded-lg inline-block border border-blue-200 mt-3">
+                            アップロードされた画像は採点完了後に自動削除され、AIの学習には一切利用されません。
+                          </p>
+                        </div>
+                      </details>
                     </div>
 
                     {/* PDF圧縮ツール紹介セクション */}
@@ -4169,45 +4216,45 @@ export default function Home() {
                           </span>
                         </div>
 
-                        {/* クイック役割設定ボタン（スマホ向け） */}
-                        <div className="flex flex-wrap gap-2 mb-3 sm:mb-4">
-                          <button
-                            type="button"
-                            onClick={() => {
-                              // 最初のファイルを答案、残りを問題+模範解答に設定
-                              const newRoles: Record<number, FileRole> = {};
-                              uploadedFiles.forEach((_, i) => {
-                                newRoles[i] = i === 0 ? 'answer' : 'problem_model';
-                              });
-                              setFileRoles(newRoles);
-                              // 答案インデックスを再計算
-                              setAnswerFileIndex(detectAnswerIndexByRole(uploadedFiles, newRoles, null));
-                            }}
-                            className="px-3 py-1.5 text-xs font-bold bg-indigo-100 text-indigo-700 rounded-lg border border-indigo-200 hover:bg-indigo-200 transition-colors"
-                          >
-                            📝 1枚目=答案 / 残り=問題
-                          </button>
-                          <button
-                            type="button"
-                            onClick={() => {
-                              // 全てを「全部入り」に設定
-                              const newRoles: Record<number, FileRole> = {};
-                              uploadedFiles.forEach((_, i) => {
-                                newRoles[i] = 'all';
-                              });
-                              setFileRoles(newRoles);
-                              // 答案インデックスを再計算
-                              setAnswerFileIndex(detectAnswerIndexByRole(uploadedFiles, newRoles, null));
-                            }}
-                            className="px-3 py-1.5 text-xs font-bold bg-rose-100 text-rose-700 rounded-lg border border-rose-200 hover:bg-rose-200 transition-colors"
-                          >
-                            📦 全て一括設定
-                          </button>
-                        </div>
-
-                        <p className="text-xs text-indigo-700 font-medium bg-indigo-50 px-3 py-2 rounded-xl mb-3 sm:mb-4 border border-indigo-100">
-                          💡 各ファイルの内容を選択してください
-                        </p>
+                        <details className="mb-3 sm:mb-4 rounded-2xl border border-slate-200 bg-slate-50/70 p-3">
+                          <summary className="cursor-pointer list-none text-xs font-bold text-slate-700">
+                            ファイル内容を細かく指定する
+                          </summary>
+                          <div className="flex flex-wrap gap-2 mt-3">
+                            <button
+                              type="button"
+                              onClick={() => {
+                                // 最初のファイルを答案、残りを問題+模範解答に設定
+                                const newRoles: Record<number, FileRole> = {};
+                                uploadedFiles.forEach((_, i) => {
+                                  newRoles[i] = i === 0 ? 'answer' : 'problem_model';
+                                });
+                                setFileRoles(newRoles);
+                                // 答案インデックスを再計算
+                                setAnswerFileIndex(detectAnswerIndexByRole(uploadedFiles, newRoles, null));
+                              }}
+                              className="px-3 py-1.5 text-xs font-bold bg-indigo-100 text-indigo-700 rounded-lg border border-indigo-200 hover:bg-indigo-200 transition-colors"
+                            >
+                              1枚目=答案 / 残り=問題
+                            </button>
+                            <button
+                              type="button"
+                              onClick={() => {
+                                // 全てを「全部入り」に設定
+                                const newRoles: Record<number, FileRole> = {};
+                                uploadedFiles.forEach((_, i) => {
+                                  newRoles[i] = 'all';
+                                });
+                                setFileRoles(newRoles);
+                                // 答案インデックスを再計算
+                                setAnswerFileIndex(detectAnswerIndexByRole(uploadedFiles, newRoles, null));
+                              }}
+                              className="px-3 py-1.5 text-xs font-bold bg-rose-100 text-rose-700 rounded-lg border border-rose-200 hover:bg-rose-200 transition-colors"
+                            >
+                              全て一括設定
+                            </button>
+                          </div>
+                        </details>
 
                         {/* ファイルグリッド - スマホ対応 */}
                         <div className="grid grid-cols-1 gap-2 sm:gap-3">
@@ -4256,43 +4303,57 @@ export default function Home() {
                                 </button>
                               </div>
 
-                              {/* 役割選択ボタン（スマホ向けタップしやすい） */}
-                              <div className="flex flex-wrap gap-1.5 sm:gap-2">
-                                {[
-                                  { value: 'answer', label: '📝 答案', color: 'indigo' },
-                                  { value: 'problem', label: '📋 問題', color: 'amber' },
-                                  { value: 'model', label: '✅ 模範解答', color: 'emerald' },
-                                  { value: 'problem_model', label: '📋✅ 問題+模範解答', color: 'cyan' },
-                                  { value: 'all', label: '📦 全部', color: 'rose' },
-                                ].map(({ value, label, color }) => (
-                                  <button
-                                    key={value}
-                                    type="button"
-                                    onClick={() => {
-                                      const newRoles = { ...fileRoles, [index]: value as FileRole };
-                                      setFileRoles(newRoles);
-                                      // 答案インデックスを再計算
-                                      setAnswerFileIndex(detectAnswerIndexByRole(uploadedFiles, newRoles, answerFileIndex));
-                                    }}
-                                    className={clsx(
-                                      "px-2 sm:px-3 py-1 sm:py-1.5 text-[10px] sm:text-xs font-bold rounded-lg border transition-all",
-                                      fileRoles[index] === value
-                                        ? `bg-${color}-200 border-${color}-400 text-${color}-800 ring-2 ring-${color}-400/30`
-                                        : `bg-white border-slate-200 text-slate-600 hover:border-${color}-300 hover:bg-${color}-50`
-                                    )}
-                                    style={{
-                                      backgroundColor: fileRoles[index] === value
-                                        ? color === 'indigo' ? '#c7d2fe' : color === 'amber' ? '#fde68a' : color === 'emerald' ? '#a7f3d0' : color === 'cyan' ? '#a5f3fc' : '#fecdd3'
-                                        : undefined,
-                                      borderColor: fileRoles[index] === value
-                                        ? color === 'indigo' ? '#818cf8' : color === 'amber' ? '#fbbf24' : color === 'emerald' ? '#34d399' : color === 'cyan' ? '#22d3ee' : '#fb7185'
-                                        : undefined,
-                                    }}
-                                  >
-                                    {label}
-                                  </button>
-                                ))}
-                              </div>
+                              {/* 役割選択ボタン（必要な場合だけ開く） */}
+                              <details className="mt-2 rounded-xl bg-white/70 p-2 border border-slate-100">
+                                <summary className="cursor-pointer list-none text-xs font-bold text-slate-600">
+                                  このファイルの内容を指定する
+                                  <span className="ml-2 text-[10px] font-medium text-slate-400">
+                                    現在: {
+                                      fileRoles[index] === 'answer' ? '答案' :
+                                        fileRoles[index] === 'problem' ? '問題' :
+                                          fileRoles[index] === 'model' ? '模範解答' :
+                                            fileRoles[index] === 'problem_model' ? '問題+模範解答' :
+                                              fileRoles[index] === 'all' ? '全部' : '自動'
+                                    }
+                                  </span>
+                                </summary>
+                                <div className="flex flex-wrap gap-1.5 sm:gap-2 mt-2">
+                                  {[
+                                    { value: 'answer', label: '答案', color: 'indigo' },
+                                    { value: 'problem', label: '問題', color: 'amber' },
+                                    { value: 'model', label: '模範解答', color: 'emerald' },
+                                    { value: 'problem_model', label: '問題+模範解答', color: 'cyan' },
+                                    { value: 'all', label: '全部', color: 'rose' },
+                                  ].map(({ value, label, color }) => (
+                                    <button
+                                      key={value}
+                                      type="button"
+                                      onClick={() => {
+                                        const newRoles = { ...fileRoles, [index]: value as FileRole };
+                                        setFileRoles(newRoles);
+                                        // 答案インデックスを再計算
+                                        setAnswerFileIndex(detectAnswerIndexByRole(uploadedFiles, newRoles, answerFileIndex));
+                                      }}
+                                      className={clsx(
+                                        "px-2 sm:px-3 py-1 sm:py-1.5 text-[10px] sm:text-xs font-bold rounded-lg border transition-all",
+                                        fileRoles[index] === value
+                                          ? `bg-${color}-200 border-${color}-400 text-${color}-800 ring-2 ring-${color}-400/30`
+                                          : `bg-white border-slate-200 text-slate-600 hover:border-${color}-300 hover:bg-${color}-50`
+                                      )}
+                                      style={{
+                                        backgroundColor: fileRoles[index] === value
+                                          ? color === 'indigo' ? '#c7d2fe' : color === 'amber' ? '#fde68a' : color === 'emerald' ? '#a7f3d0' : color === 'cyan' ? '#a5f3fc' : '#fecdd3'
+                                          : undefined,
+                                        borderColor: fileRoles[index] === value
+                                          ? color === 'indigo' ? '#818cf8' : color === 'amber' ? '#fbbf24' : color === 'emerald' ? '#34d399' : color === 'cyan' ? '#22d3ee' : '#fb7185'
+                                          : undefined,
+                                      }}
+                                    >
+                                      {label}
+                                    </button>
+                                  ))}
+                                </div>
+                              </details>
                             </div>
                           ))}
                         </div>
@@ -4317,17 +4378,17 @@ export default function Home() {
 
                     {/* PDFページ番号指定（複数ページPDF対応） */}
                     {uploadedFiles.some(f => f.type === 'application/pdf') && (
-                      <div className="bg-orange-50 rounded-2xl p-4 border border-orange-200">
-                        <h3 className="text-sm font-bold text-orange-800 mb-2 flex items-center">
-                          <span className="mr-2">📑</span>
-                          PDFのページ番号を指定（複数ページの場合）
-                        </h3>
+                      <details className="bg-orange-50 rounded-2xl p-4 border border-orange-200">
+                        <summary className="cursor-pointer list-none text-sm font-bold text-orange-800">
+                          PDFのページ番号を指定する
+                          <span className="ml-2 text-xs font-medium text-orange-600">任意</span>
+                        </summary>
                         <p className="text-xs text-orange-700 mb-3">
                           PDFが複数ページある場合、各内容があるページ番号を入力すると読み取り精度が向上します。
                           <br />
                           <span className="font-medium">※ 空欄の場合は自動で全ページをスキャンします</span>
                         </p>
-                        <div className="grid grid-cols-3 gap-3">
+                        <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 mt-3">
                           <div>
                             <label className="text-xs font-medium text-orange-700 block mb-1">
                               📝 答案のページ
@@ -4366,16 +4427,20 @@ export default function Home() {
                             />
                           </div>
                         </div>
-                      </div>
+                      </details>
                     )}
 
                     {/* 模範解答入力モード選択 */}
                     {uploadedFiles.length > 0 && (
-                      <div className="mt-4 p-4 bg-gradient-to-br from-emerald-50 to-teal-50 border border-emerald-200 rounded-xl">
-                        <div className="flex items-center justify-between mb-3">
+                      <details className="mt-4 p-4 bg-gradient-to-br from-emerald-50 to-teal-50 border border-emerald-200 rounded-xl">
+                        <summary className="cursor-pointer list-none text-sm font-bold text-emerald-800">
+                          模範解答の入力方法を変更する
+                          <span className="ml-2 text-xs font-medium text-emerald-600">通常は画像から読み取り</span>
+                        </summary>
+                        <div className="flex items-center justify-between mb-3 mt-4">
                           <h4 className="text-sm font-bold text-emerald-800 flex items-center">
                             <Edit3 className="w-4 h-4 mr-2" />
-                            模範解答の入力方法
+                            模範解答
                           </h4>
                           <div className="flex bg-white rounded-lg p-1 border border-emerald-200">
                             <button
@@ -4427,7 +4492,7 @@ export default function Home() {
                             アップロードした画像から模範解答を読み取ります。ファイルの役割設定で「模範解答」を指定してください。
                           </p>
                         )}
-                      </div>
+                      </details>
                     )}
                   </div>
 
@@ -4478,7 +4543,7 @@ export default function Home() {
                       ) : (
                         <span className="flex items-center">
                           <BookOpen className="mr-3 h-6 w-6" />
-                          答案を読み取る
+                          3 読み取りを開始する
                           <ArrowRight className="ml-3 h-6 w-6 group-hover:translate-x-1 transition-transform" />
                         </span>
                       )}

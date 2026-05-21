@@ -17,7 +17,7 @@ const BASE_URL = process.env.NEXT_PUBLIC_APP_URL || 'https://auto-tensaku-system
 export const metadata: Metadata = {
   metadataBase: new URL(BASE_URL),
   title: "Taskal AI — 国語記述問題の自動添削",
-  description: "指導歴20年超のベテラン国語講師のノウハウとAIによる解析で、あなたの思考に寄り添うフィードバックを提供する自動添削システムです。",
+  description: "問題・答案・模範解答をアップロードすると、点数・減点理由・書き直し例を返す国語記述向けAI自動添削システムです。",
   keywords: ["国語", "添削", "AI", "自動採点", "記述式", "受験", "教育"],
   authors: [{ name: "Taskal AI" }],
   manifest: "/manifest.json",
@@ -28,7 +28,7 @@ export const metadata: Metadata = {
   },
   openGraph: {
     title: "Taskal AI — 国語記述問題の自動添削",
-    description: "指導歴20年超のベテラン国語講師のノウハウとAIによる解析で、あなたの思考に寄り添うフィードバックを提供します。",
+    description: "問題・答案・模範解答をアップロードすると、点数・減点理由・書き直し例を返します。",
     type: "website",
     locale: "ja_JP",
     siteName: "Taskal AI",
@@ -44,7 +44,7 @@ export const metadata: Metadata = {
   twitter: {
     card: "summary_large_image",
     title: "Taskal AI — 国語記述問題の自動添削",
-    description: "指導歴20年超のベテラン国語講師のノウハウとAIによる解析で、あなたの思考に寄り添うフィードバックを提供します。",
+    description: "問題・答案・模範解答をアップロードすると、点数・減点理由・書き直し例を返します。",
     images: ["/ogp.png"],
   },
   icons: {

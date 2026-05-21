@@ -25,7 +25,7 @@ const steps: Step[] = [
     number: '2',
     title: 'AIが分析',
     description:
-      'ベテラン講師のノウハウを学んだAIが内容・表現・構成を瞬時に評価。',
+      '内容・表現・構成の3軸で、点数・減点理由・書き直し例を生成。',
   },
   {
     icon: FileCheck,

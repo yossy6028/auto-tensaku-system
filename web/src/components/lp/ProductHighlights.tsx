@@ -27,9 +27,9 @@ const highlights: Highlight[] = [
     },
     {
         icon: CheckCircle,
-        title: 'プロ講師の採点基準で設計',
+        title: '国語記述に合わせた採点',
         description:
-            '20年以上の指導経験を持つプロ講師の採点ノウハウをAIに学習させています。入試本番を見据えた実践的なフィードバックで、「なぜ減点されるのか」「どう書けば満点になるのか」を具体的にアドバイスします。',
+            '内容・表現・構成の3軸で答案を評価します。足りない要素、減点理由、満点に近づける書き直し例を具体的に示します。',
         colorBg: 'bg-blue-50',
         colorText: 'text-blue-600',
         borderColor: 'border-blue-100',
@@ -76,9 +76,9 @@ export function ProductHighlights() {
                     className="mb-16 text-center"
                 >
                     <h2 className="text-xl font-medium leading-relaxed text-slate-700 md:text-2xl">
-                        指導歴20年超のベテラン国語講師のノウハウと
+                        写真を送るだけで、採点・減点理由・
                         <br className="hidden md:block" />
-                        最新AIによる解析で、あなたの思考に寄り添うフィードバックを。
+                        書き直し例まで返します。
                     </h2>
                 </motion.div>
 

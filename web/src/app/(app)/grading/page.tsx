@@ -85,7 +85,7 @@ const MAX_FILES = 10;
 const VALID_EXTENSIONS = /\.(jpg|jpeg|png|gif|webp|bmp|heic|heif|pdf)$/i;
 const APP_STEPS = [
   { step: '1', title: '問題を選ぶ', body: '大問・問番号と配点だけ決めます。' },
-  { step: '2', title: 'ファイルを入れる', body: '答案・問題・模範解答をまとめてアップロードします。' },
+  { step: '2', title: '撮影してアップロード', body: '問題・答案・解答を撮影し、まとめてアップロードします。' },
   { step: '3', title: '読み取りを確認', body: '文字を直してから採点します。' },
 ];
 
@@ -3364,7 +3364,7 @@ export default function Home() {
             </div>
           </div>
           <p className="text-base md:text-lg text-slate-600 max-w-2xl mx-auto leading-relaxed font-medium">
-            問題を選び、ファイルを入れて、読み取り結果を確認するだけで添削できます。
+            問題を選び、問題・答案・解答を撮影してアップロードし、読み取り結果を確認するだけで添削できます。
           </p>
 
           {/* Handwritten Answer Support Highlight */}
@@ -3982,10 +3982,10 @@ export default function Home() {
                     <div className="text-center">
                       <label className="block text-sm font-bold text-slate-600 mb-3">
                         <span className="inline-flex h-7 w-7 items-center justify-center rounded-full bg-indigo-600 text-white mr-2">2</span>
-                        答案・問題・模範解答のファイルをアップロード
+                        問題・答案・解答を撮影してアップロード
                       </label>
                       <p className="text-sm text-slate-500 mb-4">
-                        基本は、答案・問題文・模範解答をまとめて入れれば使えます。
+                        基本は、撮影した問題・答案・解答をまとめてアップロードすれば使えます。
                       </p>
 
                       {/* 必須確認事項 */}

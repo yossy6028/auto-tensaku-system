@@ -3,6 +3,7 @@
 import React, { useState, useEffect } from 'react';
 import Link from 'next/link';
 import { ArrowLeft, Shield, FileText, Scale } from 'lucide-react';
+import { SUPPORT_EMAIL, SUPPORT_MAILTO_HREF } from '@/lib/constants/contact';
 
 type TabId = 'terms' | 'privacy' | 'tokushoho';
 
@@ -242,7 +243,7 @@ function TermsContent() {
               </tr>
               <tr>
                 <td className="py-3 px-4 border border-slate-200 text-slate-800 font-medium whitespace-nowrap">第18条</td>
-                <td className="py-3 px-4 border border-slate-200 text-slate-700">連絡方法 — 当社からユーザーへの通知は、登録されたメールアドレスへの送信または本サービス上での掲示により行います。ユーザーから当社への連絡は、当社所定の問い合わせフォームまたはメールにより行うものとします。</td>
+                <td className="py-3 px-4 border border-slate-200 text-slate-700">連絡方法 — 当社からユーザーへの通知は、登録されたメールアドレスへの送信または本サービス上での掲示により行います。ユーザーから当社への連絡は、当社所定の問い合わせフォームまたは {SUPPORT_EMAIL} 宛のメールにより行うものとします。</td>
               </tr>
             </tbody>
           </table>
@@ -545,12 +546,12 @@ function PrivacyContent() {
       <section>
         <h3 className="text-xl font-bold text-slate-800 mb-4 border-b border-slate-200 pb-2">11. お問い合わせ</h3>
         <p className="text-slate-700 leading-relaxed text-sm mb-4">
-          本プライバシーポリシーに関するお問い合わせは、以下の連絡先までお願いいたします。
+          本プライバシーポリシー、不具合、その他のお問い合わせは、以下の連絡先までお願いいたします。
         </p>
         <div className="bg-slate-50 rounded-xl p-5 border border-slate-200">
           <p className="text-slate-700 text-sm">
             <strong>EduShift 運営事務局</strong><br />
-            メール：katsu.yoshii@gmail.com
+            メール：<a href={SUPPORT_MAILTO_HREF} className="text-indigo-600 underline-offset-4 hover:underline">{SUPPORT_EMAIL}</a>
           </p>
         </div>
       </section>
@@ -573,7 +574,7 @@ function TokushohoContent() {
             { term: '代表者', desc: '吉井勝彦' },
             { term: '所在地', desc: '〒150-0021\n東京都渋谷区恵比寿西2丁目4番8号ウィンド恵比寿ビル8F' },
             { term: '電話番号', desc: '090-6028-3779（受付: 平日10:00〜17:00）' },
-            { term: 'メールアドレス', desc: 'katsu.yoshii@gmail.com' },
+            { term: 'メールアドレス', desc: SUPPORT_EMAIL },
             { term: 'ホームページURL', desc: 'https://www.edu-shift.com/' },
             { term: 'サービスの名称', desc: 'Taskal AI（国語記述答案 AI自動添削システム）' },
             {

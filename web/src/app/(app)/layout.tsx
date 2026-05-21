@@ -2,6 +2,7 @@
 import Link from "next/link";
 import { TrialEndedModal } from "@/components/TrialEndedModal";
 import { FreeAccessBanner } from "@/components/FreeAccessBanner";
+import { SUPPORT_MAILTO_HREF } from "@/lib/constants/contact";
 
 export default function AppLayout({
   children,
@@ -53,6 +54,12 @@ export default function AppLayout({
               >
                 本アプリケーションについて
               </Link>
+              <a
+                href={SUPPORT_MAILTO_HREF}
+                className="hover:text-white transition-colors"
+              >
+                不具合・お問い合わせ
+              </a>
             </nav>
 
             <p className="text-xs text-slate-400">

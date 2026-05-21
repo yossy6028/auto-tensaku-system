@@ -1,9 +1,10 @@
 'use client';
 
 import React, { useState, useRef, useEffect } from 'react';
-import { User, LogOut, Settings, CreditCard, ChevronDown, Infinity, BookOpen, Receipt } from 'lucide-react';
+import { User, LogOut, Settings, CreditCard, ChevronDown, Infinity, BookOpen, Receipt, Mail } from 'lucide-react';
 import { useAuth } from './AuthProvider';
 import Link from 'next/link';
+import { SUPPORT_MAILTO_HREF } from '@/lib/constants/contact';
 
 interface UserMenuProps {
   onAuthClick?: () => void;
@@ -171,6 +172,15 @@ export function UserMenu({ onAuthClick }: UserMenuProps) {
               <span className="text-sm">アカウント設定</span>
             </Link>
 
+            <a
+              href={SUPPORT_MAILTO_HREF}
+              onClick={() => setIsOpen(false)}
+              className="flex items-center gap-3 px-3 py-2 rounded-lg hover:bg-slate-50 transition-colors text-slate-700"
+            >
+              <Mail className="w-4 h-4" />
+              <span className="text-sm">不具合・お問い合わせ</span>
+            </a>
+
             {isAdmin && (
               <Link
                 href="/admin"
@@ -200,5 +210,4 @@ export function UserMenu({ onAuthClick }: UserMenuProps) {
     </div>
   );
 }
-
 

@@ -59,11 +59,15 @@ export async function POST(request: NextRequest) {
     }
 
     // ユーザープロファイルを取得
-    const { data: profile } = await supabase
+    const { data: profile, error: profileError } = await supabase
       .from('user_profiles')
       .select('*')
       .eq('id', user.id)
       .single();
+
+    if (profileError) {
+      console.warn('[Stripe Checkout] Failed to fetch user profile:', profileError.message);
+    }
 
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     let customerId = (profile as any)?.stripe_customer_id;
@@ -80,10 +84,14 @@ export async function POST(request: NextRequest) {
 
       // Supabaseにcustomer_idを保存
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      await (supabase as any)
+      const { error: customerUpdateError } = await (supabase as any)
         .from('user_profiles')
         .update({ stripe_customer_id: customerId })
         .eq('id', user.id);
+
+      if (customerUpdateError) {
+        console.warn('[Stripe Checkout] Failed to persist Stripe customer id:', customerUpdateError.message);
+      }
     }
 
     // 既存のアクティブなサブスクリプションをチェック
@@ -119,6 +127,7 @@ export async function POST(request: NextRequest) {
     const session = await stripe.checkout.sessions.create({
       customer: customerId,
       mode: 'subscription',
+      client_reference_id: user.id,
       payment_method_types: ['card'],
       line_items: [
         {

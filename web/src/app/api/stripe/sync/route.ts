@@ -36,6 +36,20 @@ function getSubscriptionPeriod(subscription: Record<string, unknown>): { start: 
   };
 }
 
+async function getPlanIdFromLegacyStripePrice(stripePriceId: string): Promise<string | null> {
+  try {
+    const stripe = getStripe();
+    const stripePrice = await stripe.prices.retrieve(stripePriceId);
+    if (stripePrice.currency !== 'jpy' || typeof stripePrice.unit_amount !== 'number') {
+      return null;
+    }
+    return Object.entries(PLAN_PRICES).find(([, price]) => price === stripePrice.unit_amount)?.[0] ?? null;
+  } catch (error) {
+    console.warn('[Stripe Sync] Failed to retrieve Stripe price for legacy plan resolution:', error);
+    return null;
+  }
+}
+
 export async function POST() {
   try {
     if (!process.env.NEXT_PUBLIC_SUPABASE_URL || !process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY) {
@@ -99,7 +113,8 @@ export async function POST() {
     const subscription = sorted[0] as any;
 
     const priceId = subscription.items.data[0]?.price?.id || null;
-    const resolvedPlanId = getPlanIdFromStripePriceId(priceId || '');
+    const resolvedPlanId = getPlanIdFromStripePriceId(priceId || '')
+      || (priceId ? await getPlanIdFromLegacyStripePrice(priceId) : null);
     if (!resolvedPlanId) {
       console.error('[Stripe Sync] Unknown stripe_price_id, cannot map to plan:', priceId);
     }

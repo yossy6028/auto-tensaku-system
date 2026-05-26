@@ -35,6 +35,7 @@ import {
 } from '@/lib/storage/savedProblems';
 import { Users } from 'lucide-react';
 import { WelcomeGuide } from '@/components/WelcomeGuide';
+import { sendGAEvent } from '@/components/GoogleAnalytics';
 
 type GradingStrictness = 'lenient' | 'standard' | 'strict';
 
@@ -1919,6 +1920,7 @@ export default function Home() {
     // ファイル数の上限チェック
     if (files.length > MAX_FILES) {
       setError(`一度にアップロードできるファイルは${MAX_FILES}個までです。`);
+      sendGAEvent('grading_upload_rejected', { reason: 'too_many_files', file_count: files.length });
       return;
     }
 
@@ -1935,6 +1937,7 @@ export default function Home() {
 
     if (validFiles.length === 0) {
       console.log('[Page] No valid files (image/PDF) found');
+      sendGAEvent('grading_upload_rejected', { reason: 'invalid_file_type', file_count: files.length });
       if (isMountedRef.current) {
         setError('画像ファイル（JPG、PNG、HEIC等）またはPDFファイルのみアップロードできます。（最大50MB）');
       }
@@ -2004,6 +2007,10 @@ export default function Home() {
 
     // ポップアップを表示（アンマウント後の更新を防止）
     if (isMountedRef.current) {
+      sendGAEvent('grading_upload_selected', {
+        file_count: processedFiles.length,
+        has_pdf: processedFiles.some(f => f.type === 'application/pdf') ? 1 : 0,
+      });
       setPendingFiles(processedFiles);
       setPendingFileRoles(initialRoles);
       setShowFileRoleModal(true);
@@ -2285,17 +2292,20 @@ export default function Home() {
     e.preventDefault();
 
     if (!user) {
+      sendGAEvent('grading_auth_required', { source: 'ocr_start' });
       openAuthModal('signin');
       return;
     }
 
     if (!session) {
+      sendGAEvent('grading_auth_required', { source: 'ocr_start' });
       openAuthModal('signin');
       return;
     }
 
     if (uploadedFiles.length === 0) {
       setError('ファイルをアップロードしてください。');
+      sendGAEvent('grading_ocr_blocked', { reason: 'no_files' });
       return;
     }
 
@@ -2307,6 +2317,7 @@ export default function Home() {
       const currentLabel = generateProblemLabel();
       if (!currentLabel) {
         setError('採点対象の問題を選択または入力してください。');
+        sendGAEvent('grading_ocr_blocked', { reason: 'no_problem_label' });
         return;
       }
       targetLabels = [currentLabel];
@@ -2361,6 +2372,7 @@ export default function Home() {
       const baseMessage = `ファイルの合計サイズが大きすぎます（${totalMB}MB、${fileCount}枚）。合計${maxMB}MB以下になるように、ファイルを分割するか、写真の枚数を減らしてください。`;
       setError(hasPdf ? `${baseMessage} ${PDF_SIZE_ADVICE}` : baseMessage);
       setIsLoading(false);
+      sendGAEvent('grading_ocr_failed', { reason: 'payload_too_large' });
       return;
     }
 
@@ -2368,6 +2380,11 @@ export default function Home() {
     setError(null);
     setOcrResults({});
     setConfirmedTexts({});
+    sendGAEvent('grading_ocr_started', {
+      label_count: targetLabels.length,
+      file_count: uploadedFiles.length,
+      access_type: usageInfo?.accessType || 'unknown',
+    });
 
     // 各ラベルに対してOCRを実行
     const newOcrResults: Record<string, { text: string; charCount: number }> = {};
@@ -2415,6 +2432,7 @@ export default function Home() {
           setError(fallbackMessage);
           setOcrFlowStep('idle');
           setIsLoading(false);
+          sendGAEvent('grading_ocr_failed', { reason: `parse_${res.status}` });
           return;
         }
 
@@ -2432,6 +2450,7 @@ export default function Home() {
           setError(message);
           setOcrFlowStep('idle');
           setIsLoading(false);
+          sendGAEvent('grading_ocr_failed', { reason: `http_${res.status}` });
           return;
         }
 
@@ -2439,6 +2458,7 @@ export default function Home() {
           setError(data.message ?? 'OCR処理中にエラーが発生しました');
           setOcrFlowStep('idle');
           setIsLoading(false);
+          sendGAEvent('grading_ocr_failed', { reason: 'api_error' });
           return;
         }
 
@@ -2446,6 +2466,7 @@ export default function Home() {
           setError('OCR結果が取得できませんでした');
           setOcrFlowStep('idle');
           setIsLoading(false);
+          sendGAEvent('grading_ocr_failed', { reason: 'missing_result' });
           return;
         }
 
@@ -2468,6 +2489,7 @@ export default function Home() {
         setError('OCR処理中にエラーが発生しました。');
         setOcrFlowStep('idle');
         setIsLoading(false);
+        sendGAEvent('grading_ocr_failed', { reason: 'network_error' });
         return;
       }
     }
@@ -2476,6 +2498,10 @@ export default function Home() {
     setOcrFlowStep('confirm');
     setCurrentOcrLabel('');
     setIsLoading(false);
+    sendGAEvent('grading_ocr_completed', {
+      label_count: Object.keys(newOcrResults).length,
+      file_count: uploadedFiles.length,
+    });
   };
 
   // 確認済みテキストで採点を実行
@@ -2489,6 +2515,7 @@ export default function Home() {
     if (!user || !session) {
       console.log('[Page] No user or session, showing auth modal');
       setError('セッションが切れました。再度ログインしてください。');
+      sendGAEvent('grading_auth_required', { source: 'grade_confirmed' });
       openAuthModal('signin');
       setOcrFlowStep('idle');
       return;
@@ -2499,6 +2526,7 @@ export default function Home() {
       console.log('[Page] No confirmedTexts');
       setError('読み取り結果がありません。');
       setOcrFlowStep('idle');
+      sendGAEvent('grading_submit_blocked', { reason: 'no_confirmed_text' });
       return;
     }
 
@@ -2511,6 +2539,7 @@ export default function Home() {
       console.log('[Page] All confirmedTexts are empty or placeholders');
       setError('読み取り結果が空です。答案テキストを手動で入力してください。');
       setOcrFlowStep('confirm');
+      sendGAEvent('grading_submit_blocked', { reason: 'empty_confirmed_text' });
       return;
     }
 
@@ -2519,6 +2548,7 @@ export default function Home() {
       console.log('[Page] No uploadedFiles');
       setError('ファイルがありません。');
       setOcrFlowStep('idle');
+      sendGAEvent('grading_submit_blocked', { reason: 'no_files' });
       return;
     }
 
@@ -2533,6 +2563,11 @@ export default function Home() {
 
     const targetLabels = Object.keys(confirmedTexts);
     console.log('[Page] Starting grading with labels:', targetLabels);
+    sendGAEvent('grading_started', {
+      label_count: targetLabels.length,
+      file_count: uploadedFiles.length,
+      access_type: usageInfo?.accessType || 'unknown',
+    });
 
     // 画像ファイルを圧縮（OCR時と同様）
     const hasImages = uploadedFiles.some(f => isImageFile(f));
@@ -2578,6 +2613,7 @@ export default function Home() {
       setIsLoading(false);
       setOcrFlowStep('idle');
       releaseRequestLock();
+      sendGAEvent('grading_failed', { reason: 'payload_too_large' });
       return;
     }
 
@@ -2629,6 +2665,7 @@ export default function Home() {
         if (data.requirePlan) {
           setRequirePlan(true);
         }
+        sendGAEvent('grading_failed', { reason: data.requirePlan ? 'plan_required' : 'api_error' });
       } else {
         // 既存の結果とマージ: 同じラベルの問題は新しい結果で上書き
         setResults((prev) => {
@@ -2645,13 +2682,18 @@ export default function Home() {
         refreshUsageInfo().catch((err) => {
           console.warn('Failed to refresh usage info:', err);
         });
+        sendGAEvent('grading_completed', {
+          label_count: Array.isArray(data.results) ? data.results.length : 0,
+        });
       }
     } catch (err) {
       console.error('[Page] Grading error:', err);
       if (err instanceof Error && err.name === 'AbortError') {
         setError('採点処理がタイムアウトしました（5分経過）。画像ファイルのサイズが大きい場合、圧縮してから再度お試しください。');
+        sendGAEvent('grading_failed', { reason: 'timeout' });
       } else {
         setError('採点処理中にエラーが発生しました。ネットワーク接続を確認し、再度お試しください。');
+        sendGAEvent('grading_failed', { reason: 'network_error' });
       }
     } finally {
       setIsLoading(false);
@@ -3458,7 +3500,10 @@ export default function Home() {
           <WelcomeGuide
             remainingCount={usageInfo.remainingCount ?? 3}
             onStartTrial={() => {
-              document.getElementById('grading-form')?.scrollIntoView({ behavior: 'smooth' });
+              sendGAEvent('trial_welcome_start', {
+                remaining_count: usageInfo.remainingCount ?? 0,
+              });
+              document.getElementById('upload-section')?.scrollIntoView({ behavior: 'smooth', block: 'center' });
             }}
           />
         )}
@@ -4104,7 +4149,7 @@ export default function Home() {
                       </div>
                     </details>
 
-                    <div className="group relative">
+                    <div id="upload-section" className="group relative scroll-mt-24">
                       <div
                         className={clsx(
                           "relative min-h-48 sm:min-h-72 border-2 border-dashed rounded-2xl sm:rounded-3xl transition-all duration-500 ease-out cursor-pointer overflow-hidden",
@@ -4189,7 +4234,7 @@ export default function Home() {
                                 <Camera className="w-8 h-8 sm:w-10 sm:h-10" />
                               </div>
                               <span className="text-base sm:text-lg text-slate-700 font-bold block mb-2">
-                                📸 写真をアップロード
+                                問題・答案・解答を撮影してアップロード
                               </span>
                               <span className="text-xs sm:text-sm text-slate-500 block bg-slate-100/50 px-3 sm:px-4 py-1 rounded-full mb-2">
                                 タップ or ドラッグ＆ドロップ
@@ -5833,7 +5878,7 @@ export default function Home() {
             <div className="sticky top-0 bg-white border-b border-slate-200 px-6 py-4 flex items-center justify-between z-10">
               <h2 className="text-xl font-bold text-slate-800 flex items-center">
                 <FileText className="w-5 h-5 mr-2 text-indigo-500" />
-                ファイルの種類を選択
+                アップロード内容を確認
               </h2>
               <button
                 onClick={() => {
@@ -5849,7 +5894,7 @@ export default function Home() {
 
             <div className="p-6 space-y-4">
               <p className="text-sm text-slate-600 mb-4">
-                各ファイルが「答案」「問題」「模範解答」のどれに該当するか選択してください。
+                アップロードした画像やPDFが「答案」「問題」「模範解答」のどれに該当するか選択してください。
               </p>
               <div className="bg-blue-50 border border-blue-200 rounded-lg p-3 mb-4">
                 <p className="text-xs text-blue-700 flex items-start">
@@ -5928,6 +5973,10 @@ export default function Home() {
               <button
                 type="button"
                 onClick={() => {
+                  sendGAEvent('grading_upload_confirmed', {
+                    file_count: pendingFiles.length,
+                    answer_count: Object.values(pendingFileRoles).filter(role => role === 'answer' || role === 'answer_problem' || role === 'all').length,
+                  });
                   // ファイルを追加
                   const startIndex = uploadedFiles.length;
                   setUploadedFiles(prev => {
@@ -5952,7 +6001,7 @@ export default function Home() {
                 }}
                 className="px-6 py-2 bg-indigo-500 text-white rounded-lg font-bold hover:bg-indigo-600 transition-colors shadow-md"
               >
-                確定
+                この内容で進む
               </button>
             </div>
           </div>

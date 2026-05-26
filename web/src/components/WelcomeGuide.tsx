@@ -43,18 +43,18 @@ type Step = {
 const steps: Step[] = [
   {
     icon: FileText,
-    title: '問題番号を入力',
-    description: '「問1」「大問1(1)」など、採点したい問題の番号を入力します。',
+    title: '問題を選ぶ',
+    description: '大問・問番号と配点だけ決めます。細かい形式はあとから調整できます。',
   },
   {
     icon: Camera,
-    title: '答案の写真をアップロード',
-    description: 'スマホで撮影した答案画像をアップロード。模範解答も添付するとより正確に。',
+    title: '撮影してアップロード',
+    description: '問題・答案・解答を撮影してまとめてアップロードします。PDFでも使えます。',
   },
   {
     icon: CheckCircle,
-    title: 'AIが即座に添削',
-    description: '数秒で採点結果とフィードバックが届きます。間違いのポイントも丁寧に解説。',
+    title: '読み取りを確認',
+    description: '答案の文字を確認し、必要なところだけ直してから採点します。',
   },
 ];
 
@@ -108,9 +108,9 @@ export function WelcomeGuide({ remainingCount, onStartTrial }: Props) {
           無料体験 残り{remainingCount}回
         </div>
         <h2 className="text-2xl md:text-3xl font-bold text-slate-800 mb-2">
-          はじめての AI 添削、<span className="text-indigo-600">3ステップ</span>で完了
+          最初の添削は、<span className="text-indigo-600">3ステップ</span>で進めます
         </h2>
-        <p className="text-slate-500">アカウント作成ありがとうございます！以下の手順で、すぐに AI 添削をお試しいただけます。</p>
+        <p className="text-slate-500">手元の問題・答案・解答を撮影してアップロードしてください。読み取り結果を確認してから採点できます。</p>
       </div>
 
       {/* ステップ */}
@@ -135,7 +135,7 @@ export function WelcomeGuide({ remainingCount, onStartTrial }: Props) {
           onClick={handleStart}
           className="inline-flex items-center gap-2 bg-gradient-to-r from-indigo-600 to-violet-600 hover:from-indigo-700 hover:to-violet-700 text-white font-bold px-8 py-3.5 rounded-2xl shadow-lg shadow-indigo-300/50 transition-all duration-200 hover:scale-[1.02] active:scale-[0.98]"
         >
-          さっそく始める
+          撮影してアップロードへ
           <ArrowRight className="w-5 h-5" />
         </button>
       </div>

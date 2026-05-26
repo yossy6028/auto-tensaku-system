@@ -6,6 +6,7 @@ import { useRouter, useSearchParams } from 'next/navigation';
 import { ArrowLeft, Check, Sparkles, Zap, Crown, RefreshCw, HelpCircle, Loader2, CheckCircle, XCircle } from 'lucide-react';
 import { useAuth } from '@/components/AuthProvider';
 import { AuthModal } from '@/components/AuthModal';
+import { sendGAEvent } from '@/components/GoogleAnalytics';
 
 const plans = [
   {
@@ -106,12 +107,14 @@ function PricingContent() {
     const checkout = searchParams.get('checkout');
     if (checkout === 'success') {
       setCheckoutStatus('success');
+      sendGAEvent('checkout_success');
       // 3秒後にサブスクリプション管理ページにリダイレクト
       setTimeout(() => {
         router.push('/subscription');
       }, 3000);
     } else if (checkout === 'cancelled') {
       setCheckoutStatus('cancelled');
+      sendGAEvent('checkout_cancelled');
       // 5秒後にステータスをクリア
       setTimeout(() => {
         setCheckoutStatus(null);
@@ -134,12 +137,14 @@ function PricingContent() {
     // 未ログインの場合はAuthModalを表示
     if (!user) {
       console.log('[Pricing] User is null, showing auth modal');
+      sendGAEvent('checkout_auth_required', { plan_key: planKey });
       setPendingPlan({ key: planKey, name: planName });
       setIsAuthModalOpen(true);
       return;
     }
 
     console.log('[Pricing] User is logged in, proceeding to checkout');
+    sendGAEvent('checkout_started', { plan_key: planKey });
     setLoadingPlan(planKey);
 
     try {
@@ -158,16 +163,19 @@ function PricingContent() {
       console.log('[Pricing] API response:', { status: response.status, data });
 
       if (!response.ok) {
+        sendGAEvent('checkout_failed', { plan_key: planKey, status: response.status });
         throw new Error(data.error || '決済セッションの作成に失敗しました');
       }
 
       // Stripeの決済ページ/ポータルにリダイレクト
       if (data.redirectUrl) {
         console.log('[Pricing] Redirecting to:', data.redirectUrl);
+        sendGAEvent('checkout_redirect', { plan_key: planKey, is_portal: data.isPortal ? 1 : 0 });
         window.location.href = data.redirectUrl;
       }
     } catch (error) {
       console.error('[Pricing] Checkout error:', error);
+      sendGAEvent('checkout_error', { plan_key: planKey });
       alert(error instanceof Error ? error.message : '決済処理中にエラーが発生しました');
     } finally {
       setLoadingPlan(null);

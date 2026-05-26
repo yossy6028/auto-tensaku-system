@@ -376,6 +376,21 @@ async function persistProcessedStripeEvent(event: Stripe.Event): Promise<void> {
   }
 }
 
+async function recordAppEvent(userId: string, eventName: string, properties: Record<string, string | number | boolean | null>) {
+  const { error } = await getSupabaseAdmin()
+    .from('app_events')
+    .insert({
+      user_id: userId,
+      event_name: eventName,
+      properties,
+      path: '/api/stripe/webhook',
+    });
+
+  if (error) {
+    logger.warn('Failed to record app event from Stripe webhook:', error);
+  }
+}
+
 export async function POST(request: NextRequest) {
   const body = await request.text();
   const signature = request.headers.get('stripe-signature');
@@ -445,6 +460,10 @@ export async function POST(request: NextRequest) {
             cancelAtPeriodEnd: subscription.cancel_at_period_end || false,
             resetUsageCount: true,
             purchasedAt: new Date(),
+          });
+          await recordAppEvent(userId, 'checkout_completed', {
+            source: 'stripe_webhook',
+            price_id_known: priceId ? 1 : 0,
           });
         }
         break;

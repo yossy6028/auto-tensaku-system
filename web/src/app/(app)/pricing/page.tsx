@@ -108,6 +108,7 @@ function PricingContent() {
     if (checkout === 'success') {
       setCheckoutStatus('success');
       sendGAEvent('checkout_success');
+      sendGAEvent('checkout_completed', { source: 'return_url' });
       // 3秒後にサブスクリプション管理ページにリダイレクト
       setTimeout(() => {
         router.push('/subscription');

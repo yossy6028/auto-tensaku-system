@@ -23,9 +23,40 @@ export function GoogleAnalytics() {
   );
 }
 
-/** GA4 カスタムイベント送信ヘルパー */
-export function sendGAEvent(action: string, params?: Record<string, string | number>) {
-  if (typeof window !== 'undefined' && window.gtag) {
-    window.gtag('event', action, params);
+type EventParams = Record<string, string | number | boolean | null>;
+
+function sendAppEvent(action: string, params?: EventParams) {
+  if (typeof window === 'undefined') return;
+
+  const payload = JSON.stringify({
+    eventName: action,
+    properties: params ?? {},
+    path: window.location.pathname,
+  });
+
+  if (navigator.sendBeacon) {
+    const blob = new Blob([payload], { type: 'application/json' });
+    if (navigator.sendBeacon('/api/events', blob)) {
+      return;
+    }
+  }
+
+  void fetch('/api/events', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: payload,
+    keepalive: true,
+  }).catch(() => {
+    // 計測失敗でユーザー操作を止めない
+  });
+}
+
+/** GA4 とアプリ内イベントログへ送信するヘルパー */
+export function sendGAEvent(action: string, params?: EventParams) {
+  if (typeof window !== 'undefined') {
+    if (window.gtag) {
+      window.gtag('event', action, params);
+    }
+    sendAppEvent(action, params);
   }
 }

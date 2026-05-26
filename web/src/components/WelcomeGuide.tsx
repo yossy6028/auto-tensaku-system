@@ -61,9 +61,11 @@ const steps: Step[] = [
 type Props = {
   remainingCount: number;
   onStartTrial: () => void;
+  onStartSample: () => void;
+  isSampleLoading?: boolean;
 };
 
-export function WelcomeGuide({ remainingCount, onStartTrial }: Props) {
+export function WelcomeGuide({ remainingCount, onStartTrial, onStartSample, isSampleLoading = false }: Props) {
   const dismissed = useSyncExternalStore(
     subscribeToDismissedState,
     readDismissedSnapshot,
@@ -130,13 +132,20 @@ export function WelcomeGuide({ remainingCount, onStartTrial }: Props) {
       </div>
 
       {/* CTA */}
-      <div className="relative text-center">
+      <div className="relative flex flex-col items-center justify-center gap-3 text-center sm:flex-row">
+        <button
+          onClick={onStartSample}
+          disabled={isSampleLoading}
+          className="inline-flex w-full items-center justify-center gap-2 rounded-2xl bg-gradient-to-r from-indigo-600 to-violet-600 px-8 py-3.5 font-bold text-white shadow-lg shadow-indigo-300/50 transition-all duration-200 hover:scale-[1.02] hover:from-indigo-700 hover:to-violet-700 active:scale-[0.98] disabled:cursor-wait disabled:opacity-70 sm:w-auto"
+        >
+          {isSampleLoading ? 'サンプルを採点中...' : 'サンプル問題で1回試す'}
+          <ArrowRight className="w-5 h-5" />
+        </button>
         <button
           onClick={handleStart}
-          className="inline-flex items-center gap-2 bg-gradient-to-r from-indigo-600 to-violet-600 hover:from-indigo-700 hover:to-violet-700 text-white font-bold px-8 py-3.5 rounded-2xl shadow-lg shadow-indigo-300/50 transition-all duration-200 hover:scale-[1.02] active:scale-[0.98]"
+          className="inline-flex w-full items-center justify-center gap-2 rounded-2xl border border-indigo-200 bg-white px-8 py-3.5 font-bold text-indigo-700 shadow-sm transition-all duration-200 hover:bg-indigo-50 sm:w-auto"
         >
-          撮影してアップロードへ
-          <ArrowRight className="w-5 h-5" />
+          自分の答案をアップロード
         </button>
       </div>
     </div>

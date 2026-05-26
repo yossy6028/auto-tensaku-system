@@ -36,6 +36,7 @@ import {
 import { Users } from 'lucide-react';
 import { WelcomeGuide } from '@/components/WelcomeGuide';
 import { sendGAEvent } from '@/components/GoogleAnalytics';
+import { SAMPLE_TRIAL } from '@/lib/sampleTrial';
 
 type GradingStrictness = 'lenient' | 'standard' | 'strict';
 
@@ -78,6 +79,14 @@ type GradingResponseItem = {
   regradeMode?: 'new' | 'free' | 'none';
 };
 
+type GradingApiResponse = {
+  status?: string;
+  message?: string;
+  requirePlan?: boolean;
+  results?: GradingResponseItem[];
+  usageReleaseWarning?: boolean;
+};
+
 const MAX_TOTAL_SIZE_BYTES = 4.2 * 1024 * 1024;
 const MAX_SINGLE_FILE_SIZE_BYTES = 4.3 * 1024 * 1024;
 const PDF_SIZE_ADVICE = 'PDFはページ番号を指定すると必要ページだけ抽出して軽くできます。難しい場合はオンライン圧縮ツール（iLovePDF等）で圧縮してから再度お試しください。';
@@ -111,6 +120,7 @@ export default function Home() {
     removeDevice,
     retryDeviceRegistration,
   } = useAuth();
+  const isFirstTrialUser = Boolean(user && usageInfo?.accessType === 'trial' && usageInfo?.usageCount === 0);
   const [isAuthModalOpen, setIsAuthModalOpen] = useState(false);
   const [authMode, setAuthMode] = useState<'signin' | 'signup'>('signin');
 
@@ -149,6 +159,7 @@ export default function Home() {
   // 無料再採点トークン（labelごと）
   const [regradeByLabel, setRegradeByLabel] = useState<Record<string, { token: string; remaining: number }>>({});
   const [isLoading, setIsLoading] = useState(false);
+  const [isSampleLoading, setIsSampleLoading] = useState(false);
   const [regradingLabel, setRegradingLabel] = useState<string | null>(null);  // 再採点中のラベル
   const [results, setResults] = useState<GradingResponseItem[] | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -170,6 +181,7 @@ export default function Home() {
   const [currentOcrLabel, setCurrentOcrLabel] = useState<string>('');
   const requestLockRef = useRef(false);
   const isMountedRef = useRef(true);
+  const visitedTrackedRef = useRef(false);
 
   // コンポーネントのマウント状態を追跡（メモリリーク防止）
   useEffect(() => {
@@ -178,6 +190,15 @@ export default function Home() {
       isMountedRef.current = false;
     };
   }, []);
+
+  useEffect(() => {
+    if (authLoading || visitedTrackedRef.current) return;
+    visitedTrackedRef.current = true;
+    sendGAEvent('visited_grading', {
+      logged_in: user ? 1 : 0,
+      access_type: usageInfo?.accessType || 'unknown',
+    });
+  }, [authLoading, user, usageInfo?.accessType]);
 
   // 保存済み問題を初期読み込み
   useEffect(() => {
@@ -2011,6 +2032,10 @@ export default function Home() {
         file_count: processedFiles.length,
         has_pdf: processedFiles.some(f => f.type === 'application/pdf') ? 1 : 0,
       });
+      sendGAEvent('uploaded_file', {
+        file_count: processedFiles.length,
+        has_pdf: processedFiles.some(f => f.type === 'application/pdf') ? 1 : 0,
+      });
       setPendingFiles(processedFiles);
       setPendingFileRoles(initialRoles);
       setShowFileRoleModal(true);
@@ -2385,6 +2410,11 @@ export default function Home() {
       file_count: uploadedFiles.length,
       access_type: usageInfo?.accessType || 'unknown',
     });
+    sendGAEvent('ocr_started', {
+      label_count: targetLabels.length,
+      file_count: uploadedFiles.length,
+      sample: 0,
+    });
 
     // 各ラベルに対してOCRを実行
     const newOcrResults: Record<string, { text: string; charCount: number }> = {};
@@ -2666,6 +2696,7 @@ export default function Home() {
           setRequirePlan(true);
         }
         sendGAEvent('grading_failed', { reason: data.requirePlan ? 'plan_required' : 'api_error' });
+        sendGAEvent('grade_error', { reason: data.requirePlan ? 'plan_required' : 'api_error', sample: 0 });
       } else {
         // 既存の結果とマージ: 同じラベルの問題は新しい結果で上書き
         setResults((prev) => {
@@ -2685,15 +2716,21 @@ export default function Home() {
         sendGAEvent('grading_completed', {
           label_count: Array.isArray(data.results) ? data.results.length : 0,
         });
+        sendGAEvent('grade_success', {
+          label_count: Array.isArray(data.results) ? data.results.length : 0,
+          sample: 0,
+        });
       }
     } catch (err) {
       console.error('[Page] Grading error:', err);
       if (err instanceof Error && err.name === 'AbortError') {
         setError('採点処理がタイムアウトしました（5分経過）。画像ファイルのサイズが大きい場合、圧縮してから再度お試しください。');
         sendGAEvent('grading_failed', { reason: 'timeout' });
+        sendGAEvent('grade_error', { reason: 'timeout', sample: 0 });
       } else {
         setError('採点処理中にエラーが発生しました。ネットワーク接続を確認し、再度お試しください。');
         sendGAEvent('grading_failed', { reason: 'network_error' });
+        sendGAEvent('grade_error', { reason: 'network_error', sample: 0 });
       }
     } finally {
       setIsLoading(false);
@@ -2707,6 +2744,124 @@ export default function Home() {
     setOcrFlowStep('idle');
     setOcrResults({});
     setConfirmedTexts({});
+  };
+
+  const handleSampleTrial = async () => {
+    if (!user) {
+      sendGAEvent('grading_auth_required', { source: 'sample_trial' });
+      openAuthModal('signin');
+      return;
+    }
+
+    if (!session) {
+      sendGAEvent('grading_auth_required', { source: 'sample_trial' });
+      openAuthModal('signin');
+      return;
+    }
+
+    if (isLoading || isSampleLoading) return;
+
+    if (!acquireRequestLock()) {
+      return;
+    }
+
+    setBatchMode('single');
+    setIsSampleLoading(true);
+    setIsLoading(true);
+    setError(null);
+    setRequirePlan(false);
+    setResults(null);
+    setOcrFlowStep('grading');
+    sendGAEvent('sample_trial_started');
+    sendGAEvent('uploaded_file', { file_count: 1, has_pdf: 0, sample: 1 });
+    sendGAEvent('ocr_started', { label_count: 1, file_count: 1, sample: 1 });
+
+    try {
+      const sampleResponse = await fetch(SAMPLE_TRIAL.imagePath);
+      if (!sampleResponse.ok) {
+        throw new Error('サンプル画像を読み込めませんでした。');
+      }
+
+      const sampleBlob = await sampleResponse.blob();
+      const sampleFile = new File([sampleBlob], SAMPLE_TRIAL.imageFileName, {
+        type: sampleBlob.type || 'image/png',
+      });
+
+      const targetLabels = [SAMPLE_TRIAL.label];
+      const sampleConfirmedTexts = { [SAMPLE_TRIAL.label]: SAMPLE_TRIAL.answerText };
+      const sampleProblemConditions = { [SAMPLE_TRIAL.label]: SAMPLE_TRIAL.problemCondition };
+      const sampleFileRoles: Record<number, FileRole> = { 0: 'answer' };
+
+      setSelectedProblems(targetLabels);
+      setProblemPoints({ [SAMPLE_TRIAL.label]: 10 });
+      setUploadedFiles([sampleFile]);
+      setFileRoles(sampleFileRoles);
+      setAnswerFileIndex(0);
+      setConfirmedTexts(sampleConfirmedTexts);
+      setOcrResults({
+        [SAMPLE_TRIAL.label]: {
+          text: SAMPLE_TRIAL.answerText,
+          charCount: SAMPLE_TRIAL.answerText.replace(/\s+/g, '').length,
+        },
+      });
+      setModelAnswerInputMode('text');
+      setModelAnswerText(SAMPLE_TRIAL.modelAnswerText);
+
+      const formData = new FormData();
+      formData.append('targetLabels', JSON.stringify(targetLabels));
+      formData.append('confirmedTexts', JSON.stringify(sampleConfirmedTexts));
+      formData.append('problemConditions', JSON.stringify(sampleProblemConditions));
+      formData.append('strictness', 'standard');
+      formData.append('modelAnswerText', SAMPLE_TRIAL.modelAnswerText);
+      formData.append('fileRoles', JSON.stringify(sampleFileRoles));
+      if (deviceInfo?.fingerprint) {
+        formData.append('deviceFingerprint', deviceInfo.fingerprint);
+      }
+      formData.append('files', sampleFile);
+
+      sendGAEvent('grading_started', { label_count: 1, file_count: 1, sample: 1 });
+
+      const res = await fetch('/api/grade', {
+        method: 'POST',
+        body: formData,
+        credentials: 'include',
+      });
+
+      const data = await res.json() as GradingApiResponse;
+
+      if (!res.ok || data.status === 'error') {
+        setError(data.message || 'サンプル問題の採点に失敗しました。');
+        if (data.requirePlan) setRequirePlan(true);
+        sendGAEvent('grade_error', {
+          reason: data.requirePlan ? 'plan_required' : `http_${res.status}`,
+          sample: 1,
+        });
+        return;
+      }
+
+      const newItems = Array.isArray(data.results) ? data.results : [];
+      setResults(newItems);
+      ingestRegradeInfo(newItems);
+      sendGAEvent('grade_success', { label_count: newItems.length, sample: 1 });
+      sendGAEvent('sample_trial_completed', { label_count: newItems.length });
+
+      refreshUsageInfo().catch((err) => {
+        console.warn('[Page] Failed to refresh usage info:', err);
+      });
+
+      setTimeout(() => {
+        document.getElementById('grading-results')?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+      }, 100);
+    } catch (err) {
+      console.error('[Page] Sample trial error:', err);
+      setError(err instanceof Error ? err.message : 'サンプル問題の採点中にエラーが発生しました。');
+      sendGAEvent('grade_error', { reason: 'sample_error', sample: 1 });
+    } finally {
+      setOcrFlowStep('idle');
+      setIsLoading(false);
+      setIsSampleLoading(false);
+      releaseRequestLock();
+    }
   };
 
   // eslint-disable-next-line @typescript-eslint/no-unused-vars
@@ -3496,12 +3651,14 @@ export default function Home() {
         </div>
 
         {/* Welcome Guide for first-time trial users */}
-        {user && usageInfo?.accessType === 'trial' && usageInfo?.usageCount === 0 && (
+        {isFirstTrialUser && (
           <WelcomeGuide
-            remainingCount={usageInfo.remainingCount ?? 3}
+            remainingCount={usageInfo?.remainingCount ?? 3}
+            onStartSample={handleSampleTrial}
+            isSampleLoading={isSampleLoading}
             onStartTrial={() => {
               sendGAEvent('trial_welcome_start', {
-                remaining_count: usageInfo.remainingCount ?? 0,
+                remaining_count: usageInfo?.remainingCount ?? 0,
               });
               document.getElementById('upload-section')?.scrollIntoView({ behavior: 'smooth', block: 'center' });
             }}
@@ -3529,6 +3686,7 @@ export default function Home() {
           <div className="absolute top-0 left-0 w-full h-2 bg-gradient-to-r from-indigo-500 via-violet-500 to-fuchsia-500"></div>
           <div className="p-8 md:p-14">
             {/* ========== Mode Toggle Tabs ========== */}
+            {!isFirstTrialUser && (
             <details className="mb-8 rounded-2xl border border-slate-200 bg-slate-50/80 p-4">
               <summary className="cursor-pointer list-none text-center text-sm font-bold text-slate-700">
                 詳細メニューを開く
@@ -3565,6 +3723,7 @@ export default function Home() {
                 </div>
               </div>
             </details>
+            )}
 
             {batchMode === 'single' && (
               <>
@@ -3590,6 +3749,7 @@ export default function Home() {
                   </div>
 
                   {/* 生徒名・添削担当者名入力 */}
+                  {!isFirstTrialUser && (
                   <details className="max-w-2xl mx-auto rounded-2xl border border-slate-200 bg-slate-50/70 p-4">
                     <summary className="cursor-pointer list-none text-center text-sm font-bold text-slate-700">
                       名前を入れる
@@ -3627,8 +3787,19 @@ export default function Home() {
                       PDF出力時にレポートに表示されます。
                     </p>
                   </details>
+                  )}
+
+                  {isFirstTrialUser && (
+                    <div className="max-w-2xl mx-auto rounded-2xl border border-indigo-100 bg-indigo-50/70 p-5 text-center">
+                      <p className="text-sm font-bold text-indigo-800">初回は1問だけ、標準設定で進めます</p>
+                      <p className="mt-2 text-xs leading-5 text-indigo-700">
+                        まずは「サンプル問題で1回試す」か、手元の問題・答案・解答を撮影してアップロードしてください。問題番号や採点基準の細かい設定は、初回添削後に使えます。
+                      </p>
+                    </div>
+                  )}
 
                   {/* Problem Selector */}
+                  {!isFirstTrialUser && (
                   <div className="max-w-2xl mx-auto">
                     <label className="block text-sm font-bold text-slate-600 mb-3 text-center tracking-wide">
                       <span className="inline-flex h-7 w-7 items-center justify-center rounded-full bg-indigo-600 text-white mr-2">1</span>
@@ -4021,6 +4192,7 @@ export default function Home() {
                       </p>
                     </details>
                   </div>
+                  )}
 
                   {/* File Upload Section */}
                   <div className="space-y-4">
@@ -4422,7 +4594,7 @@ export default function Home() {
                     )}
 
                     {/* PDFページ番号指定（複数ページPDF対応） */}
-                    {uploadedFiles.some(f => f.type === 'application/pdf') && (
+                    {!isFirstTrialUser && uploadedFiles.some(f => f.type === 'application/pdf') && (
                       <details className="bg-orange-50 rounded-2xl p-4 border border-orange-200">
                         <summary className="cursor-pointer list-none text-sm font-bold text-orange-800">
                           PDFのページ番号を指定する
@@ -4476,7 +4648,7 @@ export default function Home() {
                     )}
 
                     {/* 模範解答入力モード選択 */}
-                    {uploadedFiles.length > 0 && (
+                    {!isFirstTrialUser && uploadedFiles.length > 0 && (
                       <details className="mt-4 p-4 bg-gradient-to-br from-emerald-50 to-teal-50 border border-emerald-200 rounded-xl">
                         <summary className="cursor-pointer list-none text-sm font-bold text-emerald-800">
                           模範解答の入力方法を変更する
@@ -5299,7 +5471,7 @@ export default function Home() {
           }, 0);
 
           return (
-            <div key={index} className="mt-24 animate-fade-in-up">
+            <div key={index} id={index === 0 ? 'grading-results' : undefined} className="mt-24 animate-fade-in-up scroll-mt-24">
               <div className="bg-white/80 backdrop-blur-3xl shadow-[0_30px_80px_-20px_rgba(0,0,0,0.15)] rounded-[3rem] overflow-hidden border border-white/60 ring-1 ring-white/50 relative">
                 <div className="absolute top-0 left-0 w-full h-2 bg-gradient-to-r from-emerald-400 via-teal-500 to-cyan-500"></div>
 

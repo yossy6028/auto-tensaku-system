@@ -33,9 +33,12 @@ export function LPFooter() {
 
         <div className="mt-8 border-t border-white/10 pt-8 text-center">
           <p className="mb-3 text-sm text-slate-400">
-            不具合・お問い合わせは{' '}
-            <a href={SUPPORT_MAILTO_HREF} className="font-medium text-slate-200 underline-offset-4 hover:underline">
-              {SUPPORT_EMAIL}
+            <a
+              href={SUPPORT_MAILTO_HREF}
+              className="font-medium text-slate-200 underline-offset-4 hover:underline"
+              aria-label={`不具合・お問い合わせを ${SUPPORT_EMAIL} にメールする`}
+            >
+              不具合・お問い合わせ（{SUPPORT_EMAIL}）
             </a>
             {' '}まで
           </p>

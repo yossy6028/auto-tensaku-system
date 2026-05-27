@@ -8,18 +8,23 @@ import { useReducedMotion, useIsMobile } from '@/hooks/useMediaQuery';
 type Particle = {
   id: number;
   left: string;
-  size: number;
+  size: string;
   delay: number;
   duration: number;
 };
 
+function seededFraction(seed: number): number {
+  const value = Math.sin(seed * 12.9898) * 43758.5453;
+  return value - Math.floor(value);
+}
+
 function generateParticles(count: number): Particle[] {
   return Array.from({ length: count }, (_, i) => ({
     id: i,
-    left: `${Math.random() * 100}%`,
-    size: Math.random() * 4 + 2,
-    delay: Math.random() * 5,
-    duration: Math.random() * 8 + 6,
+    left: `${(seededFraction(i + 1) * 100).toFixed(4)}%`,
+    size: `${(seededFraction(i + 101) * 4 + 2).toFixed(4)}px`,
+    delay: seededFraction(i + 201) * 5,
+    duration: seededFraction(i + 301) * 8 + 6,
   }));
 }
 

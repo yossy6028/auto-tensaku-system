@@ -1,5 +1,6 @@
 'use client';
 
+import { useEffect } from 'react';
 import Image from 'next/image';
 import Link from 'next/link';
 import { motion, useMotionValue, useSpring, useTransform } from 'framer-motion';
@@ -15,11 +16,16 @@ export function HeroSection() {
   const mouseX = useMotionValue(0);
   const mouseY = useMotionValue(0);
 
-  // Update motion values from mouse position (only on desktop)
-  if (!isMobile && typeof window !== 'undefined') {
+  useEffect(() => {
+    if (isMobile) {
+      mouseX.set(0);
+      mouseY.set(0);
+      return;
+    }
+
     mouseX.set((mouse.x - window.innerWidth / 2) / window.innerWidth);
     mouseY.set((mouse.y - window.innerHeight / 2) / window.innerHeight);
-  }
+  }, [isMobile, mouse.x, mouse.y, mouseX, mouseY]);
 
   const springConfig = { stiffness: 50, damping: 30 };
   const parallaxX = useSpring(useTransform(mouseX, [-0.5, 0.5], [-10, 10]), springConfig);

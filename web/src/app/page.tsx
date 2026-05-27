@@ -8,7 +8,6 @@ import { ProductHighlights } from '@/components/lp/ProductHighlights';
 import { HowItWorksSection } from '@/components/lp/HowItWorksSection';
 import { ThreeStepsSection } from '@/components/lp/ThreeStepsSection';
 import { VideoPlaceholder } from '@/components/lp/VideoPlaceholder';
-import { TestimonialsSection } from '@/components/lp/TestimonialsSection';
 import { PricingPreview } from '@/components/lp/PricingPreview';
 import { FAQSection } from '@/components/lp/FAQSection';
 import { CTASection } from '@/components/lp/CTASection';
@@ -27,7 +26,6 @@ export default function LandingPage() {
       <HowItWorksSection />
       <ThreeStepsSection />
       <VideoPlaceholder />
-      <TestimonialsSection />
       <PricingPreview />
       <FAQSection />
       <CTASection />

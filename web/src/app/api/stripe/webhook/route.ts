@@ -86,9 +86,11 @@ async function getCustomerEmail(
   }
 }
 
-function requireResolvedUserId(userId: string | null, context: string): string {
-  if (userId) return userId;
-  throw new Error(`[Stripe Webhook] Could not resolve Supabase user for ${context}`);
+function logSkippedUnlinkedStripeEvent(context: string, details: Record<string, string | null | undefined>) {
+  logger.warn('Skipping Stripe event because no matching Supabase user was found:', {
+    context,
+    ...details,
+  });
 }
 
 async function getPlanIdFromLegacyStripePrice(stripePriceId: string): Promise<string | null> {
@@ -439,14 +441,21 @@ export async function POST(request: NextRequest) {
           const subscription = await stripe.subscriptions.retrieve(subscriptionId) as any;
           const customerId = getCustomerId(subscription.customer);
           const customerEmail = await getCustomerEmail(stripe, subscription.customer, session.customer_details?.email ?? null);
-          const userId = requireResolvedUserId(
-            await resolveUserIdFromStripe({
-              explicitUserId: subscription.metadata?.supabase_user_id || session.metadata?.supabase_user_id,
+          const userId = await resolveUserIdFromStripe({
+            explicitUserId: subscription.metadata?.supabase_user_id || session.metadata?.supabase_user_id,
+            customerId,
+            customerEmail,
+          });
+
+          if (!userId) {
+            logSkippedUnlinkedStripeEvent(`${event.type}:${subscriptionId}`, {
               customerId,
               customerEmail,
-            }),
-            `${event.type}:${subscriptionId}`
-          );
+              sessionId: session.id,
+              paymentLink: typeof session.payment_link === 'string' ? session.payment_link : null,
+            });
+            break;
+          }
 
           const priceId = subscription.items.data[0]?.price?.id;
           const period = getSubscriptionPeriod(subscription);
@@ -475,14 +484,20 @@ export async function POST(request: NextRequest) {
         const subscription = event.data.object as any;
         const customerId = getCustomerId(subscription.customer);
         const customerEmail = await getCustomerEmail(stripe, subscription.customer);
-        const userId = requireResolvedUserId(
-          await resolveUserIdFromStripe({
-            explicitUserId: subscription.metadata?.supabase_user_id,
+        const userId = await resolveUserIdFromStripe({
+          explicitUserId: subscription.metadata?.supabase_user_id,
+          customerId,
+          customerEmail,
+        });
+
+        if (!userId) {
+          logSkippedUnlinkedStripeEvent(`${event.type}:${subscription.id}`, {
             customerId,
             customerEmail,
-          }),
-          `${event.type}:${subscription.id}`
-        );
+            subscriptionId: subscription.id,
+          });
+          break;
+        }
 
         // プラン変更（price_id変更）を検出 → usage_count をリセット
         // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -514,14 +529,20 @@ export async function POST(request: NextRequest) {
         const subscription = event.data.object as any;
         const customerId = getCustomerId(subscription.customer);
         const customerEmail = await getCustomerEmail(stripe, subscription.customer);
-        const userId = requireResolvedUserId(
-          await resolveUserIdFromStripe({
-            explicitUserId: subscription.metadata?.supabase_user_id,
+        const userId = await resolveUserIdFromStripe({
+          explicitUserId: subscription.metadata?.supabase_user_id,
+          customerId,
+          customerEmail,
+        });
+
+        if (!userId) {
+          logSkippedUnlinkedStripeEvent(`${event.type}:${subscription.id}`, {
             customerId,
             customerEmail,
-          }),
-          `${event.type}:${subscription.id}`
-        );
+            subscriptionId: subscription.id,
+          });
+          break;
+        }
 
         const deletedPeriod = getSubscriptionPeriod(subscription);
         await upsertSubscriptionRecord({
@@ -549,14 +570,20 @@ export async function POST(request: NextRequest) {
           const subscription = await stripe.subscriptions.retrieve(subscriptionId) as any;
           const customerId = getCustomerId(subscription.customer);
           const customerEmail = await getCustomerEmail(stripe, subscription.customer);
-          const userId = requireResolvedUserId(
-            await resolveUserIdFromStripe({
-              explicitUserId: subscription.metadata?.supabase_user_id,
+          const userId = await resolveUserIdFromStripe({
+            explicitUserId: subscription.metadata?.supabase_user_id,
+            customerId,
+            customerEmail,
+          });
+
+          if (!userId) {
+            logSkippedUnlinkedStripeEvent(`${event.type}:${subscriptionId}`, {
               customerId,
               customerEmail,
-            }),
-            `${event.type}:${subscriptionId}`
-          );
+              subscriptionId,
+            });
+            break;
+          }
 
           const invoicePeriod = getSubscriptionPeriod(subscription);
           await upsertSubscriptionRecord({
@@ -586,14 +613,20 @@ export async function POST(request: NextRequest) {
           const subscription = await stripe.subscriptions.retrieve(subscriptionId) as any;
           const customerId = getCustomerId(subscription.customer);
           const customerEmail = await getCustomerEmail(stripe, subscription.customer);
-          const userId = requireResolvedUserId(
-            await resolveUserIdFromStripe({
-              explicitUserId: subscription.metadata?.supabase_user_id,
+          const userId = await resolveUserIdFromStripe({
+            explicitUserId: subscription.metadata?.supabase_user_id,
+            customerId,
+            customerEmail,
+          });
+
+          if (!userId) {
+            logSkippedUnlinkedStripeEvent(`${event.type}:${subscriptionId}`, {
               customerId,
               customerEmail,
-            }),
-            `${event.type}:${subscriptionId}`
-          );
+              subscriptionId,
+            });
+            break;
+          }
 
           const failedPeriod = getSubscriptionPeriod(subscription);
           await upsertSubscriptionRecord({

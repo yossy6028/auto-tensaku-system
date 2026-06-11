@@ -45,7 +45,7 @@ export function RealSampleSection() {
               <span className="text-sm font-bold text-amber-700 uppercase tracking-wide">Step 1</span>
               <span className="text-sm font-semibold text-slate-700">スマホで撮影</span>
             </div>
-            <div className="relative rounded-2xl overflow-hidden shadow-xl border border-slate-200 bg-white">
+            <div className="relative max-w-md mx-auto rounded-2xl overflow-hidden shadow-xl border border-slate-200 bg-white">
               <Image
                 src="/sample-handwritten.png"
                 alt="生徒の手書き答案"

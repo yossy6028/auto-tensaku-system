@@ -789,45 +789,53 @@ ${JSON.stringify(partialResult, null, 2)}`;
         const hasAllRole = categorizedFiles?.studentFiles.some(f => f.role === 'all') ?? false;
 
 
-        // 2段階OCR: まずマス目構造を分析（大きなファイルではスキップ）
-        let gridInfo: { columns: number; rows: number } | null = null;
+        // 2段階OCR: マス目構造分析と Agentic Vision 分析は互いに独立した
+        // OCRヒント生成のため並列実行する（どちらも内部でエラーを握りつぶし
+        // null/undefined を返す設計なので Promise.all で reject は起きない）
+        let gridInfoPromise: Promise<{ columns: number; rows: number } | null> = Promise.resolve(null);
         if (!isLargeFile) {
             console.log("[Grader] マス目構造分析を開始...");
-            gridInfo = await this.analyzeGridStructure(targetParts, ocrModelName);
+            gridInfoPromise = this.analyzeGridStructure(targetParts, ocrModelName);
             // 分析結果はログに出力済み（成功/失敗問わず既存フローを続行）
         }
 
         // Agentic Vision 解答用紙構造分析（Feature Flagで制御）
-        let agenticVisionHints: OcrHints | undefined;
+        let agenticVisionPromise: Promise<OcrHints | undefined> = Promise.resolve(undefined);
         if (AGENTIC_VISION_ENABLED && !isLargeFile && targetParts.length === 1) {
-            try {
+            const firstPart = targetParts[0];
+            if ("inlineData" in firstPart && firstPart.inlineData) {
                 console.log("[Grader] Agentic Vision 解答用紙分析を開始...");
-                const firstPart = targetParts[0];
-                if ("inlineData" in firstPart && firstPart.inlineData) {
-                    const preprocessor = new AgenticVisionPreprocessor({
-                        timeoutMs: AGENTIC_VISION_TIMEOUT_MS,
-                    });
-                    const analysisResult = await preprocessor.analyze(
-                        firstPart.inlineData.data,
-                        firstPart.inlineData.mimeType
-                    );
-                    if (analysisResult?.success && analysisResult.layout.answerSheet) {
-                        agenticVisionHints = {
-                            ...analysisResult.hints,
-                            // 解答用紙分析情報をnotesに追加
-                            notes: [
-                                ...analysisResult.hints.notes,
-                                this.buildAnswerSheetNote(analysisResult.layout.answerSheet),
-                            ].filter(Boolean),
-                        };
-                        console.log(`[Grader] Agentic Vision 分析完了: ${analysisResult.layout.answerSheet.sheetType}`);
+                const inlineData = firstPart.inlineData;
+                agenticVisionPromise = (async (): Promise<OcrHints | undefined> => {
+                    try {
+                        const preprocessor = new AgenticVisionPreprocessor({
+                            timeoutMs: AGENTIC_VISION_TIMEOUT_MS,
+                        });
+                        const analysisResult = await preprocessor.analyze(
+                            inlineData.data,
+                            inlineData.mimeType
+                        );
+                        if (analysisResult?.success && analysisResult.layout.answerSheet) {
+                            console.log(`[Grader] Agentic Vision 分析完了: ${analysisResult.layout.answerSheet.sheetType}`);
+                            return {
+                                ...analysisResult.hints,
+                                // 解答用紙分析情報をnotesに追加
+                                notes: [
+                                    ...analysisResult.hints.notes,
+                                    this.buildAnswerSheetNote(analysisResult.layout.answerSheet),
+                                ].filter(Boolean),
+                            };
+                        }
+                    } catch (error) {
+                        // Agentic Vision失敗時は既存フローにフォールバック
+                        console.warn("[Grader] Agentic Vision 分析失敗、スキップ:", error instanceof Error ? error.message : error);
                     }
-                }
-            } catch (error) {
-                // Agentic Vision失敗時は既存フローにフォールバック
-                console.warn("[Grader] Agentic Vision 分析失敗、スキップ:", error instanceof Error ? error.message : error);
+                    return undefined;
+                })();
             }
         }
+
+        const [gridInfo, agenticVisionHints] = await Promise.all([gridInfoPromise, agenticVisionPromise]);
 
         // 大きなファイルではプロンプト数を1つに削減（タイムアウト防止）
         const ocrPrompts = isLargeFile

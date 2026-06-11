@@ -889,6 +889,9 @@ export async function POST(req: NextRequest) {
         const paidLabels = sanitizedLabels.filter((label) => !freeRegradeByLabel.has(label));
         const requiresPaidUsage = paidLabels.length > 0;
         let reservedCount = 0;
+        // 成功パス(差分解放)で利用枠の最終確定が済んだら true。
+        // 異常終了時のロールバックが、成功パスと二重に解放しないためのガード。
+        let usageSettled = false;
         const supabaseAdmin = requiresPaidUsage ? getSupabaseAdmin() : null;
 
         // 利用枠をアトミックに予約（無料再採点のみの場合はスキップ）
@@ -1077,6 +1080,10 @@ export async function POST(req: NextRequest) {
                         logger.info(`[API] Released ${releaseCount} unused usage slot(s)`);
                     }
                 }
+                // ここまでで「予約枠 - 成功有料数」の差分解放が完了し、
+                // successfulPaidCount 分の消費が確定した。以降に例外が出ても
+                // ロールバックで二重解放しないようフラグを立てる。
+                usageSettled = true;
 
                 // 成功した採点のラベルをログに記録
                 if (successfulPaidCount > 0) {
@@ -1169,13 +1176,33 @@ export async function POST(req: NextRequest) {
                 }
             });
         } catch (error) {
-            if (error instanceof QueueFullError) {
-                // キュー満杯時は予約した利用枠を解放（リーク防止）
-                if (reservedCount > 0) {
-                    await supabaseRpc
-                        .rpc('release_usage', { p_user_id: user.id, p_count: reservedCount })
-                        .catch((e: unknown) => logger.error('Failed to release usage on QueueFullError:', e));
+            // ジョブ本体や前処理が成功パスの枠確定(usageSettled)前に異常終了した場合、
+            // 予約した利用枠は1回も消費されていないため全額ロールバックする。
+            // QueueFullError も convertFilesToBuffers 例外も TaskalGrader 例外もここを通る。
+            if (!usageSettled && reservedCount > 0) {
+                const { error: rollbackError } = await supabaseRpc
+                    .rpc('release_usage', { p_user_id: user.id, p_count: reservedCount });
+                if (rollbackError) {
+                    logger.error('Failed to roll back reserved usage on abnormal termination:', rollbackError);
+                    if (supabaseAdmin) {
+                        try {
+                            const fallbackRelease = await releaseUsageWithAdminFallback(supabaseAdmin, user.id, reservedCount);
+                            if (fallbackRelease.success) {
+                                logger.warn('[API] release_usage RPC failed on rollback. Used direct admin fallback.', {
+                                    userId: user.id,
+                                    reservedCount,
+                                });
+                            }
+                        } catch (fallbackError) {
+                            logger.error('[API] Usage rollback fallback failed:', fallbackError);
+                        }
+                    }
+                } else {
+                    logger.info(`[API] Rolled back ${reservedCount} reserved usage slot(s) after abnormal termination`);
                 }
+            }
+
+            if (error instanceof QueueFullError) {
                 const queueState = getQueueState();
                 return NextResponse.json(
                     {

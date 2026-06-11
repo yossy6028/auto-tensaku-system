@@ -64,11 +64,12 @@ CREATE TABLE IF NOT EXISTS system_settings (
 -- =====================================================
 
 -- 料金プラン初期データ
+-- ※ プランIDはコード(webhook PLAN_LIMITS / lib/stripe/config.ts / 料金ページ / Stripeメタデータ)
+--   と一致させること。価格・回数も webhook の PLAN_PRICES / PLAN_LIMITS（期間限定価格）と揃える。
 INSERT INTO pricing_plans (id, name, description, usage_limit, price_yen, sort_order) VALUES
-    ('plan_15', 'ライトプラン', '15回まで利用可能', 15, 980, 1),
-    ('plan_40', 'スタンダードプラン', '40回まで利用可能', 40, 1980, 2),
-    ('plan_100', 'プレミアムプラン', '100回まで利用可能', 100, 3980, 3),
-    ('plan_unlimited', '無制限プラン', '無制限に利用可能', NULL, 4980, 4)
+    ('light',     'ライトプラン',     '月10回まで利用可能',  10,   480, 1),
+    ('standard',  'スタンダードプラン', '月30回まで利用可能',  30,   980, 2),
+    ('unlimited', '無制限プラン',     '回数無制限で利用可能', NULL, 1580, 3)
 ON CONFLICT (id) DO NOTHING;
 
 -- システム設定初期データ

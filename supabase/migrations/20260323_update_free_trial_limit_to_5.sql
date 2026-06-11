@@ -162,7 +162,10 @@ BEGIN
     -- 4. 無料体験チェック（フォールバック・回数のみ）
     SELECT * INTO v_profile FROM user_profiles WHERE id = p_user_id;
 
-    IF v_profile IS NOT NULL AND v_profile.free_trial_started_at IS NOT NULL THEN
+    -- 注意: %ROWTYPE への IS NOT NULL は「全カラム非NULL」判定になり、
+    -- custom_trial_days 等の NULL 許可カラムが NULL だと行が存在しても FALSE になる。
+    -- 行の存在判定は必ず FOUND を使う（Phase 6f の罠）。
+    IF FOUND AND v_profile.free_trial_started_at IS NOT NULL THEN
         SELECT COALESCE(value::INTEGER, 5) INTO v_free_trial_usage_limit FROM system_settings WHERE key = 'free_trial_usage_limit';
 
         -- カスタム設定を優先

@@ -3,12 +3,25 @@
 -- 更新日: 2024-12-21
 -- =====================================================
 --
+-- ⚠️【非推奨 / DEPRECATED】2026-06-11 -----------------------------------------
+-- このファイルの check_free_access / can_use_service には旧仕様の
+-- 「時間ベース判定 (NOW() < v_trial_end)」が含まれており、後続の
+-- supabase/migrations/ で撤廃済み（回数のみ判定が正）。
+-- canonical（唯一の真実）は supabase/migrations/ 配下の日付付きマイグレーション:
+--   - 20260323_update_free_trial_limit_to_5.sql
+--   - 20260611_fix_can_use_service_found.sql
+-- 新規構築・再適用では supabase/migrations/ を順番に流すこと。
+-- このファイルの関数定義を canonical の後に再実行すると「サイレント期限切れ」が
+-- 復活するため、関数の CREATE OR REPLACE 部分は実行しないこと。
+-- （列追加 ALTER TABLE ... ADD COLUMN は冪等なので再実行しても無害）
+-- --------------------------------------------------------------------------
+--
 -- このマイグレーションは以下を行います:
 -- 1. user_profilesにcustom_trial_days, custom_trial_usage_limitカラムを追加
--- 2. check_free_access関数をカスタムトライアル対応に更新
--- 3. can_use_service関数を管理者チェック+カスタムトライアル対応に更新
+-- 2. check_free_access関数をカスタムトライアル対応に更新【非推奨: 上記参照】
+-- 3. can_use_service関数を管理者チェック+カスタムトライアル対応に更新【非推奨: 上記参照】
 --
--- 実行順序: supabase_migration.sql → supabase_migration_stripe.sql → このファイル
+-- 実行順序(歴史的): supabase_migration.sql → supabase_migration_stripe.sql → このファイル
 -- =====================================================
 
 -- =====================================================

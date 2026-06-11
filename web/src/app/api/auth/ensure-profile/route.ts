@@ -82,12 +82,14 @@ export async function POST() {
     if (insertError) {
       // normalized_email の UNIQUE 制約違反 — 別のユーザーが同じ正規化メールで既に存在
       if (insertError.code === '23505') {
+        // 自動マージは別アカウント乗っ取りに直結するため行わず、サポート誘導に留める。
+        // （このAPIは認証必須なので任意メールの列挙には使えないが、条件は断定しない文言にする）
         console.warn(
           '[ensure-profile] normalized_email conflict for user %s (%s). Profile not created.',
           user.id, user.email
         );
         return NextResponse.json(
-          { error: 'このメールアドレスは別のアカウントで既に使用されています。' },
+          { error: 'アカウントの初期設定を完了できませんでした。お手数ですがサポートまでお問い合わせください。' },
           { status: 409 }
         );
       }

@@ -9,6 +9,12 @@ import { enqueueGradingJob, QueueFullError, getQueueState } from '@/lib/security
 import { logger } from '@/lib/security/logger';
 import { createRegradeToken, verifyRegradeToken } from '@/lib/security/regradeToken';
 import { isHeicMimeType, hasHeicExtension, convertHeicBufferToJpeg } from '@/lib/utils/serverHeicConverter';
+import {
+    MAX_SINGLE_FILE_SIZE,
+    MAX_TOTAL_SIZE,
+    MAX_FILES_COUNT,
+    oversizeAdvice,
+} from '@/lib/security/uploadLimits';
 
 // Force dynamic to prevent caching
 export const dynamic = 'force-dynamic';
@@ -16,8 +22,7 @@ export const dynamic = 'force-dynamic';
 // Vercel Proプラン + Fluid Compute: 最大300秒のタイムアウト
 export const maxDuration = 300;
 
-// Note: Vercel Proプランではデフォルトで最大100MBのボディサイズに対応
-// 本システムでは20MBまでのファイルをサポート（コード内で検証）
+// アップロードサイズ上限は @/lib/security/uploadLimits に一元化（Vercel 4.5MBペイロード上限が真の制約）
 
 // 型定義
 type UploadedFilePart = {
@@ -189,6 +194,44 @@ async function loadActiveSubscription(
     };
 }
 
+/**
+ * 利用枠フォールバックのCAS再試行回数。
+ * 旧実装は2回固定で、高並列時に「競合で失敗→ユーザーに再試行要求」が起きやすかった（Grok指摘#1）。
+ */
+const USAGE_FALLBACK_MAX_ATTEMPTS = 5;
+
+/**
+ * CASミス時の軽いバックオフ（jitter付き）。再試行同士の衝突（thundering herd）を緩和する。
+ * attempt=0,1,2... に対し概ね 25〜50ms, 50〜75ms, ... と漸増。
+ */
+async function usageFallbackBackoff(attempt: number): Promise<void> {
+    const baseMs = 25 * (attempt + 1);
+    const jitterMs = Math.floor(Math.random() * 25);
+    await new Promise((resolve) => setTimeout(resolve, baseMs + jitterMs));
+}
+
+/**
+ * admin / 期間限定無料開放(promo) の判定を集約。
+ * reserve と release で完全に同一だったロジックを1か所に統一し、
+ * 過去に再発した「管理者チェック漏れ」「無料開放の日付判定ずれ」（Grok指摘#1の経緯）を構造的に防ぐ。
+ * 判定順序は従来どおり admin が promo に優先する。
+ */
+function resolveFreeAccess(
+    profile: UsageProfileRow | null,
+    settings: SystemSettingsSnapshot,
+): 'admin' | 'promo' | null {
+    if (profile?.role === 'admin') return 'admin';
+
+    if (settings.freeAccessEnabled) {
+        const freeAccessUntil = settings.freeAccessUntil ? Date.parse(settings.freeAccessUntil) : Number.NaN;
+        if (!settings.freeAccessUntil || Number.isNaN(freeAccessUntil) || freeAccessUntil > Date.now()) {
+            return 'promo';
+        }
+    }
+
+    return null;
+}
+
 async function reserveUsageWithAdminFallback(
     admin: ReturnType<typeof getSupabaseAdmin>,
     userId: string,
@@ -196,10 +239,11 @@ async function reserveUsageWithAdminFallback(
 ): Promise<ReserveUsageResult> {
     const settings = await loadSystemSettings(admin);
 
-    for (let attempt = 0; attempt < 2; attempt += 1) {
+    for (let attempt = 0; attempt < USAGE_FALLBACK_MAX_ATTEMPTS; attempt += 1) {
         const profile = await loadUsageProfile(admin, userId);
 
-        if (profile?.role === 'admin') {
+        const freeAccess = resolveFreeAccess(profile, settings);
+        if (freeAccess === 'admin') {
             return {
                 success: true,
                 message: '管理者はサービスを無制限に利用できます',
@@ -210,20 +254,16 @@ async function reserveUsageWithAdminFallback(
                 plan_name: 'admin',
             };
         }
-
-        if (settings.freeAccessEnabled) {
-            const freeAccessUntil = settings.freeAccessUntil ? Date.parse(settings.freeAccessUntil) : Number.NaN;
-            if (!settings.freeAccessUntil || Number.isNaN(freeAccessUntil) || freeAccessUntil > Date.now()) {
-                return {
-                    success: true,
-                    message: '期間限定無料開放中！',
-                    subscription_id: null,
-                    usage_count: null,
-                    usage_limit: null,
-                    remaining_count: null,
-                    plan_name: 'promo',
-                };
-            }
+        if (freeAccess === 'promo') {
+            return {
+                success: true,
+                message: '期間限定無料開放中！',
+                subscription_id: null,
+                usage_count: null,
+                usage_limit: null,
+                remaining_count: null,
+                plan_name: 'promo',
+            };
         }
 
         const { subscription, planName } = await loadActiveSubscription(admin, userId);
@@ -282,6 +322,8 @@ async function reserveUsageWithAdminFallback(
                 };
             }
 
+            // CASミス（他リクエストが先に更新）。バックオフして最新値で再試行。
+            await usageFallbackBackoff(attempt);
             continue;
         }
 
@@ -322,6 +364,8 @@ async function reserveUsageWithAdminFallback(
                 };
             }
 
+            // CASミス（他リクエストが先に更新）。バックオフして最新値で再試行。
+            await usageFallbackBackoff(attempt);
             continue;
         }
 
@@ -344,18 +388,16 @@ async function releaseUsageWithAdminFallback(
     userId: string,
     count: number
 ): Promise<UsageReleaseResult> {
-    for (let attempt = 0; attempt < 2; attempt += 1) {
+    for (let attempt = 0; attempt < USAGE_FALLBACK_MAX_ATTEMPTS; attempt += 1) {
         const profile = await loadUsageProfile(admin, userId);
-        if (profile?.role === 'admin') {
+        const settings = await loadSystemSettings(admin);
+
+        const freeAccess = resolveFreeAccess(profile, settings);
+        if (freeAccess === 'admin') {
             return { success: true, message: '管理者は利用枠の解放対象ではありません' };
         }
-
-        const settings = await loadSystemSettings(admin);
-        if (settings.freeAccessEnabled) {
-            const freeAccessUntil = settings.freeAccessUntil ? Date.parse(settings.freeAccessUntil) : Number.NaN;
-            if (!settings.freeAccessUntil || Number.isNaN(freeAccessUntil) || freeAccessUntil > Date.now()) {
-                return { success: true, message: '無料開放中は利用枠の解放対象ではありません' };
-            }
+        if (freeAccess === 'promo') {
+            return { success: true, message: '無料開放中は利用枠の解放対象ではありません' };
         }
 
         const { subscription } = await loadActiveSubscription(admin, userId);
@@ -375,6 +417,8 @@ async function releaseUsageWithAdminFallback(
                 return { success: true, message: '利用枠を解放しました' };
             }
 
+            // CASミス（他リクエストが先に更新）。バックオフして最新値で再試行。
+            await usageFallbackBackoff(attempt);
             continue;
         }
 
@@ -394,6 +438,8 @@ async function releaseUsageWithAdminFallback(
                 return { success: true, message: '無料体験の利用枠を解放しました' };
             }
 
+            // CASミス（他リクエストが先に更新）。バックオフして最新値で再試行。
+            await usageFallbackBackoff(attempt);
             continue;
         }
 
@@ -429,14 +475,7 @@ const ALLOWED_MIME_TYPES = [
     'application/pdf',
 ];
 
-/**
- * ファイルサイズ制限
- * Vercel Serverless Functions: 4.5MBペイロード上限（プランに関係なく）
- * FormDataオーバーヘッドを考慮して4.3MBに設定
- */
-const MAX_SINGLE_FILE_SIZE = 4.3 * 1024 * 1024; // 4.3MB（単一ファイル）
-const MAX_TOTAL_SIZE = 4.3 * 1024 * 1024; // 4.3MB（Vercelペイロード上限対応）
-const MAX_FILES_COUNT = 10; // 最大ファイル数
+// ファイルサイズ・ファイル数の上限は @/lib/security/uploadLimits から import（grade/ocr で共有）
 
 // 無料再採点（もっと厳しく/甘く）用の設定
 const REGRADE_TOKEN_TTL_SECONDS = 60 * 60 * 24 * 7; // 7日
@@ -526,10 +565,7 @@ function validateFiles(files: File[]): void {
     const totalSize = files.reduce((sum, file) => sum + file.size, 0);
     if (totalSize > MAX_TOTAL_SIZE) {
         const hasPdf = files.some(f => f.type === 'application/pdf');
-        const advice = hasPdf
-            ? 'PDFは容量オーバーしやすいため、スマホ等で写真を撮ってアップロードすることをおすすめします。または、オンライン圧縮ツール（iLovePDF等）で圧縮してから再度お試しください。'
-            : '合計4.3MB以下になるように、ファイルを分割するか、写真の枚数を減らしてください。';
-        throw new Error(`ファイルの合計サイズが大きすぎます（${(totalSize / 1024 / 1024).toFixed(1)}MB）。${advice}`);
+        throw new Error(`ファイルの合計サイズが大きすぎます（${(totalSize / 1024 / 1024).toFixed(1)}MB）。${oversizeAdvice(hasPdf)}`);
     }
 
     // 各ファイルの検証
@@ -846,7 +882,12 @@ export async function POST(req: NextRequest) {
         const strictness = parseStrictness(strictnessRaw);
 
         // 端末指紋（無料再採点トークンの紐付けに使用）
-        const deviceFingerprint = sanitizeDeviceFingerprint(deviceFingerprintRaw) || (req.headers.get('user-agent') || 'unknown');
+        // クライアントが指紋を送らない場合のフォールバックは User-Agent ではなく user.id に固定する。
+        // 理由: UA はアプリ/ブラウザ更新で変化しうるため、UA をアンカーにすると
+        //       「同じユーザーなのに無料再採点トークンが失効 → 再課金」が起きていた（Grok指摘#7）。
+        //       トークンは HMAC payload の sub(=user.id) で既にユーザー束縛されているため、
+        //       フォールバックを user.id にしても他人のトークン流用防止は損なわれず、UA起因の誤失効のみが消える。
+        const deviceFingerprint = sanitizeDeviceFingerprint(deviceFingerprintRaw) || `uid:${user.id}`;
 
         // 再採点トークン（label -> token）
         let regradeTokens: Record<string, string> = {};

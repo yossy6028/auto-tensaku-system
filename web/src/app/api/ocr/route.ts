@@ -6,6 +6,13 @@ import type { Database } from '@/lib/supabase/types';
 import { checkRateLimit, GRADING_RATE_LIMIT } from '@/lib/security/rateLimit';
 import { logger } from '@/lib/security/logger';
 import { isHeicMimeType, hasHeicExtension, convertHeicBufferToJpeg } from '@/lib/utils/serverHeicConverter';
+import {
+    MAX_SINGLE_FILE_SIZE,
+    MAX_TOTAL_SIZE,
+    MAX_REQUEST_SIZE,
+    MAX_FILES_COUNT,
+    oversizeAdvice,
+} from '@/lib/security/uploadLimits';
 
 // Force dynamic to prevent caching
 export const dynamic = 'force-dynamic';
@@ -77,9 +84,7 @@ const ALLOWED_MIME_TYPES = [
     'application/pdf',
 ];
 
-const MAX_SINGLE_FILE_SIZE = 4 * 1024 * 1024;
-const MAX_TOTAL_SIZE = 4 * 1024 * 1024;
-const MAX_FILES_COUNT = 10;
+// ファイルサイズ・ファイル数の上限は @/lib/security/uploadLimits から import（grade/ocr で共有）
 
 /**
  * ファイルのセキュリティ検証
@@ -91,10 +96,7 @@ function validateFile(file: File): void {
 
     if (file.size > MAX_SINGLE_FILE_SIZE) {
         const isPdf = file.type === 'application/pdf';
-        const advice = isPdf
-            ? 'PDFは容量オーバーしやすいため、スマホ等で写真を撮ってアップロードすることをおすすめします。または、オンライン圧縮ツール（iLovePDF等）で圧縮してから再度お試しください。'
-            : '4MB以下のファイルをアップロードしてください。';
-        throw new Error(`ファイル「${file.name}」が大きすぎます（${(file.size / 1024 / 1024).toFixed(1)}MB）。${advice}`);
+        throw new Error(`ファイル「${file.name}」が大きすぎます（${(file.size / 1024 / 1024).toFixed(1)}MB）。${oversizeAdvice(isPdf)}`);
     }
 
     const dangerousNamePatterns = [/\.\./, /[\/\\]/, /[\x00-\x1f]/, /^\.+$/];
@@ -117,10 +119,7 @@ function validateFiles(files: File[]): void {
     const totalSize = files.reduce((sum, file) => sum + file.size, 0);
     if (totalSize > MAX_TOTAL_SIZE) {
         const hasPdf = files.some(f => f.type === 'application/pdf');
-        const advice = hasPdf
-            ? 'PDFは容量オーバーしやすいため、スマホ等で写真を撮ってアップロードすることをおすすめします。または、オンライン圧縮ツール（iLovePDF等）で圧縮してから再度お試しください。'
-            : '合計4MB以下になるように、ファイルを分割するか、写真の枚数を減らしてください。';
-        throw new Error(`ファイルの合計サイズが大きすぎます（${(totalSize / 1024 / 1024).toFixed(1)}MB）。${advice}`);
+        throw new Error(`ファイルの合計サイズが大きすぎます（${(totalSize / 1024 / 1024).toFixed(1)}MB）。${oversizeAdvice(hasPdf)}`);
     }
 
     for (const file of files) {
@@ -199,6 +198,39 @@ async function convertFilesToBuffers(
 }
 
 /**
+ * can_use_service RPC の1行分の戻り値。
+ * admin / 無料開放(promo) / 残枠あり → can_use=true、プラン無し・体験尽き → can_use=false。
+ */
+type CanUseServiceRow = Database['public']['Functions']['can_use_service']['Returns'][number];
+
+/**
+ * SSR クライアントの .rpc() 型は Database 関数を解決しきれないため、
+ * grade ルートと同じく構造型へキャストして呼び出す。
+ */
+type SupabaseRpcClient = {
+    rpc: (fn: string, args: Record<string, unknown>) => Promise<{ data: unknown; error: unknown }>;
+};
+
+/**
+ * OCR を利用枠ガードでブロックすべきか判定する（A案: 緩い）。
+ *
+ * OCR 自体は無課金の事前ステップ（ユーザーが読み取り結果を確認・修正するため）。
+ * ただしプランの無いユーザーが OCR だけを大量に叩くと Gemini API コストが発生するため、
+ * 「明らかに利用権の無いユーザー」だけを弾きたい。reserve はしない（読取判定のみ）。
+ *
+ * @param usage can_use_service の戻り行。取得失敗時は null（その場合の扱いも判断対象）。
+ * @returns true を返すと OCR を 403 でブロックする。
+ */
+function shouldBlockOcr(usage: CanUseServiceRow | null): boolean {
+    // A案（緩い）:
+    // - usage === null（取得失敗）→ false（フェイルオープン: OCRを止めない）
+    // - can_use === true（admin / 無料開放 / 残枠あり）→ false（通す）
+    // - can_use === false（プラン無し・無料体験尽き）→ true（ブロック）
+    // ※ `=== false` を使うことで、null（取得失敗）を誤ってブロック側に倒さない。
+    return usage?.can_use === false;
+}
+
+/**
  * OCRのみ実行するエンドポイント
  * ユーザーが読み取り結果を確認・修正できるよう、OCRだけを先に実行
  */
@@ -222,6 +254,30 @@ export async function POST(req: NextRequest) {
             return NextResponse.json(
                 { status: 'error', message: `リクエストが多すぎます。${rateLimitResult.retryAfter}秒後に再試行してください。` },
                 { status: 429 }
+            );
+        }
+
+        // 利用枠の事前ガード（A案: 緩い / Grok指摘#3）
+        // OCRは無課金だが、プランの無いユーザーによる乱用（Gemini APIコスト）を防ぐ。
+        // can_use_service は読取のみ呼び、reserve はしない（実際の枠消費は /api/grade 側）。
+        let ocrUsageRow: CanUseServiceRow | null = null;
+        try {
+            const supabaseRpc = supabase as unknown as SupabaseRpcClient;
+            const { data: usageData } = await supabaseRpc.rpc('can_use_service', { p_user_id: user.id });
+            ocrUsageRow = (usageData as CanUseServiceRow[] | null)?.[0] ?? null;
+        } catch (usageError) {
+            // 枠取得自体に失敗した場合はOCRを止めない（フェイルオープン）。
+            // 本番でRPC権限が剥がれている等の既知事象でも、OCRの既存挙動を退化させないため。
+            logger.warn('[OCR API] can_use_service 取得失敗。利用枠ガードをスキップします:', usageError);
+        }
+        if (shouldBlockOcr(ocrUsageRow)) {
+            return NextResponse.json(
+                {
+                    status: 'error',
+                    message: ocrUsageRow?.message || '利用可能なプランがありません。プランを購入してください。',
+                    requirePlan: true,
+                },
+                { status: 403 }
             );
         }
 
@@ -254,18 +310,14 @@ export async function POST(req: NextRequest) {
 
         // リクエストサイズチェック（413エラー対策）
         // フロントエンドで既にチェックしているが、念のためサーバー側でもチェック
+        // 上限は grade ルートと共通（@/lib/security/uploadLimits の MAX_REQUEST_SIZE）
         const totalFileSize = files.reduce((sum, f) => sum + f.size, 0);
-        const MAX_REQUEST_SIZE = 3.5 * 1024 * 1024; // 3.5MB（Vercelの制限4.5MBに安全マージン）
 
         if (totalFileSize > MAX_REQUEST_SIZE) {
             const totalMB = (totalFileSize / 1024 / 1024).toFixed(1);
-            const maxMB = (MAX_REQUEST_SIZE / 1024 / 1024).toFixed(1);
             const hasPdf = files.some(f => f.type === 'application/pdf');
-            const advice = hasPdf
-                ? 'PDFは容量オーバーしやすいため、スマホ等で写真を撮ってアップロードすることをおすすめします。または、オンライン圧縮ツール（iLovePDF等）で圧縮してから再度お試しください。'
-                : `合計${maxMB}MB以下になるように、ファイルを圧縮するか分割してください。`;
             return NextResponse.json(
-                { status: 'error', message: `ファイルの合計サイズが大きすぎます（${totalMB}MB）。${advice}` },
+                { status: 'error', message: `ファイルの合計サイズが大きすぎます（${totalMB}MB）。${oversizeAdvice(hasPdf)}` },
                 { status: 413 }
             );
         }

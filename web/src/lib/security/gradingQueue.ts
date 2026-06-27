@@ -1,3 +1,14 @@
+/**
+ * 採点ジョブの同時実行・キュー長を制限する簡易キュー。
+ *
+ * ■ 既知の限界（Grok指摘#2）
+ *   状態（queue / activeCount）はインメモリのモジュール変数で、Vercel の各サーバーレス
+ *   インスタンスごとに独立する。よって「全体での同時実行数」を厳密に制御するものではなく、
+ *   1インスタンス内での暴走（メモリ・API同時呼び出し）を抑える緩和層。
+ *   厳密なグローバル制御が必要になったら、外部キュー（Upstash/QStash 等）へ移行する。
+ *   なお利用枠の正当性は DB の `reserve_usage`（FOR UPDATE）が担保するため、ここが
+ *   インスタンス毎であっても二重課金・枠超過は発生しない（rateLimit.ts のヘッダ参照）。
+ */
 type QueueTask = {
     run: () => Promise<unknown>;
     resolve: (value: unknown) => void;

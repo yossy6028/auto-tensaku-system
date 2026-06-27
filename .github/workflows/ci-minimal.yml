@@ -17,6 +17,12 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 15
 
+    # アプリ本体は web/ にある（リポジトリ直下は運用スクリプト用ツールボックス）。
+    # 全ステップを web/ で実行し、実際のアプリをビルド・監査する。
+    defaults:
+      run:
+        working-directory: web
+
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -26,12 +32,13 @@ jobs:
         with:
           node-version: "20"
           cache: "npm"
+          cache-dependency-path: web/package-lock.json
 
       - name: Install deps
         run: npm ci
 
       - name: Build
-        run: npm run build --if-present
+        run: npm run build
 
       - name: Security audit (prod deps only)
         run: npm audit --omit=dev --audit-level=moderate

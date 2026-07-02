@@ -869,8 +869,10 @@ ${JSON.stringify(partialResult, null, 2)}`;
         };
 
         if (usePerImageOnly) {
-            const perImageTexts: string[] = [];
-            for (const part of targetParts) {
+            // 画像ごとのOCRは互いに独立なため並列実行する（従来は答案画像の枚数分だけ直列だった）。
+            // Promise.all は入力順を保持するので、結合結果のテキスト順は従来と同一。
+            // fallbackLogged は並行クロージャ間で共有されるため稀に重複ログが出うるが、ログ抑制用途なので実害はない。
+            const perImageOutcomes = await Promise.all(targetParts.map(async (part) => {
                 let bestValid: OcrResult | null = null;
                 let bestFallback: OcrResult | null = null;
                 let bestFallbackCount = -1;
@@ -904,11 +906,16 @@ ${JSON.stringify(partialResult, null, 2)}`;
                 }
 
                 const selected = bestValid ?? bestFallback ?? { text: "", charCount: 0 };
+                return { selected, layoutCandidate: bestValid?.layout ?? bestFallback?.layout };
+            }));
+
+            const perImageTexts: string[] = [];
+            for (const { selected, layoutCandidate } of perImageOutcomes) {
                 perImageTexts.push(selected.text);
                 charCount += selected.charCount;
                 // 最初の有効なlayout情報を使用
-                if (!finalLayout && (bestValid?.layout || bestFallback?.layout)) {
-                    finalLayout = bestValid?.layout ?? bestFallback?.layout;
+                if (!finalLayout && layoutCandidate) {
+                    finalLayout = layoutCandidate;
                 }
             }
 

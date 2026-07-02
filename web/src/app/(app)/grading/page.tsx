@@ -92,6 +92,17 @@ const MAX_SINGLE_FILE_SIZE_BYTES = 4.3 * 1024 * 1024;
 const PDF_SIZE_ADVICE = 'PDFはページ番号を指定すると必要ページだけ抽出して軽くできます。難しい場合はオンライン圧縮ツール（iLovePDF等）で圧縮してから再度お試しください。';
 const MAX_FILE_SIZE = 50 * 1024 * 1024; // 50MB
 const MAX_FILES = 10;
+
+// 採点待ち中に表示する段階メッセージ。
+// atSec: 経過秒数がこの値以上になったらその message を表示する（atSec の昇順に並べる）。
+// 経過秒数に応じて最後にマッチした1件だけが表示される。空のままなら従来の「AIが採点中...」固定表示になる。
+const GRADING_PROGRESS_STEPS: Array<{ atSec: number; message: string }> = [
+  { atSec: 0, message: '答案のテキストを整理しています...' },
+  { atSec: 15, message: '採点基準と照らし合わせています...' },
+  { atSec: 40, message: '減点理由と書き直し例を作成しています...' },
+  { atSec: 70, message: '仕上げの確認をしています。もう少しお待ちください...' },
+  { atSec: 110, message: '丁寧に見直しています。まもなく完了します...' },
+];
 const VALID_EXTENSIONS = /\.(jpg|jpeg|png|gif|webp|bmp|heic|heif|pdf)$/i;
 const APP_STEPS = [
   { step: '1', title: '問題を選ぶ', body: '大問・問番号と配点だけ決めます。' },
@@ -161,6 +172,7 @@ export default function Home() {
   const [isLoading, setIsLoading] = useState(false);
   const [isSampleLoading, setIsSampleLoading] = useState(false);
   const [regradingLabel, setRegradingLabel] = useState<string | null>(null);  // 再採点中のラベル
+  const [gradingElapsedSec, setGradingElapsedSec] = useState(0);  // 採点待ちの経過秒数（段階メッセージ用）
   const [results, setResults] = useState<GradingResponseItem[] | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [requirePlan, setRequirePlan] = useState(false);
@@ -181,6 +193,28 @@ export default function Home() {
   const [currentOcrLabel, setCurrentOcrLabel] = useState<string>('');
   const requestLockRef = useRef(false);
   const isMountedRef = useRef(true);
+  // 圧縮・PDFページ抽出の結果キャッシュ。
+  // OCR→採点で同じファイル一式を2回圧縮していた（体感数秒×2）ため、
+  // 入力（Fileの同一参照・役割・PDFページ指定）が変わらない限り前回結果を再利用する。
+  const preparedFilesCacheRef = useRef<{
+    sources: File[];
+    rolesKey: string;
+    pdfKey: string;
+    result: File[];
+  } | null>(null);
+
+  // 採点待ち中だけ経過秒数を刻む（GRADING_PROGRESS_STEPS の段階メッセージ切替に使用）
+  useEffect(() => {
+    if (ocrFlowStep !== 'grading') {
+      setGradingElapsedSec(0);
+      return;
+    }
+    const startedAt = Date.now();
+    const timer = setInterval(() => {
+      setGradingElapsedSec(Math.floor((Date.now() - startedAt) / 1000));
+    }, 1000);
+    return () => clearInterval(timer);
+  }, [ocrFlowStep]);
   const visitedTrackedRef = useRef(false);
 
   // コンポーネントのマウント状態を追跡（メモリリーク防止）
@@ -1720,6 +1754,23 @@ export default function Home() {
       onCompressionProgress?: (progress: number, currentFile: string) => void;
     }
   ): Promise<File[]> => {
+    const rolesKey = JSON.stringify(options.fileRoles);
+    const pdfKey = JSON.stringify(options.pdfPageInfo);
+    const cached = preparedFilesCacheRef.current;
+    if (
+      cached &&
+      cached.rolesKey === rolesKey &&
+      cached.pdfKey === pdfKey &&
+      cached.sources.length === files.length &&
+      cached.sources.every((file, i) => file === files[i])
+    ) {
+      return cached.result;
+    }
+    const finalize = (result: File[]): File[] => {
+      preparedFilesCacheRef.current = { sources: [...files], rolesKey, pdfKey, result };
+      return result;
+    };
+
     let processedFiles = files;
     const hasPdf = processedFiles.some((file) => file.type === 'application/pdf');
     const hasPdfPageInfo = !!(
@@ -1749,10 +1800,10 @@ export default function Home() {
     }
 
     if (!shouldCompressImages(processedFiles)) {
-      return processedFiles;
+      return finalize(processedFiles);
     }
 
-    return compressWithTimeout(processedFiles, options.onCompressionProgress);
+    return finalize(await compressWithTimeout(processedFiles, options.onCompressionProgress));
   };
 
   const openOcrEditModal = (label: string, initialText: string, strictness: GradingStrictness, problemCondition = '') => {
@@ -2416,12 +2467,19 @@ export default function Home() {
       sample: 0,
     });
 
-    // 各ラベルに対してOCRを実行
+    // 各ラベルのOCRを並列実行する。
+    // 従来はラベルごとに直列で fetch していたため、2問選ぶと読み取り待ちが単純に2倍だった。
+    // /api/ocr はユーザー毎10リクエスト/分のレート制限で、UIの同時選択上限（2問）なら並列でも安全。
     const newOcrResults: Record<string, { text: string; charCount: number }> = {};
+    setCurrentOcrLabel(
+      targetLabels.length > 1 ? `${targetLabels.length}問を同時に` : `「${targetLabels[0]}」を`
+    );
 
-    for (const label of targetLabels) {
-      setCurrentOcrLabel(label);
+    type OcrLabelOutcome =
+      | { ok: true; label: string; text: string; charCount: number }
+      | { ok: false; message: string; reason: string };
 
+    const runOcrForLabel = async (label: string): Promise<OcrLabelOutcome> => {
       const formData = new FormData();
       formData.append('targetLabel', label);
 
@@ -2459,11 +2517,7 @@ export default function Home() {
           } else {
             fallbackMessage = 'サーバーからの応答を処理できませんでした。時間をおいて再度お試しください。';
           }
-          setError(fallbackMessage);
-          setOcrFlowStep('idle');
-          setIsLoading(false);
-          sendGAEvent('grading_ocr_failed', { reason: `parse_${res.status}` });
-          return;
+          return { ok: false, message: fallbackMessage, reason: `parse_${res.status}` };
         }
 
         if (!res.ok) {
@@ -2477,53 +2531,51 @@ export default function Home() {
           } else {
             message = '読み取り処理に失敗しました。時間をおいて再度お試しください。';
           }
-          setError(message);
-          setOcrFlowStep('idle');
-          setIsLoading(false);
-          sendGAEvent('grading_ocr_failed', { reason: `http_${res.status}` });
-          return;
+          return { ok: false, message, reason: `http_${res.status}` };
         }
 
         if (data.status === 'error') {
-          setError(data.message ?? 'OCR処理中にエラーが発生しました');
-          setOcrFlowStep('idle');
-          setIsLoading(false);
-          sendGAEvent('grading_ocr_failed', { reason: 'api_error' });
-          return;
+          return { ok: false, message: data.message ?? 'OCR処理中にエラーが発生しました', reason: 'api_error' };
         }
 
         if (!data.ocrResult) {
-          setError('OCR結果が取得できませんでした');
-          setOcrFlowStep('idle');
-          setIsLoading(false);
-          sendGAEvent('grading_ocr_failed', { reason: 'missing_result' });
-          return;
+          return { ok: false, message: 'OCR結果が取得できませんでした', reason: 'missing_result' };
         }
 
-        newOcrResults[label] = {
-          text: data.ocrResult.text,
-          charCount: data.ocrResult.charCount
-        };
-
-        // 初期値として確認済みテキストにも設定
-        // ただしプレースホルダーテキスト（OCR失敗）の場合は空文字にして
-        // ユーザーに手動入力を促す
-        const ocrText = data.ocrResult!.text;
-        const isPlaceholder = /読み取れませんでした|取得できませんでした|判読不能|認識できません/.test(ocrText);
-        setConfirmedTexts(prev => ({
-          ...prev,
-          [label]: isPlaceholder ? '' : ocrText
-        }));
+        return { ok: true, label, text: data.ocrResult.text, charCount: data.ocrResult.charCount };
       } catch (err) {
         console.error('OCR error:', err);
-        setError('OCR処理中にエラーが発生しました。');
-        setOcrFlowStep('idle');
-        setIsLoading(false);
-        sendGAEvent('grading_ocr_failed', { reason: 'network_error' });
-        return;
+        return { ok: false, message: 'OCR処理中にエラーが発生しました。', reason: 'network_error' };
       }
+    };
+
+    const outcomes = await Promise.all(targetLabels.map(runOcrForLabel));
+
+    const firstFailure = outcomes.find(
+      (outcome): outcome is Extract<OcrLabelOutcome, { ok: false }> => !outcome.ok
+    );
+    if (firstFailure) {
+      setError(firstFailure.message);
+      setOcrFlowStep('idle');
+      setIsLoading(false);
+      setCurrentOcrLabel('');
+      sendGAEvent('grading_ocr_failed', { reason: firstFailure.reason });
+      return;
     }
 
+    for (const outcome of outcomes) {
+      if (!outcome.ok) continue;
+      newOcrResults[outcome.label] = { text: outcome.text, charCount: outcome.charCount };
+
+      // 初期値として確認済みテキストにも設定
+      // ただしプレースホルダーテキスト（OCR失敗）の場合は空文字にして
+      // ユーザーに手動入力を促す
+      const isPlaceholder = /読み取れませんでした|取得できませんでした|判読不能|認識できません/.test(outcome.text);
+      setConfirmedTexts(prev => ({
+        ...prev,
+        [outcome.label]: isPlaceholder ? '' : outcome.text
+      }));
+    }
     setOcrResults(newOcrResults);
     setOcrFlowStep('confirm');
     setCurrentOcrLabel('');
@@ -4745,7 +4797,7 @@ export default function Home() {
                       {ocrFlowStep === 'ocr-loading' ? (
                         <span className="flex items-center">
                           <Loader2 className="animate-spin -ml-1 mr-3 h-6 w-6" />
-                          {currentOcrLabel ? `「${currentOcrLabel}」を読み取り中...` : '読み取り中...'}
+                          {currentOcrLabel ? `${currentOcrLabel}読み取り中...` : '読み取り中...'}
                         </span>
                       ) : isCompressing ? (
                         <span className="flex items-center">
@@ -4829,8 +4881,12 @@ export default function Home() {
                 {ocrFlowStep === 'grading' && (
                   <div className="mt-8 p-8 bg-gradient-to-br from-indigo-50 to-violet-50 border-2 border-indigo-200 rounded-2xl text-center">
                     <Loader2 className="animate-spin h-12 w-12 text-indigo-600 mx-auto mb-4" />
-                    <p className="text-xl font-bold text-indigo-800 animate-pulse">AIが採点中...</p>
-                    <p className="text-sm text-indigo-600 mt-2">30秒〜2分程度かかる場合があります。<br />このままお待ちください。</p>
+                    <p className="text-xl font-bold text-indigo-800 animate-pulse">
+                      {[...GRADING_PROGRESS_STEPS].reverse().find((step) => gradingElapsedSec >= step.atSec)?.message ?? 'AIが採点中...'}
+                    </p>
+                    <p className="text-sm text-indigo-600 mt-2">
+                      経過 {gradingElapsedSec}秒（通常30秒〜2分かかります）<br />このままお待ちください。
+                    </p>
                   </div>
                 )}
               </>

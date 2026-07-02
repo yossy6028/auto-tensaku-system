@@ -80,8 +80,24 @@ export async function POST() {
       });
 
     if (insertError) {
-      // normalized_email の UNIQUE 制約違反 — 別のユーザーが同じ正規化メールで既に存在
       if (insertError.code === '23505') {
+        // 23505（UNIQUE 制約違反）には2系統あるため、id を再SELECTして判別する:
+        //   (a) 同一ユーザーの同時POST → 主キー(id)衝突。プロファイルは競合した別リクエストが
+        //       作成済み → 冪等に成功(created:false)を返すべき。
+        //   (b) 別ユーザーが同じ normalized_email で既存 → 本物の衝突 → サポート誘導。
+        // 旧実装は両者を一律 (b) 扱いで 409 にしていたため、(a) が誤って 409 になっていた。
+        const { data: nowExisting } = await admin
+          .from('user_profiles')
+          .select('id')
+          .eq('id', user.id)
+          .maybeSingle();
+
+        if (nowExisting) {
+          // (a) 競合した別リクエストが既に作成済み → 成功扱い
+          return NextResponse.json({ ok: true, created: false });
+        }
+
+        // (b) 自分の id は存在しない = normalized_email の衝突。
         // 自動マージは別アカウント乗っ取りに直結するため行わず、サポート誘導に留める。
         // （このAPIは認証必須なので任意メールの列挙には使えないが、条件は断定しない文言にする）
         console.warn(

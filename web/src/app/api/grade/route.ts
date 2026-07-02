@@ -933,7 +933,24 @@ export async function POST(req: NextRequest) {
         // 成功パス(差分解放)で利用枠の最終確定が済んだら true。
         // 異常終了時のロールバックが、成功パスと二重に解放しないためのガード。
         let usageSettled = false;
-        const supabaseAdmin = requiresPaidUsage ? getSupabaseAdmin() : null;
+        // admin クライアントは遅延生成する。SUPABASE_SERVICE_ROLE_KEY 欠落/無効でも
+        // reserve_usage RPC が正常なら採点を通すため、キー起因の throw で全採点を
+        // 500 に落とさない。実際に admin フォールバックが必要になった時だけ生成し、
+        // 失敗しても null を返して退化耐性を持たせる。
+        let supabaseAdminResolved = false;
+        let supabaseAdminInstance: ReturnType<typeof getSupabaseAdmin> | null = null;
+        const resolveSupabaseAdmin = (): ReturnType<typeof getSupabaseAdmin> | null => {
+            if (!supabaseAdminResolved) {
+                supabaseAdminResolved = true;
+                try {
+                    supabaseAdminInstance = getSupabaseAdmin();
+                } catch (adminInitError) {
+                    logger.error('[API] Supabase admin client init failed (service role key missing/invalid). Continuing without admin fallback.', adminInitError);
+                    supabaseAdminInstance = null;
+                }
+            }
+            return supabaseAdminInstance;
+        };
 
         // 利用枠をアトミックに予約（無料再採点のみの場合はスキップ）
         if (requiresPaidUsage) {
@@ -945,7 +962,10 @@ export async function POST(req: NextRequest) {
             if (reserveError) {
                 logger.error('Usage reservation error:', reserveError);
 
-                if (!supabaseAdmin || !isUsageReservationFallbackTarget(reserveError)) {
+                const reserveFallbackAdmin = isUsageReservationFallbackTarget(reserveError)
+                    ? resolveSupabaseAdmin()
+                    : null;
+                if (!reserveFallbackAdmin) {
                     return NextResponse.json(
                         { status: 'error', message: '利用状況の確認中にエラーが発生しました。' },
                         { status: 500 }
@@ -953,7 +973,7 @@ export async function POST(req: NextRequest) {
                 }
 
                 try {
-                    const fallbackRow = await reserveUsageWithAdminFallback(supabaseAdmin, user.id, paidLabels.length);
+                    const fallbackRow = await reserveUsageWithAdminFallback(reserveFallbackAdmin, user.id, paidLabels.length);
                     reserveRows = [fallbackRow];
                     logger.warn('[API] reserve_usage RPC failed. Used direct admin fallback.', {
                         userId: user.id,
@@ -982,10 +1002,11 @@ export async function POST(req: NextRequest) {
             reservedCount = shouldTrackReservedCount(reserveRows[0].plan_name) ? paidLabels.length : 0;
         }
 
-        // ファイルをバッファに変換（役割情報を付与）
-        const fileBuffers = await convertFilesToBuffers(files, pdfPageInfo, fileRoles);
-
         try {
+            // ファイルをバッファに変換（役割情報を付与）。
+            // HEIC 変換失敗等の throw を inner catch のロールバックで受けるため try 内で実行する。
+            const fileBuffers = await convertFilesToBuffers(files, pdfPageInfo, fileRoles);
+
             const queuedJob = enqueueGradingJob(async () => {
                 // 2024-12-21: ファイルサイズと問題数のログ（並列処理により5問程度まで対応可能）
                 const totalFileSize = fileBuffers.reduce((sum, f) => sum + f.buffer.length, 0);
@@ -1103,9 +1124,10 @@ export async function POST(req: NextRequest) {
                     if (releaseError) {
                         logger.error('Failed to release unused usage slots:', releaseError);
                         usageReleaseWarning = true;
-                        if (supabaseAdmin) {
+                        const releaseFallbackAdmin = resolveSupabaseAdmin();
+                        if (releaseFallbackAdmin) {
                             try {
-                                const fallbackRelease = await releaseUsageWithAdminFallback(supabaseAdmin, user.id, releaseCount);
+                                const fallbackRelease = await releaseUsageWithAdminFallback(releaseFallbackAdmin, user.id, releaseCount);
                                 if (fallbackRelease.success) {
                                     logger.warn('[API] release_usage RPC failed. Used direct admin fallback.', {
                                         userId: user.id,
@@ -1225,9 +1247,10 @@ export async function POST(req: NextRequest) {
                     .rpc('release_usage', { p_user_id: user.id, p_count: reservedCount });
                 if (rollbackError) {
                     logger.error('Failed to roll back reserved usage on abnormal termination:', rollbackError);
-                    if (supabaseAdmin) {
+                    const rollbackFallbackAdmin = resolveSupabaseAdmin();
+                    if (rollbackFallbackAdmin) {
                         try {
-                            const fallbackRelease = await releaseUsageWithAdminFallback(supabaseAdmin, user.id, reservedCount);
+                            const fallbackRelease = await releaseUsageWithAdminFallback(rollbackFallbackAdmin, user.id, reservedCount);
                             if (fallbackRelease.success) {
                                 logger.warn('[API] release_usage RPC failed on rollback. Used direct admin fallback.', {
                                     userId: user.id,

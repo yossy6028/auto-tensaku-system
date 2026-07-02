@@ -37,6 +37,10 @@ lerna-debug.log*
 # Serena
 .serena/
 
+# Letta (contains local session data / PII — never commit)
+.letta/
+**/.letta/
+
 # Next.js
 .next/
 out/

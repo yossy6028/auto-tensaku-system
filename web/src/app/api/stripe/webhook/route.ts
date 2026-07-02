@@ -6,6 +6,16 @@ import { logger } from '@/lib/security/logger';
 
 type SubscriptionStatus = 'active' | 'cancelled' | 'past_due';
 
+// リトライしても直らない（＝コード/設定を修正しない限り永久に失敗する）webhook 処理エラー。
+// これを投げると catch 節で status='failed' に確定させ 200 を返すことで、
+// 「500 → 再送 → また 500」を最大3日繰り返す poison ループを打ち切る。
+class NonRetryableWebhookError extends Error {
+  constructor(message: string) {
+    super(message);
+    this.name = 'NonRetryableWebhookError';
+  }
+}
+
 // Supabase Admin Client (遅延初期化 — ビルド時にはenv未設定のためランタイムで生成)
 function getSupabaseAdmin() {
   const supabaseServiceRoleKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
@@ -188,7 +198,9 @@ async function resolvePlan(stripePriceId?: string | null): Promise<PlanResolutio
     || (stripePriceId ? await getPlanIdFromLegacyStripePrice(stripePriceId) : null);
   if (!resolvedPlanId) {
     logger.error('Unknown stripe_price_id, cannot map to plan:', stripePriceId);
-    throw new Error(`[Stripe Webhook] Unknown Stripe price id: ${stripePriceId || 'empty'}`);
+    // 未知の price id は再送しても解決しない（Stripe 側の price 追加か当方のマッピング修正が必要）。
+    // リトライ不可能として分類し、poison ループを避ける。
+    throw new NonRetryableWebhookError(`[Stripe Webhook] Unknown Stripe price id: ${stripePriceId || 'empty'}`);
   }
   const fallbackPlanId = resolvedPlanId;
   const { data: planById, error: planByIdError } = await getSupabaseAdmin()
@@ -345,36 +357,187 @@ async function upsertSubscriptionRecord(params: {
   }
 }
 
-async function hasProcessedStripeEvent(eventId: string): Promise<boolean> {
-  const { data, error } = await getSupabaseAdmin()
-    .from('stripe_events')
-    .select('id')
-    .eq('event_id', eventId)
-    .maybeSingle();
+// ---- Stripe webhook 冪等性（status 列ベースの状態機械） --------------------
+//
+// stripe_events.status は 'processing' → 'processed' / 'failed' と遷移する。
+// claim で行を 'processing' で挿入して処理権を獲得し、成功で 'processed'、
+// リトライ不可能な失敗で 'failed'、リトライ可能な失敗では行を削除して Stripe に委ねる。
+//
+// これにより次の2つの弱点を塞ぐ:
+//   (1) 処理途中の kill（maxDuration超過/OOM/デプロイ差替）で行が processing のまま
+//       取り残されても、一定時間後に「孤児」として回収し再処理できる。
+//   (2) 未知 price id 等のリトライ不可能な失敗を 'failed' で確定し、再送ループを打ち切る。
 
-  if (error) {
-    logger.error('Failed to check Stripe event idempotency:', error);
-    throw new Error('[Stripe Webhook] Failed to check event idempotency');
-  }
+// claim の結果。'retry_later' は「他が処理中かもしれない」ため 500 を返して Stripe 再送に委ねる。
+type ClaimResult = 'claimed' | 'duplicate' | 'retry_later';
 
-  return Boolean(data?.id);
+// processing のまま放置された行を「孤児（=処理プロセスが死んだ）」とみなす閾値。
+// この webhook は maxDuration を設定しておらず関数寿命は十数秒程度なので、
+// 5分を超えて processing の行は確実にプロセスが消えている。生存中ワーカーを誤って
+// 奪わないため、閾値は関数の最大寿命より十分大きく取る。
+// このルートに maxDuration を設定する場合は、必ずこの閾値もその寿命より十分大きく取り直すこと。
+const ORPHAN_THRESHOLD_MS = 5 * 60 * 1000;
+
+// status 列が存在するスキーマ（本マイグレーション適用後）かどうか。
+// マイグレーション適用前の本番にこのコードが出た場合、claim で列不在を検知したら
+// false に倒し、旧方式（行の存在＝処理済み、失敗時 DELETE）へ自動縮退して webhook を落とさない。
+// 全環境でマイグレーション適用が完了したら、このフォールバック分岐は削除してよい。
+let statusColumnAvailable = true;
+
+// PostgREST は未知列への書き込みで PGRST204、素の SQL 経由なら 42703 を返す。
+function isMissingStatusColumn(error: { code?: string; message?: string } | null): boolean {
+  if (!error) return false;
+  if (error.code === 'PGRST204' || error.code === '42703') return true;
+  const message = error.message ?? '';
+  return message.includes('status') && message.includes('column');
 }
 
-async function persistProcessedStripeEvent(event: Stripe.Event): Promise<void> {
+// 冪等性の関所: event_id を 'processing' で INSERT（ON CONFLICT DO NOTHING）して処理権を獲得する。
+// 衝突（既存行あり）時は行の状態を見て、処理済み/処理中/孤児/打ち切り済みを判定する。
+async function claimStripeEvent(event: Stripe.Event): Promise<ClaimResult> {
+  const admin = getSupabaseAdmin();
+
+  // 並行 release により行が消えて claim をやり直す場合に備え、回数を制限してループする。
+  for (let attempt = 0; attempt < 3; attempt++) {
+    const insertPayload = {
+      event_id: event.id,
+      event_type: event.type,
+      data: event.data,
+      ...(statusColumnAvailable ? { status: 'processing' } : {}),
+    };
+
+    const { data: inserted, error: insertError } = await admin
+      .from('stripe_events')
+      .upsert(insertPayload, { onConflict: 'event_id', ignoreDuplicates: true })
+      .select('event_id');
+
+    if (insertError) {
+      if (statusColumnAvailable && isMissingStatusColumn(insertError)) {
+        logger.warn('stripe_events.status 列が無いため冪等性を旧方式へ縮退します:', event.id);
+        statusColumnAvailable = false;
+        continue; // status を外して再試行
+      }
+      logger.error('Failed to claim Stripe event idempotency:', insertError);
+      throw new Error('[Stripe Webhook] Failed to claim event idempotency');
+    }
+
+    // 挿入できた（RETURNING に行が返る）= 新規イベント → 処理権を獲得。
+    if (inserted && inserted.length > 0) {
+      return 'claimed';
+    }
+
+    // ここに来る = event_id 衝突（既存行あり）。旧スキーマは状態を持たないので即スキップ。
+    if (!statusColumnAvailable) {
+      return 'duplicate';
+    }
+
+    const { data: existing, error: selectError } = await admin
+      .from('stripe_events')
+      .select('status, created_at')
+      .eq('event_id', event.id)
+      .maybeSingle();
+
+    if (selectError) {
+      logger.error('Failed to read existing Stripe event state:', selectError);
+      throw new Error('[Stripe Webhook] Failed to read event state');
+    }
+
+    if (!existing) {
+      continue; // 並行 release で行が消えた直後 → 再 claim を試みる
+    }
+
+    // (a) 処理完了済み → スキップ
+    if (existing.status === 'processed') {
+      return 'duplicate';
+    }
+
+    // (b) processing のまま → 孤児かどうかを経過時間で判定
+    if (existing.status === 'processing') {
+      const ageMs = Date.now() - new Date(existing.created_at).getTime();
+      if (ageMs < ORPHAN_THRESHOLD_MS) {
+        // まだ新しい = 別配信が処理中の可能性。ここで 200 スキップすると、もし相手が
+        // kill 済みだった場合にイベントを永久に取りこぼす。非2xx を返して Stripe に再送させ、
+        // 次の配信までに相手が完了(processed)するか孤児化(閾値超過)するのを待つ方が安全。
+        return 'retry_later';
+      }
+      // 閾値超過 = プロセスは確実に死んでいる。created_at を現在時刻に更新して奪い返す。
+      // WHERE に status='processing' と「閾値より古い created_at」を課すことで、
+      // 同時に孤児を拾った別配信との競合を防ぐ（更新に成功した1つだけが処理権を得る）。
+      const staleBefore = new Date(Date.now() - ORPHAN_THRESHOLD_MS).toISOString();
+      const { data: reclaimed, error: reclaimError } = await admin
+        .from('stripe_events')
+        .update({ status: 'processing', created_at: new Date().toISOString() })
+        .eq('event_id', event.id)
+        .eq('status', 'processing')
+        .lt('created_at', staleBefore)
+        .select('event_id');
+
+      if (reclaimError) {
+        logger.error('Failed to reclaim orphaned Stripe event:', reclaimError);
+        throw new Error('[Stripe Webhook] Failed to reclaim orphaned event');
+      }
+      if (reclaimed && reclaimed.length > 0) {
+        logger.warn('Reclaimed orphaned Stripe event for reprocessing:', event.id);
+        return 'claimed';
+      }
+      return 'duplicate'; // 競合に負けた = 他が奪って処理中
+    }
+
+    // (c) status === 'failed' = リトライ不可として打ち切り済み → スキップ
+    return 'duplicate';
+  }
+
+  // 3回とも行が消え続けた異常系。二重処理を避けるため安全側（500・再送に委ねる）に倒す。
+  logger.error('Stripe event claim exhausted retries:', event.id);
+  throw new Error('[Stripe Webhook] Failed to claim event after retries');
+}
+
+// 処理成功を確定する。行を 'processed' にして以降の再送を確実にスキップさせる。
+async function markStripeEventProcessed(eventId: string): Promise<void> {
+  if (!statusColumnAvailable) {
+    return; // 旧スキーマでは行が存在するだけで「処理済み」を意味する
+  }
   const { error } = await getSupabaseAdmin()
     .from('stripe_events')
-    .upsert(
-      {
-        event_id: event.id,
-        event_type: event.type,
-        data: event.data,
-      },
-      { onConflict: 'event_id', ignoreDuplicates: true }
-    );
+    .update({ status: 'processed', processed_at: new Date().toISOString() })
+    .eq('event_id', eventId);
 
   if (error) {
-    logger.error('Failed to persist processed Stripe event:', error);
-    throw new Error('[Stripe Webhook] Failed to persist processed event');
+    // マークに失敗しても業務処理自体は完了済みで 200 を返す。行は processing のまま残るが、
+    // 成功済みイベントに Stripe が再送してくることは基本無いので実害は無い（ログのみ）。
+    logger.error('Failed to mark Stripe event as processed:', eventId, error);
+  }
+}
+
+// リトライ不可能な失敗を確定する。行を 'failed' で残し 200 を返すことで再送ループを打ち切る。
+async function markStripeEventFailed(eventId: string): Promise<void> {
+  if (!statusColumnAvailable) {
+    // 旧スキーマでは status を持てない。行を残すと再送が常にスキップされ「失敗のまま沈黙」に
+    // なるため、行を削除して Stripe 側の再送機会だけは残す（従来の release 相当）。
+    await releaseStripeEvent(eventId);
+    return;
+  }
+  const { error } = await getSupabaseAdmin()
+    .from('stripe_events')
+    .update({ status: 'failed', processed_at: new Date().toISOString() })
+    .eq('event_id', eventId);
+
+  if (error) {
+    logger.error('Failed to mark Stripe event as failed:', eventId, error);
+  }
+}
+
+// リトライ可能な失敗時に処理権を解放する。行を削除しないと再送が claim でスキップされ
+// 取りこぼすため、DELETE して Stripe の自動再送に委ねる。
+async function releaseStripeEvent(eventId: string): Promise<void> {
+  const { error } = await getSupabaseAdmin()
+    .from('stripe_events')
+    .delete()
+    .eq('event_id', eventId);
+
+  if (error) {
+    // 解放に失敗してもレスポンスは 500 のままにして Stripe 再送に委ねる（ログのみ）。
+    logger.error('Failed to release Stripe event after processing failure:', eventId, error);
   }
 }
 
@@ -421,13 +584,23 @@ export async function POST(request: NextRequest) {
 
   logger.info('Webhook event received:', event.type);
 
-  try {
-    // 処理前に保存すると、途中失敗したイベントまで処理済み扱いになるため、成功後に保存する。
-    if (await hasProcessedStripeEvent(event.id)) {
-      logger.info('Duplicate event skipped:', event.id);
-      return NextResponse.json({ received: true });
-    }
+  // 冪等性の関所: イベントIDを先に 'processing' で INSERT（ON CONFLICT DO NOTHING）して
+  // 「処理権」を獲得する。旧実装は check(存在確認)→処理→保存 の順だったため、同一イベントの
+  // 並行配信時に両スレッドが存在確認をすり抜け、usage_count リセット等が二重実行されうった（TOCTOU）。
+  // DB の一意制約をアトミックな関所にすることで二重処理を構造的に防ぐ。
+  const claim = await claimStripeEvent(event);
+  if (claim === 'duplicate') {
+    logger.info('Duplicate event skipped:', event.id);
+    return NextResponse.json({ received: true });
+  }
+  if (claim === 'retry_later') {
+    // 直近に処理中（かもしれない）配信がある。取りこぼしを避けるため非2xx（409）を返し、
+    // Stripe に再送させる。次の配信までに相手が完了(processed)するか孤児化するのを待つ。
+    logger.info('Event is being processed by another delivery, asking Stripe to retry:', event.id);
+    return NextResponse.json({ error: 'Event in progress, retry later' }, { status: 409 });
+  }
 
+  try {
     switch (event.type) {
       case 'checkout.session.completed': {
         const session = event.data.object as Stripe.Checkout.Session;
@@ -646,11 +819,22 @@ export async function POST(request: NextRequest) {
         logger.info('Unhandled event type:', event.type);
     }
 
-    await persistProcessedStripeEvent(event);
-
+    // 業務処理が成功したので処理権を 'processed' に確定し、以降の再送をスキップさせる。
+    await markStripeEventProcessed(event.id);
     return NextResponse.json({ received: true });
   } catch (error) {
     logger.error('Webhook processing error:', error);
+
+    if (error instanceof NonRetryableWebhookError) {
+      // リトライ不可能な失敗（例: 未知の price id）。再送しても直らないので 'failed' で確定し、
+      // 200 を返して「500 → 再送 → また 500」の poison ループ（最大3日）を打ち切る。
+      await markStripeEventFailed(event.id);
+      return NextResponse.json({ received: true, skipped: 'non_retryable' });
+    }
+
+    // リトライで直りうる失敗 → 先頭で獲得した「処理権」を解放して 500 を返す。
+    // これにより Stripe の自動再送で同じイベントを最初から再処理できる。
+    await releaseStripeEvent(event.id);
     return NextResponse.json(
       { error: 'Webhook processing failed' },
       { status: 500 }

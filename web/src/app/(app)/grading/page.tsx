@@ -3410,41 +3410,41 @@ export default function Home() {
           {/* Login Card */}
           <div className="max-w-md mx-auto w-full">
             <div className="bg-white/80 backdrop-blur-2xl shadow-[0_8px_30px_rgb(0,0,0,0.08)] rounded-3xl overflow-hidden border border-white/60 ring-1 ring-white/50">
-              <div className="bg-gradient-to-r from-indigo-600 to-violet-600 p-6 text-white text-center">
-                <h2 className="text-2xl font-bold">ご利用にはログインが必要です</h2>
-                <p className="text-indigo-100 mt-2 text-sm">
-                  アカウントをお持ちでない方は新規登録してください
+              <div className="bg-gradient-to-r from-es-blue to-es-teal p-6 text-white text-center">
+                <h2 className="text-2xl font-bold">無料5回は、登録するとすぐ使えます</h2>
+                <p className="text-es-teal-light mt-2 text-sm">
+                  メールアドレスだけで登録1分／クレジットカード不要
                 </p>
               </div>
 
               <div className="p-8 space-y-4">
                 <button
+                  onClick={() => openAuthModal('signup')}
+                  className="w-full py-4 px-6 bg-gradient-to-r from-es-blue to-es-teal text-white font-bold rounded-xl shadow-lg hover:shadow-xl hover:-translate-y-0.5 transition-all flex items-center justify-center"
+                >
+                  <UserPlus className="w-5 h-5 mr-2" />
+                  無料で登録して5回試す
+                </button>
+
+                <button
                   onClick={() => openAuthModal('signin')}
-                  className="w-full py-4 px-6 bg-gradient-to-r from-indigo-600 to-violet-600 text-white font-bold rounded-xl shadow-lg hover:shadow-xl hover:-translate-y-0.5 transition-all flex items-center justify-center"
+                  className="w-full py-4 px-6 bg-white text-es-teal font-bold rounded-xl border-2 border-es-teal/30 hover:border-es-teal hover:bg-es-teal-light transition-all flex items-center justify-center"
                 >
                   <LogIn className="w-5 h-5 mr-2" />
                   ログイン
                 </button>
 
-                <button
-                  onClick={() => openAuthModal('signup')}
-                  className="w-full py-4 px-6 bg-white text-indigo-600 font-bold rounded-xl border-2 border-indigo-200 hover:border-indigo-400 hover:bg-indigo-50 transition-all flex items-center justify-center"
-                >
-                  <UserPlus className="w-5 h-5 mr-2" />
-                  新規登録（無料）
-                </button>
-
                 <div className="pt-4 border-t border-slate-200 space-y-3">
                   <Link
                     href="/usage"
-                    className="flex items-center justify-center w-full py-3 px-6 bg-gradient-to-r from-indigo-50 to-violet-50 text-indigo-700 font-bold rounded-xl border-2 border-indigo-200 hover:border-indigo-400 hover:from-indigo-100 hover:to-violet-100 transition-all shadow-sm hover:shadow-md"
+                    className="flex items-center justify-center w-full py-3 px-6 bg-es-teal-light text-es-teal font-bold rounded-xl border-2 border-es-teal/30 hover:border-es-teal hover:brightness-95 transition-all shadow-sm hover:shadow-md"
                   >
                     <BookOpen className="w-5 h-5 mr-2" />
                     使い方を見る
                   </Link>
                   <Link
                     href="/pricing"
-                    className="flex items-center justify-center text-sm text-slate-600 hover:text-indigo-600 transition-colors"
+                    className="flex items-center justify-center text-sm text-slate-600 hover:text-es-teal transition-colors"
                   >
                     <CreditCard className="w-4 h-4 mr-1" />
                     料金プランを見る

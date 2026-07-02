@@ -1,6 +1,7 @@
 import { LPHeader } from '@/components/lp/LPHeader';
 import { HeroSection } from '@/components/lp/HeroSection';
 import { RealSampleSection } from '@/components/lp/RealSampleSection';
+import { DemoSection } from '@/components/lp/DemoSection';
 import { ProblemSection } from '@/components/lp/ProblemSection';
 import { SolutionSection } from '@/components/lp/SolutionSection';
 import { FeaturesSection } from '@/components/lp/FeaturesSection';
@@ -21,6 +22,7 @@ export default function LandingPage() {
       <ProblemSection />
       <SolutionSection />
       <RealSampleSection />
+      <DemoSection />
       <ProductHighlights />
       <FeaturesSection />
       <HowItWorksSection />

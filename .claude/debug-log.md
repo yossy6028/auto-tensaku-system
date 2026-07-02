@@ -45,3 +45,13 @@ grade ルートと同じ流儀に合わせ、OCR ルートにも `SupabaseRpcCli
 - Edit/Write の直前は必ず Read ツールで対象を開く（Bash cat は read 追跡に不十分）。
 - 未読の既存ファイルを編集する場合は Read を挟む。
 - いずれも即訂正し、最終的に `next build` exit 0 で全体整合を確認済み。成果物への影響なし。
+
+## 2026-07-02: Vercelテレメトリを誤プロジェクトで計測（訂正済み）
+
+**症状**: 「本番API直近7日呼び出しゼロ」を prj_Tn18...（名前"web"、latestDeployment:null の空プロジェクト）で計測していた。
+
+**根本原因**: `web/.vercel/project.json` が過去の `vercel link` 誤操作で作られた空プロジェクト"web"を指したまま放置されており、プロジェクトID探索時に repo直下より先に web/ 側を読んだ。
+
+**対処**: 実プロジェクトは `auto-tensaku-system`（prj_O5FFBgBl5nCvVLIChEt7FJnimIwk）。正しい計測でも「7日間 約35リクエスト・大半がbot・APIコールゼロ」で結論（実質流入ゼロ）は不変。`web/.vercel/project.json` を正プロジェクトに書き換え（.bak-20260702 保存）。
+
+**再発防止**: Vercel計測時は必ず `latestDeployment` が非nullであること・プロジェクト名がリポジトリと一致することを確認してから集計する。repo直下の `.vercel/project.json` が正。

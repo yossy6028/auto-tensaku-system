@@ -8,9 +8,9 @@
 
 | 事実 | 根拠 |
 |---|---|
-| **本番APIは直近7日間で呼び出しゼロ** | Vercelランタイムログ（採点・認証・Stripeすべて空） |
+| **本番の直近7日間は約35リクエストのみで、大半が /robots.txt・/sitemap.xml（クローラー）。LP `/` が11回、/grading が2回、採点・認証・決済APIは呼び出しゼロ** | Vercelランタイムログ（プロジェクト auto-tensaku-system で計測。※初回計測は web/.vercel/project.json が指す空プロジェクト"web"を誤参照 → 訂正済み、結論は不変） |
 | ランタイムエラーも直近7日ゼロ（＝使われていないだけ） | Vercel get_runtime_errors |
-| 本番は6/11のmainのまま。6/27以降の課金・利用枠修正は未デプロイ | origin/main 最終コミット 2026-06-11、現ブランチ fix/grok-hardening-20260627 未マージ |
+| ~~本番は6/11のmainのまま~~ → **2026-07-02に修正一式をmainへマージ・本番デプロイ完了**（下記§7） | デプロイ 88b1e1f READY を確認 |
 | GAは設置済み（G-RTB411K3Q1）だが流入チャネルが存在しない | layout.tsx、sitemap.tsは4URLのみ |
 
 **結論: 「売れない」の第一原因はプロダクトの欠陥ではなく、「誰にも見られていない」こと。** ただし、仮に流入を作っても現状のファネル（ログイン壁・初回体験・価格構造）では転換しない構造的欠陥が複数確認された。以下、売れない構造を4層に分解する。
@@ -72,15 +72,20 @@
 4. **真の競合はChatGPT（月約¥3,000）**。「汎用AIとの違い（採点基準の安定性・手書きOCR・一括処理）」の比較セクションをLPに。¥480はChatGPTより安く「本気のツールではない」印象を与える。
 5. 二重価格・「期間限定」常設は撤廃（景表法有利誤認リスク＋B2B信頼毀損）。
 
-## 6. 塾長にしかできないアクション（チェックリスト）
+## 6. アクション状況（2026-07-02 更新）
 
-- [ ] Supabase SQLエディタで `supabase/diagnose_20260612_reserve_usage.sql` の②を実行し、本番reserve_usageが時間判定版か回数版かを確認 → 時間版なら `supabase_migration_remove_trial_time_limit.sql` を再適用
-- [ ] 同②b: authenticated の EXECUTE 権限確認 → 剥がれていれば `fix_20260612_grant_execute.sql`
-- [ ] Vercel本番の `SUPABASE_SERVICE_ROLE_KEY` の有効性確認（Supabase Settings→API のキーと一致するか）
-- [ ] `supabase/migration_stripe_events_status.sql`（本日新規作成）を本番に適用 **→ その後に** 本ブランチをmainへマージ・デプロイ
+**完了（本セッションで実施・確認済み）:**
+- [x] 本番reserve_usage / release_usage / can_use_service は**回数のみ版**であることを確認（時間ベース版は残存せず。reserve/releaseはFOR UPDATEあり）
+- [x] authenticated / service_role の EXECUTE 権限が有効であることを確認
+- [x] `SUPABASE_SERVICE_ROLE_KEY` の有効性を機能検証（check-email APIがadminクエリ成功→200）
+- [x] `supabase/migration_stripe_events_status.sql` を本番Supabaseに適用（status列・CHECK制約・部分インデックス・processed_at DEFAULT撤去を確認）
+- [x] mainマージ・本番デプロイ完了（88b1e1f READY）。本番LPでデモセクションの表示を確認
+
+**塾長にしかできないこと（残）:**
 - [ ] GA（G-RTB411K3Q1）で過去90日のセッション数を確認（流入ゼロ仮説の最終確認）
 - [ ] 価格再設計（上記5）の意思決定。Stripeの価格作り直しが必要
 - [ ] 監修者（実名・顔写真・経歴）と事例掲載の許諾
+- [ ] 直販10件への声かけ（無料3ヶ月×実名事例2件）
 
 ## 7. 本日の実装（このブランチに追加・検証済み）
 

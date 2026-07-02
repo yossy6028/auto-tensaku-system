@@ -107,14 +107,25 @@ export function HeroSection() {
             initial={{ opacity: 0, y: 20 }}
             animate={{ opacity: 1, y: 0 }}
             transition={{ duration: 0.5, delay: 0.4 }}
-            className="flex flex-col gap-4 sm:flex-row"
+            className="flex flex-col items-center gap-3"
           >
-            <Link
-              href="/grading"
-              className="inline-flex items-center justify-center rounded-full bg-es-teal px-8 py-4 text-lg font-bold text-white shadow-lg shadow-es-teal/25 transition-all hover:brightness-110 hover:shadow-xl hover:-translate-y-0.5"
-            >
-              無料で5回試す
-            </Link>
+            <div className="flex flex-col gap-4 sm:flex-row">
+              <Link
+                href="/grading"
+                className="inline-flex items-center justify-center rounded-full bg-es-teal px-8 py-4 text-lg font-bold text-white shadow-lg shadow-es-teal/25 transition-all hover:brightness-110 hover:shadow-xl hover:-translate-y-0.5"
+              >
+                無料で5回試す
+              </Link>
+              <a
+                href="#demo"
+                className="inline-flex items-center justify-center rounded-full border-2 border-es-teal/40 bg-white/70 px-8 py-4 text-lg font-bold text-es-teal backdrop-blur-sm transition-all hover:border-es-teal hover:bg-white hover:-translate-y-0.5"
+              >
+                登録不要で採点を体験
+              </a>
+            </div>
+            <p className="text-sm text-slate-600">
+              メールアドレスだけで登録・1分／クレジットカード不要
+            </p>
           </motion.div>
         </div>
       </div>

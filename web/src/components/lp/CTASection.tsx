@@ -96,7 +96,7 @@ export function CTASection() {
           viewport={{ once: true, amount: 0.5 }}
           transition={{ duration: 0.6, delay: 0.15 }}
         >
-          初回5回無料 / クレジットカード不要
+          初回5回無料 / クレジットカード不要 / メールアドレスだけで登録1分
         </motion.p>
 
         <motion.div

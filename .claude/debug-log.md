@@ -55,3 +55,13 @@ grade ルートと同じ流儀に合わせ、OCR ルートにも `SupabaseRpcCli
 **対処**: 実プロジェクトは `auto-tensaku-system`（prj_O5FFBgBl5nCvVLIChEt7FJnimIwk）。正しい計測でも「7日間 約35リクエスト・大半がbot・APIコールゼロ」で結論（実質流入ゼロ）は不変。`web/.vercel/project.json` を正プロジェクトに書き換え（.bak-20260702 保存）。
 
 **再発防止**: Vercel計測時は必ず `latestDeployment` が非nullであること・プロジェクト名がリポジトリと一致することを確認してから集計する。repo直下の `.vercel/project.json` が正。
+
+## 2026-07-02: Supabase SQL EditorへのCDP type入力がタイムアウト・SQL破損
+
+**症状**: browser_batch の `type` で長文SQLを入力中に `Input.dispatchKeyEvent` が30秒タイムアウト。入力済み部分も Monaco の自動補完が介入し `UNION allSELECT` 等に破損。
+
+**根本原因**: Monaco系エディタへの合成キーイベント連打は (1) 1文字ずつの補完計算で固まりやすく (2) 補完ポップアップが確定入力を書き換えるため、長文入力に構造的に不向き。
+
+**対処**: javascript_tool で `monaco.editor.getModels()[last].setValue(sql)` を実行してエディタ内容を直接セット→Runボタンクリック。以降の2クエリとも成功。
+
+**再発防止**: SQL Editor等のコードエディタへの入力は、キー入力ではなく必ずエディタAPI（monaco setValue）または貼り付け相当の手段を使う。キー入力は1行程度の短文に限定する。

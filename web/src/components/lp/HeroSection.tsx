@@ -4,7 +4,7 @@ import { useEffect } from 'react';
 import Image from 'next/image';
 import Link from 'next/link';
 import { motion, useMotionValue, useSpring, useTransform } from 'framer-motion';
-import { ChevronDown } from 'lucide-react';
+import { ChevronDown, UserRound } from 'lucide-react';
 import { useIsMobile } from '@/hooks/useMediaQuery';
 import { useMousePosition } from '@/hooks/useMousePosition';
 
@@ -81,9 +81,9 @@ export function HeroSection() {
               initial={{ opacity: 0, y: 20 }}
               animate={{ opacity: 1, y: 0 }}
               transition={{ duration: 0.8, delay: 0.2 }}
-              className="mb-6 text-3xl font-bold tracking-tight bg-gradient-to-r from-blue-600 to-indigo-600 bg-clip-text text-transparent sm:text-4xl md:text-5xl"
+              className="mb-6 text-4xl font-bold tracking-tight bg-gradient-to-r from-blue-600 to-indigo-600 bg-clip-text text-transparent sm:text-5xl md:text-6xl"
             >
-              国語記述の添削を、<br />写真アップロードだけで。
+              記述の採点、1枚3分。
             </motion.h1>
           </motion.div>
 
@@ -91,15 +91,32 @@ export function HeroSection() {
             initial={{ opacity: 0, y: 20 }}
             animate={{ opacity: 1, y: 0 }}
             transition={{ duration: 0.5, delay: 0.2 }}
-            className="mb-10 max-w-4xl mx-auto text-lg text-slate-800 sm:text-xl font-medium leading-relaxed space-y-4"
+            className="mb-8 max-w-4xl mx-auto text-lg text-slate-800 sm:text-xl font-medium leading-relaxed space-y-4"
           >
             <p>
-              問題・答案・模範解答をまとめてアップロード。<br />
-              点数・減点理由・書き直し例まで、数分で確認できます。
+              中学受験・高校受験の国語記述に特化したAI採点。<br />
+              点数・減点理由・書き直し例まで、数分で返します。
             </p>
             <p className="text-base text-slate-700">
-              中学受験・高校受験の記述問題<span className="text-sm text-slate-600">（10文字〜400文字）</span>に対応した、<br className="hidden sm:inline" />
-              塾講師・家庭教師向けのAI自動添削システムです。
+              塾講師・家庭教師の添削時間を、指導の時間に。<br className="hidden sm:inline" />
+              ご家庭での見直しにもお使いいただけます。
+            </p>
+          </motion.div>
+
+          <motion.div
+            initial={{ opacity: 0, y: 20 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ duration: 0.5, delay: 0.3 }}
+            className="mb-10 flex items-center gap-3 rounded-full border border-es-teal/20 bg-white/70 px-4 py-2.5 shadow-sm backdrop-blur-sm sm:px-5"
+          >
+            {/* 顔写真は保留。後日ここに Image を差し込む想定でスロットを確保 */}
+            <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-es-teal-light">
+              <UserRound className="h-5 w-5 text-es-teal" />
+            </span>
+            <p className="text-left text-xs text-slate-700 sm:text-sm">
+              <span className="font-bold text-slate-900">開発・監修: 吉井勝彦</span>
+              <span className="mx-1.5 text-slate-300">|</span>
+              指導歴20年超の現役国語講師 / EduShift代表
             </p>
           </motion.div>
 

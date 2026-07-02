@@ -8,7 +8,7 @@ import { Menu, X } from 'lucide-react';
 import { useReducedMotion } from '@/hooks/useMediaQuery';
 
 const navLinks = [
-  { label: '特長', href: '#features' },
+  { label: '特長', href: '#comparison' },
   { label: '料金', href: '#pricing' },
   { label: '使い方', href: '#how-it-works' },
 ];

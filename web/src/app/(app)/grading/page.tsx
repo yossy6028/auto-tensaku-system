@@ -89,6 +89,11 @@ type GradingApiResponse = {
 
 const MAX_TOTAL_SIZE_BYTES = 4.2 * 1024 * 1024;
 const MAX_SINGLE_FILE_SIZE_BYTES = 4.3 * 1024 * 1024;
+// サーバ側OCRは合計1.5MB超で「最適化モード」（プロンプト1本・マス目分析/Agentic Vision/
+// フォールバックモデル無効）に縮退する（grader.ts の isLargeFile）。
+// 品質保持圧縮（0.6MB/2048px）で1.5MB未満に収まる見込みがあれば事前圧縮した方が
+// 読み取り精度もアップロード速度も上がるため、その発動閾値を設ける。
+const FULL_PIPELINE_TOTAL_BYTES = 1.4 * 1024 * 1024;
 const PDF_SIZE_ADVICE = 'PDFはページ番号を指定すると必要ページだけ抽出して軽くできます。難しい場合はオンライン圧縮ツール（iLovePDF等）で圧縮してから再度お試しください。';
 const MAX_FILE_SIZE = 50 * 1024 * 1024; // 50MB
 const MAX_FILES = 10;
@@ -1705,7 +1710,14 @@ export default function Home() {
     }
 
     const imageBudget = MAX_TOTAL_SIZE_BYTES - nonImageSize;
-    return imageSize > imageBudget;
+    if (imageSize > imageBudget) {
+      return true;
+    }
+
+    // Vercelペイロード上限(4.3MB)は下回っていても、サーバOCRの品質パイプライン
+    // 閾値(1.5MB)を超える場合は圧縮する。典型的なスマホ写真1枚(2〜4MB)が
+    // 無圧縮のまま縮退モードでOCRされるのを防ぐ（圧縮後の方が読み取り精度が高い）。
+    return nonImageSize < FULL_PIPELINE_TOTAL_BYTES && totalSize > FULL_PIPELINE_TOTAL_BYTES;
   }, []);
 
   const compressWithTimeout = useCallback(async (

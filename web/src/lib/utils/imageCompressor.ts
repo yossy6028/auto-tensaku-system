@@ -58,10 +58,12 @@ export const HIGH_QUALITY_OPTIONS: CompressionOptions = {
  * 低品質圧縮設定（ファイル数が多い場合）
  */
 export const LOW_QUALITY_OPTIONS: CompressionOptions = {
-    maxSizeMB: 0.25,
-    maxWidthOrHeight: IS_MOBILE ? 1200 : 1400,  // スマホ1200px、PC1400px（最低限OCR可能）
+    // 手書きOCRの精度確保のため下限を引き上げ（0.25MB/1200-1400pxでは細い画数の文字が潰れる）。
+    // 4枚×0.35MB=1.4MBならサーバの品質パイプライン閾値（1.5MB）にも収まる。
+    maxSizeMB: 0.35,
+    maxWidthOrHeight: IS_MOBILE ? 1440 : 1600,
     useWebWorker: false,
-    initialQuality: 0.6,
+    initialQuality: 0.65,
 };
 
 /**
@@ -422,12 +424,14 @@ export function getOptimalCompressionOptions(fileCount: number): CompressionOpti
         // 3-4枚: 低品質設定
         return LOW_QUALITY_OPTIONS;
     }
-    // 5枚以上: 超低品質（動的生成でSSR問題回避）
+    // 5枚以上: 強圧縮（動的生成でSSR問題回避）
+    // 0.15MB/1000px/q0.4 は手書き文字が判読不能になりOCR精度を大きく損なうため、
+    // 判読可能な下限として 0.2MB/1200px/q0.5 に引き上げ（10枚でも合計2MB、4.2MB予算内）。
     return {
-        maxSizeMB: 0.15,
-        maxWidthOrHeight: 1000,
+        maxSizeMB: 0.2,
+        maxWidthOrHeight: 1200,
         useWebWorker: false,
-        initialQuality: 0.4,
+        initialQuality: 0.5,
     };
 }
 

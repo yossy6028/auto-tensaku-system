@@ -17,6 +17,11 @@ const GRADING_TIMEOUT_MS = 150_000; // 150秒（採点はOCRより長めに）
 const OCR_RETRY_ATTEMPTS = 2;       // 2回に削減（3回→2回）
 const OCR_RETRY_BACKOFF_MS = 500;   // 500msに短縮（800ms→500ms）
 const OCR_RETRY_JITTER_MS = 200;    // 200msに短縮（400ms→200ms）
+// 画像単位OCRの同時実行数上限。
+// 無制限のPromise.allだと答案枚数分のGemini呼び出しが同時に飛び、
+// レート制限(429)や応答遅延→サイレントなフォールバック採用を誘発する。
+// 3並列なら直列比で約1/3の待ち時間を保ちつつバーストを抑えられる。
+const OCR_MAX_CONCURRENCY = 3;
 // シンプルなプロンプトに変更したため、思考バジェットを削減
 // 過剰な思考を防ぐため1024トークンに制限
 const OCR_THINKING_BUDGET = 1024;
@@ -96,7 +101,10 @@ function sleep(ms: number): Promise<void> {
  */
 class RateLimitManager {
     private static instance: RateLimitManager;
+    // 429検知後にフォールバックモデルへ切り替えている時間。経過後は主モデルへ復帰を試みる
+    private static readonly COOLDOWN_MS = 5 * 60 * 1000;
     private rateLimitedDate: string | null = null; // YYYY-MM-DD形式（JST）
+    private rateLimitedAt: number | null = null;   // 最後に429を検知した時刻（epoch ms）
 
     private constructor() { }
 
@@ -123,23 +131,28 @@ class RateLimitManager {
      */
     markRateLimited(): void {
         this.rateLimitedDate = this.getCurrentDateJST();
+        this.rateLimitedAt = Date.now();
         console.warn(`[RateLimitManager] ⚠️ Gemini 3 Pro がレート制限に達しました（${this.rateLimitedDate}）。フォールバックモデルに切り替えます。`);
     }
 
     /**
-     * レート制限中かどうかをチェック
-     * 日付が変わっていたら自動的にリセット
+     * レート制限中かどうかをチェック（制限解除条件を満たしたら自動リセット）
      */
     isRateLimited(): boolean {
-        if (!this.rateLimitedDate) {
+        if (!this.rateLimitedDate || this.rateLimitedAt === null) {
             return false;
         }
 
-        const currentDate = this.getCurrentDateJST();
-        if (currentDate !== this.rateLimitedDate) {
-            // 日付が変わったのでリセット
-            console.info(`[RateLimitManager] ✅ 日付が変わりました（${this.rateLimitedDate} → ${currentDate}）。Gemini 3 Pro に復帰します。`);
+        // クールダウン方式: 最後の429検知から一定時間で主モデルに復帰する。
+        // （従来は「JST日付が変わるまで」固定で、一過性の429が一日中の読み取り精度低下に化けていた）
+        // Geminiの429は分単位のRPM制限が主因のことが多く数分で解除される。
+        // 日次クォータ超過だった場合も、復帰試行が429で失敗すれば即座に再ラッチされるため
+        // 早すぎる復帰の実害はリトライ1回分の待ち時間に留まる。
+        const elapsedMs = Date.now() - this.rateLimitedAt;
+        if (elapsedMs >= RateLimitManager.COOLDOWN_MS) {
+            console.info(`[RateLimitManager] ✅ クールダウン（${Math.round(elapsedMs / 1000)}秒）が経過しました。Gemini 3 Pro に復帰します。`);
             this.rateLimitedDate = null;
+            this.rateLimitedAt = null;
             return false;
         }
 
@@ -178,6 +191,29 @@ class RateLimitManager {
 
 // グローバルインスタンス
 const rateLimitManager = RateLimitManager.getInstance();
+
+/**
+ * 同時実行数を制限した並列map（結果は入力順を保持）。
+ * Promise.all(items.map(...)) と違い、常に最大 limit 件までしか同時に走らない。
+ */
+async function mapWithConcurrency<T, R>(
+    items: T[],
+    limit: number,
+    fn: (item: T, index: number) => Promise<R>
+): Promise<R[]> {
+    const results = new Array<R>(items.length);
+    let nextIndex = 0;
+    const workerCount = Math.max(1, Math.min(limit, items.length));
+    const workers = Array.from({ length: workerCount }, async () => {
+        while (true) {
+            const i = nextIndex++;
+            if (i >= items.length) break;
+            results[i] = await fn(items[i], i);
+        }
+    });
+    await Promise.all(workers);
+    return results;
+}
 
 // 型定義
 // ファイルの役割タイプ（エクスポート）
@@ -870,9 +906,10 @@ ${JSON.stringify(partialResult, null, 2)}`;
 
         if (usePerImageOnly) {
             // 画像ごとのOCRは互いに独立なため並列実行する（従来は答案画像の枚数分だけ直列だった）。
-            // Promise.all は入力順を保持するので、結合結果のテキスト順は従来と同一。
+            // ただし無制限並列はGeminiのレート制限(429)を誘発し精度低下の温床になるため、
+            // OCR_MAX_CONCURRENCY 件までに制限する。結果は入力順を保持し結合テキスト順は従来と同一。
             // fallbackLogged は並行クロージャ間で共有されるため稀に重複ログが出うるが、ログ抑制用途なので実害はない。
-            const perImageOutcomes = await Promise.all(targetParts.map(async (part) => {
+            const perImageOutcomes = await mapWithConcurrency(targetParts, OCR_MAX_CONCURRENCY, async (part, partIndex) => {
                 let bestValid: OcrResult | null = null;
                 let bestFallback: OcrResult | null = null;
                 let bestFallbackCount = -1;
@@ -906,8 +943,16 @@ ${JSON.stringify(partialResult, null, 2)}`;
                 }
 
                 const selected = bestValid ?? bestFallback ?? { text: "", charCount: 0 };
+                // 有効なOCR結果が得られないまま「それらしいテキスト」や空文字を黙って採用すると
+                // 読み取り精度の低下として表面化するため、劣化採用を必ずログに残す
+                if (!bestValid) {
+                    console.warn(
+                        `[Grader] ⚠️ 画像${partIndex + 1}/${targetParts.length}: 有効なOCR結果なし → ` +
+                        (bestFallback ? `フォールバックテキストを採用（${bestFallback.charCount}文字）` : "空文字を採用")
+                    );
+                }
                 return { selected, layoutCandidate: bestValid?.layout ?? bestFallback?.layout };
-            }));
+            });
 
             const perImageTexts: string[] = [];
             for (const { selected, layoutCandidate } of perImageOutcomes) {

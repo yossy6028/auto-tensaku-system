@@ -29,7 +29,7 @@
     "react": "19.2.1",
     "react-dom": "19.2.1",
     "react-to-print": "^3.2.0",
-    "sharp": "^0.34.5",
+    "sharp": "^0.35.3",
     "stripe": "^20.1.0",
     "tailwind-merge": "^3.4.0"
   },
@@ -47,6 +47,7 @@
   },
   "overrides": {
     "postcss": "^8.5.15",
+    "sharp": "$sharp",
     "ws": "^8.21.0"
   }
 }

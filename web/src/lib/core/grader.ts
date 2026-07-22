@@ -1,4 +1,4 @@
-import { GoogleGenAI } from "@google/genai";
+import { GoogleGenAI, ThinkingLevel, type GenerateContentConfig } from "@google/genai";
 import { CONFIG } from "../config";
 import { SYSTEM_INSTRUCTION } from "../prompts/taskal";
 import {
@@ -22,9 +22,6 @@ const OCR_RETRY_JITTER_MS = 200;    // 200msに短縮（400ms→200ms）
 // レート制限(429)や応答遅延→サイレントなフォールバック採用を誘発する。
 // 3並列なら直列比で約1/3の待ち時間を保ちつつバーストを抑えられる。
 const OCR_MAX_CONCURRENCY = 3;
-// シンプルなプロンプトに変更したため、思考バジェットを削減
-// 過剰な思考を防ぐため1024トークンに制限
-const OCR_THINKING_BUDGET = 1024;
 // 合計タイムアウト想定: OCR(120秒×2回) + 採点(150秒) = 最大390秒
 // ただし通常は1回目で成功するため問題なし
 
@@ -328,27 +325,34 @@ const FILE_PATTERNS = {
 
 export class TaskalGrader {
     private ai: GoogleGenAI;
-    private ocrThinkingMode: "disabled" | "enabled" | "unsupported" = "disabled";
 
-    // OCR用の設定（安定性優先）
-    // Geminiの思考モードがthinkingBudgetを無視して~8000トークン使用するため、
-    // maxOutputTokensを32768に設定して出力用の余裕を確保
-    // (thinking: ~8000 + output: ~2000 = ~10000で十分な余裕あり)
-    private readonly ocrConfig = {
-        temperature: 0,
-        topP: 0.1,
-        topK: 16,
+    // OCRは単純転写のため、旧実装の思考オフに最も近い minimal を使う。
+    // 採点は判断が必要なため、Gemini 3.6 Flash の既定相当である medium を使う。
+    private readonly ocrBaseConfig: GenerateContentConfig = {
         maxOutputTokens: 32768,
         responseMimeType: "application/json" as const
     };
 
     // 採点用の設定（JSON出力を強制）
-    private readonly gradingConfig = {
-        temperature: 0,
-        topP: 0.1,
-        topK: 16,
+    private readonly gradingBaseConfig: GenerateContentConfig = {
         responseMimeType: "application/json" as const
     };
+
+    private buildThinkingConfig(
+        baseConfig: GenerateContentConfig,
+        modelName: string,
+        thinkingLevel: ThinkingLevel
+    ): GenerateContentConfig {
+        // Gemini 3系はthinkingLevel、旧世代モデルは各モデルの既定動作を使う。
+        // これにより、環境変数で旧世代モデルへ一時退避しても400エラーを起こさない。
+        if (!modelName.startsWith("gemini-3")) {
+            return baseConfig;
+        }
+        return {
+            ...baseConfig,
+            thinkingConfig: { thinkingLevel }
+        };
+    }
 
     // OCR用のsystemInstruction（安定性重視）
     // 2025-01-28: 省略防止のため強化（文字抜け問題対応）
@@ -399,7 +403,7 @@ export class TaskalGrader {
                     model: gradingModel,
                     contents: [{ role: "user", parts: [{ text: prompt }, ...imageParts] }],
                     config: {
-                        ...this.gradingConfig,
+                        ...this.buildThinkingConfig(this.gradingBaseConfig, gradingModel, ThinkingLevel.MEDIUM),
                         systemInstruction: buildGradingSystemInstruction(strictness)
                     }
                 }),
@@ -415,7 +419,11 @@ export class TaskalGrader {
                         model: CONFIG.RATE_LIMIT_FALLBACK_MODEL,
                         contents: [{ role: "user", parts: [{ text: prompt }, ...imageParts] }],
                         config: {
-                            ...this.gradingConfig,
+                            ...this.buildThinkingConfig(
+                                this.gradingBaseConfig,
+                                CONFIG.RATE_LIMIT_FALLBACK_MODEL,
+                                ThinkingLevel.MEDIUM
+                            ),
                             systemInstruction: buildGradingSystemInstruction(strictness)
                         }
                     }),
@@ -845,6 +853,7 @@ ${JSON.stringify(partialResult, null, 2)}`;
                 agenticVisionPromise = (async (): Promise<OcrHints | undefined> => {
                     try {
                         const preprocessor = new AgenticVisionPreprocessor({
+                            model: ocrModelName,
                             timeoutMs: AGENTIC_VISION_TIMEOUT_MS,
                         });
                         const analysisResult = await preprocessor.analyze(
@@ -1300,7 +1309,7 @@ JSONのみ出力してください。`;
                     model: resolvedModel,
                     contents: [{ role: "user", parts: [{ text: prompt }, ...parts] }],
                     config: {
-                        ...this.ocrConfig,
+                        ...this.buildThinkingConfig(this.ocrBaseConfig, resolvedModel, ThinkingLevel.MINIMAL),
                         systemInstruction: this.ocrSystemInstruction
                     }
                 }),
@@ -1411,36 +1420,22 @@ JSONのみ出力してください。`;
 
         for (let attemptIndex = 0; attemptIndex < OCR_RETRY_ATTEMPTS; attemptIndex += 1) {
             try {
-                const baseConfig = {
-                    ...this.ocrConfig,
+                const buildConfig = (modelName: string): GenerateContentConfig => ({
+                    ...this.buildThinkingConfig(this.ocrBaseConfig, modelName, ThinkingLevel.MINIMAL),
                     systemInstruction: this.ocrSystemInstruction
-                };
-                const buildConfig = (mode: "disabled" | "enabled" | "unsupported") => {
-                    if (mode === "unsupported") {
-                        return baseConfig;
-                    }
-                    return {
-                        ...baseConfig,
-                        thinkingConfig: {
-                            thinkingBudget: mode === "enabled" ? OCR_THINKING_BUDGET : 0
-                        }
-                    };
-                };
-                const configWithThinking = buildConfig(this.ocrThinkingMode);
+                });
                 let result;
                 try {
                     result = await withTimeout(
                         this.ai.models.generateContent({
                             model: resolvedModel,
                             contents: [{ role: "user", parts: [{ text: prompt }, ...parts] }],
-                            config: configWithThinking
+                            config: buildConfig(resolvedModel)
                         }),
                         OCR_TIMEOUT_MS,
                         "OCR処理"
                     );
                 } catch (error) {
-                    const message = error instanceof Error ? error.message : String(error);
-
                     // レート制限エラーの検出
                     if (RateLimitManager.isRateLimitError(error) && CONFIG.RATE_LIMIT_FALLBACK_MODEL) {
                         rateLimitManager.markRateLimited();
@@ -1453,7 +1448,7 @@ JSONのみ出力してください。`;
                                 this.ai.models.generateContent({
                                     model: resolvedModel,
                                     contents: [{ role: "user", parts: [{ text: prompt }, ...parts] }],
-                                    config: configWithThinking
+                                    config: buildConfig(resolvedModel)
                                 }),
                                 OCR_TIMEOUT_MS,
                                 "OCR処理（フォールバック）"
@@ -1462,35 +1457,7 @@ JSONのみ出力してください。`;
                             throw error;
                         }
                     } else {
-                        const thinkingUnsupported = /thinking/i.test(message) && /unsupported|not supported|does not support|not available/i.test(message);
-                        const thinkingRequired = /thinking/i.test(message) && /only works in thinking mode|budget 0 is invalid|requires thinking/i.test(message);
-                        if (this.ocrThinkingMode !== "enabled" && thinkingRequired) {
-                            console.warn("[Grader] thinkingモード必須のため有効化します:", message);
-                            this.ocrThinkingMode = "enabled";
-                            result = await withTimeout(
-                                this.ai.models.generateContent({
-                                    model: resolvedModel,
-                                    contents: [{ role: "user", parts: [{ text: prompt }, ...parts] }],
-                                    config: buildConfig("enabled")
-                                }),
-                                OCR_TIMEOUT_MS,
-                                "OCR処理"
-                            );
-                        } else if (this.ocrThinkingMode !== "unsupported" && thinkingUnsupported) {
-                            console.warn("[Grader] thinkingConfigが未対応のため無効化します:", message);
-                            this.ocrThinkingMode = "unsupported";
-                            result = await withTimeout(
-                                this.ai.models.generateContent({
-                                    model: resolvedModel,
-                                    contents: [{ role: "user", parts: [{ text: prompt }, ...parts] }],
-                                    config: buildConfig("unsupported")
-                                }),
-                                OCR_TIMEOUT_MS,
-                                "OCR処理"
-                            );
-                        } else {
-                            throw error;
-                        }
+                        throw error;
                     }
                 }
 

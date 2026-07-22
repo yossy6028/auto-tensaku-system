@@ -217,7 +217,7 @@ export interface AgenticVisionConfig {
  * デフォルト設定
  */
 export const DEFAULT_AGENTIC_VISION_CONFIG: AgenticVisionConfig = {
-  model: 'gemini-3.5-flash',
+  model: 'gemini-3.6-flash',
   timeoutMs: 60_000,  // 60秒
   enabled: true,
   qualityThreshold: 40,  // 40点以下で再撮影推奨

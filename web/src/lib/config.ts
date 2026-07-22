@@ -15,12 +15,12 @@ function getRequiredEnv(key: string, defaultValue?: string): string {
 
 export const CONFIG = {
     GEMINI_API_KEY: getRequiredEnv('GEMINI_API_KEY'),
-    // 2026-05-20: Gemini API の安定版 Flash モデルを既定にする（環境変数で上書き可能）
-    MODEL_NAME: process.env.MODEL_NAME || 'gemini-3.5-flash',
+    // 2026-07-22: Gemini API の安定版 Flash モデルを既定にする（環境変数で上書き可能）
+    MODEL_NAME: process.env.MODEL_NAME || 'gemini-3.6-flash',
     // OCR専用モデル（未指定ならMODEL_NAMEを使用）
     OCR_MODEL_NAME: process.env.OCR_MODEL_NAME || '',
     // OCR失敗時のフォールバックモデル（未指定なら無効）
     OCR_FALLBACK_MODEL_NAME: process.env.OCR_FALLBACK_MODEL_NAME || '',
     // レート制限時の代替モデル（メインモデルが制限に達した場合に使用）
-    RATE_LIMIT_FALLBACK_MODEL: process.env.RATE_LIMIT_FALLBACK_MODEL || 'gemini-3.5-flash',
+    RATE_LIMIT_FALLBACK_MODEL: process.env.RATE_LIMIT_FALLBACK_MODEL || 'gemini-3.6-flash',
 };

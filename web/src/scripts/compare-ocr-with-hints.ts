@@ -15,7 +15,7 @@ import {
   buildAnswerSheetHints,
 } from '../lib/core/agenticVision';
 
-const OCR_MODEL = process.env.OCR_MODEL_NAME || process.env.MODEL_NAME || 'gemini-3.5-flash';
+const OCR_MODEL = process.env.OCR_MODEL_NAME || process.env.MODEL_NAME || 'gemini-3.6-flash';
 
 // 標準OCRプロンプト（問九用）
 const STANDARD_OCR_PROMPT = `
@@ -100,8 +100,7 @@ async function main() {
           { text: STANDARD_OCR_PROMPT }
         ]
       }
-    ],
-    config: { temperature: 0, topP: 0.1 }
+    ]
   });
   const standardOcrTime = Date.now() - standardStart;
   const standardOcrText = standardResponse.text || '';
@@ -129,8 +128,7 @@ async function main() {
           { text: enhancedPrompt }
         ]
       }
-    ],
-    config: { temperature: 0, topP: 0.1 }
+    ]
   });
   const enhancedOcrTime = Date.now() - enhancedStart;
   const enhancedOcrText = enhancedResponse.text || '';

@@ -39,7 +39,11 @@ export class AgenticVisionPreprocessor {
     }
 
     this.genai = new GoogleGenAI({ apiKey });
-    this.config = { ...DEFAULT_AGENTIC_VISION_CONFIG, ...config };
+    this.config = {
+      ...DEFAULT_AGENTIC_VISION_CONFIG,
+      model: CONFIG.OCR_MODEL_NAME || CONFIG.MODEL_NAME,
+      ...config,
+    };
   }
 
   /**
@@ -158,8 +162,6 @@ export class AgenticVisionPreprocessor {
       ],
       config: {
         tools: [{ codeExecution: {} }],  // Code Execution を有効化
-        temperature: 0,
-        topP: 0.1,
       }
     });
 

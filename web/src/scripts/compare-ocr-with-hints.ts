@@ -15,7 +15,7 @@ import {
   buildAnswerSheetHints,
 } from '../lib/core/agenticVision';
 
-const OCR_MODEL = process.env.OCR_MODEL_NAME || process.env.MODEL_NAME || 'gemini-3.6-flash';
+const OCR_MODEL = process.env.OCR_MODEL_NAME || process.env.MODEL_NAME || 'gemini-3.7-flash';
 
 // 標準OCRプロンプト（問九用）
 const STANDARD_OCR_PROMPT = `

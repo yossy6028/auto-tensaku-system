@@ -327,7 +327,7 @@ export class TaskalGrader {
     private ai: GoogleGenAI;
 
     // OCRは単純転写のため、旧実装の思考オフに最も近い minimal を使う。
-    // 採点は判断が必要なため、Gemini 3.6 Flash の既定相当である medium を使う。
+    // 採点は判断が必要なため、Gemini 3.7 Flash の既定相当である medium を使う。
     private readonly ocrBaseConfig: GenerateContentConfig = {
         maxOutputTokens: 32768,
         responseMimeType: "application/json" as const

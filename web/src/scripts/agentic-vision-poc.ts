@@ -1,7 +1,7 @@
 /**
  * Agentic Vision PoC スクリプト
  *
- * Gemini 3.6 Flash + Code Execution を使用して、
+ * Gemini 3.7 Flash + Code Execution を使用して、
  * 日本語手書き答案画像の前処理が有効かを検証する。
  *
  * 使用方法:
@@ -23,8 +23,8 @@ config({ path: path.join(__dirname, '../../.env.local') });
 // 設定
 // ========================================
 
-const AGENTIC_VISION_MODEL = process.env.AGENTIC_VISION_MODEL || process.env.MODEL_NAME || 'gemini-3.6-flash';
-const STANDARD_OCR_MODEL = process.env.OCR_MODEL_NAME || process.env.MODEL_NAME || 'gemini-3.6-flash';
+const AGENTIC_VISION_MODEL = process.env.AGENTIC_VISION_MODEL || process.env.MODEL_NAME || 'gemini-3.7-flash';
+const STANDARD_OCR_MODEL = process.env.OCR_MODEL_NAME || process.env.MODEL_NAME || 'gemini-3.7-flash';
 
 // ========================================
 // 型定義

@@ -535,7 +535,7 @@ IndexedDB（ブラウザローカル）に保存:
 | MODEL_NAME | `gemini-3.8-flash` | メイン採点モデル |
 | OCR_MODEL_NAME | 空（MODEL_NAME使用） | OCR専用モデル |
 | OCR_FALLBACK_MODEL_NAME | 空（無効） | OCR失敗時フォールバック |
-| RATE_LIMIT_FALLBACK_MODEL | `gemini-3.8-flash` | レート制限時の代替モデル |
+| RATE_LIMIT_FALLBACK_MODEL | `gemini-3.7-flash` | レート制限時の代替モデル（primary と別モデル） |
 
 ---
 

@@ -114,3 +114,4 @@ grade ルートと同じ流儀に合わせ、OCR ルートにも `SupabaseRpcCli
 3. **curl + シェル内 JSON エスケープで応答が空（python json.load が Expecting value）**
    - 原因: 二重エスケープ崩れ。python urllib で本体を組み立てて再実行し解消。良性（検証手順の不備、成果物に影響なし）。
 - `grep` のノーマッチ exit 1 は存在チェックの想定内で良性。
+4. **存在チェック系の exit 1/2（良性）**: `ls` で Vercel CLI の auth.json 候補2パスを並べたうち旧パス `~/.local/share/com.vercel.cli/` が無く非0終了／`web/.env.local` が無く grep 警告（ローカルに .env.local は置かない運用＝想定どおり。本番キーは `vercel env pull` → 一時ファイル → 即 rm で取得）。処理は継続・成果物に影響なし。再発防止: 存在チェックは `[ -f ] && ... || true` で終了コードを潰す。

@@ -30,7 +30,7 @@ Vercelのプロジェクト設定で以下の環境変数を設定：
 GEMINI_API_KEY=<あなたのGemini APIキー>
 MODEL_NAME=gemini-3.8-flash
 OCR_MODEL_NAME=gemini-3.8-flash
-RATE_LIMIT_FALLBACK_MODEL=gemini-3.8-flash
+RATE_LIMIT_FALLBACK_MODEL=gemini-3.7-flash
 NEXT_PUBLIC_SUPABASE_URL=<あなたのSupabase URL>
 NEXT_PUBLIC_SUPABASE_ANON_KEY=<あなたのSupabase Anon Key>
 ```

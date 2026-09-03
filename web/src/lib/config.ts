@@ -22,5 +22,5 @@ export const CONFIG = {
     // OCR失敗時のフォールバックモデル（未指定なら無効）
     OCR_FALLBACK_MODEL_NAME: process.env.OCR_FALLBACK_MODEL_NAME || '',
     // レート制限時の代替モデル（メインモデルが制限に達した場合に使用）
-    RATE_LIMIT_FALLBACK_MODEL: process.env.RATE_LIMIT_FALLBACK_MODEL || 'gemini-3.8-flash',
+    RATE_LIMIT_FALLBACK_MODEL: process.env.RATE_LIMIT_FALLBACK_MODEL || 'gemini-3.7-flash',
 };

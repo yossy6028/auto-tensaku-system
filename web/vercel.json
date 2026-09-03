@@ -1,5 +1,5 @@
 {
-  "buildCommand": "npm run build",
+  "buildCommand": "npm run build && node src/scripts/verify-sharp-trace.mjs",
   "installCommand": "npm install",
   "framework": "nextjs"
 }

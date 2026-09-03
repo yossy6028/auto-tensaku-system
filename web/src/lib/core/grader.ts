@@ -326,8 +326,10 @@ const FILE_PATTERNS = {
 export class TaskalGrader {
     private ai: GoogleGenAI;
 
-    // OCRは単純転写のため、旧実装の思考オフに最も近い minimal を使う。
-    // 採点は判断が必要なため、Gemini 3.7 Flash の既定相当である medium を使う。
+    // OCRは単純転写のため、思考を最小にする。
+    // ※ MINIMAL は Gemini 3.7/3.8 Flash が 400 (INVALID_ARGUMENT) で拒否する（2026-09-03 実測）。
+    //    その場合 OCR が全滅して空文字で採点に進むため、最小の有効値 LOW を使う。
+    // 採点は判断が必要なため、Gemini 3.8 Flash の既定相当である medium を使う。
     private readonly ocrBaseConfig: GenerateContentConfig = {
         maxOutputTokens: 32768,
         responseMimeType: "application/json" as const
@@ -1309,7 +1311,7 @@ JSONのみ出力してください。`;
                     model: resolvedModel,
                     contents: [{ role: "user", parts: [{ text: prompt }, ...parts] }],
                     config: {
-                        ...this.buildThinkingConfig(this.ocrBaseConfig, resolvedModel, ThinkingLevel.MINIMAL),
+                        ...this.buildThinkingConfig(this.ocrBaseConfig, resolvedModel, ThinkingLevel.LOW),
                         systemInstruction: this.ocrSystemInstruction
                     }
                 }),
@@ -1421,7 +1423,7 @@ JSONのみ出力してください。`;
         for (let attemptIndex = 0; attemptIndex < OCR_RETRY_ATTEMPTS; attemptIndex += 1) {
             try {
                 const buildConfig = (modelName: string): GenerateContentConfig => ({
-                    ...this.buildThinkingConfig(this.ocrBaseConfig, modelName, ThinkingLevel.MINIMAL),
+                    ...this.buildThinkingConfig(this.ocrBaseConfig, modelName, ThinkingLevel.LOW),
                     systemInstruction: this.ocrSystemInstruction
                 });
                 let result;

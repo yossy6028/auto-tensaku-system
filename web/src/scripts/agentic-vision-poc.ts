@@ -23,8 +23,8 @@ config({ path: path.join(__dirname, '../../.env.local') });
 // 設定
 // ========================================
 
-const AGENTIC_VISION_MODEL = process.env.AGENTIC_VISION_MODEL || process.env.MODEL_NAME || 'gemini-3.7-flash';
-const STANDARD_OCR_MODEL = process.env.OCR_MODEL_NAME || process.env.MODEL_NAME || 'gemini-3.7-flash';
+const AGENTIC_VISION_MODEL = process.env.AGENTIC_VISION_MODEL || process.env.MODEL_NAME || 'gemini-3.8-flash';
+const STANDARD_OCR_MODEL = process.env.OCR_MODEL_NAME || process.env.MODEL_NAME || 'gemini-3.8-flash';
 
 // ========================================
 // 型定義

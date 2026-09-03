@@ -7,7 +7,26 @@
  * @see https://discuss.ai.google.dev/t/heic-image-supported-or-not-docs-say-yes-but-they-dont-work/55146
  */
 
-import sharp from 'sharp';
+// sharp はネイティブモジュール（libvips）を伴うため、静的 import にすると読込失敗が
+// このモジュールを import する /api/ocr・/api/grade 全体を巻き込んで 500 にする
+// （2026-09-03 に実際に発生）。HEIC 変換が必要になった時点で遅延読込し、失敗しても
+// 呼び出し側には null（変換失敗）を返して JPEG/PNG の採点は継続させる。
+type SharpConstructor = typeof import('sharp').default;
+let sharpPromise: Promise<SharpConstructor> | null = null;
+
+async function loadSharp(): Promise<SharpConstructor> {
+    if (sharpPromise) {
+        return sharpPromise;
+    }
+    const promise = import('sharp')
+        .then((mod) => mod.default)
+        .catch((error: unknown) => {
+            sharpPromise = null; // 次回の呼び出しで再試行できるようにする
+            throw error;
+        });
+    sharpPromise = promise;
+    return promise;
+}
 
 /**
  * MIMEタイプがHEIC/HEIFかどうかを判定
@@ -45,6 +64,7 @@ export async function convertHeicBufferToJpeg(
     try {
         console.log(`[ServerHEIC] Starting conversion${fileLabel}: ${sizeMB.toFixed(2)}MB, quality: ${quality}`);
 
+        const sharp = await loadSharp();
         const jpegBuffer = await sharp(buffer)
             .jpeg({ quality })
             .toBuffer();

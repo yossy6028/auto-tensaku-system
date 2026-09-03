@@ -115,3 +115,12 @@ grade ルートと同じ流儀に合わせ、OCR ルートにも `SupabaseRpcCli
    - 原因: 二重エスケープ崩れ。python urllib で本体を組み立てて再実行し解消。良性（検証手順の不備、成果物に影響なし）。
 - `grep` のノーマッチ exit 1 は存在チェックの想定内で良性。
 4. **存在チェック系の exit 1/2（良性）**: `ls` で Vercel CLI の auth.json 候補2パスを並べたうち旧パス `~/.local/share/com.vercel.cli/` が無く非0終了／`web/.env.local` が無く grep 警告（ローカルに .env.local は置かない運用＝想定どおり。本番キーは `vercel env pull` → 一時ファイル → 即 rm で取得）。処理は継続・成果物に影響なし。再発防止: 存在チェックは `[ -f ] && ... || true` で終了コードを潰す。
+
+## 2026-09-03 本番「サーバーからの応答を処理できませんでした」（/api/ocr・/api/grade が 500）
+1. **症状**: 採点画面で上記メッセージ。Vercel ランタイムログ（保持1h以内に取得）: `Could not load the "sharp" module using the linux-x64 runtime / ERR_DLOPEN_FAILED: libvips-cpp.so.8.18.3: cannot open shared object file`。認証前のダミー POST でも両ルート 500 ＝ モジュール読込時点の失敗（HEIC 有無・モデル変更と無関係）。
+2. **根本原因**: 2026-07-22 の sharp 0.34.5→0.35.3（aaa8d97）で entry が `lib/index.js`→`dist/index.cjs` に移動。@vercel/nft の sharp 特例（`sharp/lib/index.js` 判定で `@img/sharp-libvips-*` を emitAssetDirectory）が Next 16.2.6 同梱版・最新 1.11.0 とも新レイアウト未対応で、libvips 共有ライブラリが関数バンドルに入らなくなった。さらに Vercel 上（hasNextSupport）では Next がサーバートレースから `**/node_modules/sharp/**`・`**/@img/sharp-libvips*/**` を除外するため救済経路も無し。**7/22 以降ずっと採点不能だった**（流入ゼロで未検知。8/14 の 3.7 移行・本日の 3.8 移行は無関係だが、移行検証が「モデル API 直叩き」のみで本番ルートの疎通を見ていなかった）。
+3. **切り分けで効いた手順**: (a) 認証不要のダミー POST で 500/401 を見る＝モジュール読込失敗の検出、(b) `.next/server/app/api/<route>/route.js.nft.json` に `libvips-cpp` が有るかを見る＝ローカルで再現できる失敗テスト、(c) 旧デプロイ URL は 302（Vercel 認証壁）で比較不能。
+4. **対処**: `next.config.ts` の `outputFileTracingIncludes` で `/api/ocr`・`/api/grade` に `node_modules/@img/sharp-libvips-*/**/*` を明示同梱（2fa92fb）。デプロイ後、両ルートが 500→401 に回復。
+5. **再発防止**: (a) `src/scripts/verify-sharp-trace.mjs` を `vercel.json` の buildCommand に連結し、libvips がトレースに無ければビルド失敗（フェイルクローズ）。(b) `serverHeicConverter.ts` の sharp を遅延 import 化し、ネイティブ読込失敗が HEIC 変換の null に閉じるようにして JPEG/PNG の採点を巻き込まない。(c) 今後のデプロイ後は本番 `/api/ocr`・`/api/grade` へダミー POST し 401 を確認する（500 なら読込失敗）。
+- 失敗ツール呼び出し: Vercel MCP `get_deployment_build_logs` を未ロードのまま呼び `idOrUrl` 未指定エラー → ToolSearch でロードして再実行（良性）。`npm view sharp exports.[.]...` の zsh グロブ展開エラーも存在チェック相当で良性。
+- `next build` が「Another next build process is already running」で exit 1（直前の型エラー終了ビルドの後始末が残っていた一過性。pgrep で残プロセス無しを確認後の再実行で成功。良性・連続ビルド時は数秒待つ）。

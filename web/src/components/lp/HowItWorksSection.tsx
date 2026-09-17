@@ -25,7 +25,7 @@ const steps: Step[] = [
     number: '2',
     title: 'AIが分析',
     description:
-      '内容・表現・構成の3軸で、点数・減点理由・書き直し例を生成。',
+      '最新AI「Gemini 3.8 Flash」が、内容・表現・構成の3軸で、点数・減点理由・書き直し例をすばやく精細に生成。',
   },
   {
     icon: FileCheck,

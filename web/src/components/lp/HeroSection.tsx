@@ -32,7 +32,7 @@ export function HeroSection() {
   const parallaxY = useSpring(useTransform(mouseY, [-0.5, 0.5], [-10, 10]), springConfig);
 
   return (
-    <section className="relative flex min-h-screen items-center justify-center overflow-hidden">
+    <section className="relative flex min-h-screen items-center justify-center overflow-hidden pt-16 pb-24">
       {/* Background Image with Overlay */}
       <div className="absolute inset-0 -z-20">
         <motion.div
@@ -77,6 +77,18 @@ export function HeroSection() {
               />
             </motion.div>
 
+            <motion.p
+              initial={{ opacity: 0, y: 10 }}
+              animate={{ opacity: 1, y: 0 }}
+              transition={{ duration: 0.5, delay: 0.1 }}
+              className="mx-auto mb-5 inline-flex items-center gap-2 rounded-full border border-es-blue/20 bg-white/80 py-1.5 pl-1.5 pr-4 text-xs font-bold text-slate-800 shadow-sm backdrop-blur-sm sm:text-sm"
+            >
+              <span className="rounded-full bg-gradient-to-r from-es-teal to-es-blue px-2.5 py-0.5 text-[11px] font-bold tracking-wider text-white">
+                NEW
+              </span>
+              最新AI「Gemini 3.8 Flash」搭載
+            </motion.p>
+
             <motion.h1
               initial={{ opacity: 0, y: 20 }}
               animate={{ opacity: 1, y: 0 }}
@@ -96,6 +108,10 @@ export function HeroSection() {
             <p>
               中学受験・高校受験の国語記述に特化したAI採点。<br />
               点数・減点理由・書き直し例まで、数分で返します。
+            </p>
+            <p className="text-base font-bold text-es-blue sm:text-lg">
+              最新モデルの導入で、<br className="sm:hidden" />
+              採点も講評も、より速く、より精細に。
             </p>
             <p className="text-base text-slate-700">
               塾講師・家庭教師の添削時間を、指導の時間に。<br className="hidden sm:inline" />

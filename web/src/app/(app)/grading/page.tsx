@@ -37,8 +37,98 @@ import { Users } from 'lucide-react';
 import { WelcomeGuide } from '@/components/WelcomeGuide';
 import { sendGAEvent } from '@/components/GoogleAnalytics';
 import { SAMPLE_TRIAL } from '@/lib/sampleTrial';
+import { deriveEffectiveTargets, type EffectiveTargetSelection } from '@/lib/grading/effectiveTargets';
 
 type GradingStrictness = 'lenient' | 'standard' | 'strict';
+
+type TargetSummaryProps = {
+  selection: EffectiveTargetSelection;
+  mode: 'single' | 'batch';
+  disabled?: boolean;
+  locked?: boolean;
+  onRemove?: (index: number) => void;
+  onClear?: () => void;
+};
+
+function TargetSummary({ selection, mode, disabled = false, locked = false, onRemove, onClear }: TargetSummaryProps) {
+  const hasTargets = selection.targets.length > 0;
+
+  return (
+    <section
+      aria-label="今回の採点対象"
+      className="rounded-2xl border-2 border-indigo-300 bg-gradient-to-br from-white to-indigo-50 p-5 shadow-sm"
+    >
+      <div className="flex flex-wrap items-center justify-between gap-2">
+        <h3 className="text-sm font-extrabold tracking-wide text-indigo-900">今回の採点対象</h3>
+        <span className="rounded-full bg-indigo-600 px-3 py-1 text-sm font-bold text-white">
+          {selection.targets.length}問
+        </span>
+      </div>
+
+      {hasTargets ? (
+        <div className="mt-4 space-y-3">
+          {selection.targets.map((target, index) => (
+            <div key={`${target.label}-${index}`} className="flex items-center gap-3 rounded-xl border border-indigo-200 bg-white px-4 py-3">
+              <div className="min-w-0 flex-1">
+                <p className="break-words text-2xl font-black leading-tight text-slate-900 sm:text-[30px]">
+                  {target.label}
+                </p>
+                <p className="mt-1 text-sm font-bold text-indigo-700">
+                  {target.points === null ? '配点未設定' : `配点 ${Math.floor(target.points)}点`}
+                </p>
+              </div>
+              {selection.source === 'selected' && onRemove && (
+                <button
+                  type="button"
+                  onClick={() => onRemove(index)}
+                  disabled={disabled}
+                  aria-label={`${target.label}を採点対象から削除`}
+                  className="rounded-lg p-2 text-slate-400 transition-colors hover:bg-red-50 hover:text-red-600 disabled:opacity-50"
+                >
+                  <Trash2 className="h-5 w-5" aria-hidden="true" />
+                </button>
+              )}
+            </div>
+          ))}
+          <div className="flex flex-wrap items-center justify-between gap-2 text-xs">
+            <p className="font-medium text-slate-600">
+              {selection.source === 'draft'
+                ? 'この入力内容を採点します。追加操作は不要です。'
+                : '追加済みの問題だけを採点します。'}
+            </p>
+            {selection.source === 'selected' && onClear && (
+              <button
+                type="button"
+                onClick={onClear}
+                disabled={disabled}
+                className="font-bold text-slate-500 underline hover:text-red-600 disabled:opacity-50"
+              >
+                {mode === 'single' ? '追加済みの問題を解除' : '採点対象をすべてクリア'}
+              </button>
+            )}
+          </div>
+        </div>
+      ) : (
+        <p className="mt-4 rounded-xl bg-white px-4 py-5 text-center text-base font-bold text-amber-700">
+          {mode === 'batch'
+            ? '採点対象はまだありません。「採点対象に追加」を押してください。'
+            : '採点対象はまだありません。問題番号を入力してください。'}
+        </p>
+      )}
+
+      {selection.draftIsPending && (
+        <p className="mt-3 rounded-lg bg-amber-50 px-3 py-2 text-sm font-bold text-amber-800">
+          入力欄を変えても、追加済みの問題・配点は変わりません。配点を直す場合は、対象を削除して追加し直してください。
+        </p>
+      )}
+      {locked && (
+        <p className="mt-3 rounded-lg bg-blue-50 px-3 py-2 text-sm font-bold text-blue-800">
+          読み取り開始時に確定した対象です。入力欄を変更しても、今回の送信対象は変わりません。
+        </p>
+      )}
+    </section>
+  );
+}
 
 type DeductionDetail = {
   reason?: string;
@@ -191,6 +281,7 @@ export default function Home() {
   const [ocrFlowStep, setOcrFlowStep] = useState<OcrFlowStep>('idle');
   const [ocrResults, setOcrResults] = useState<Record<string, { text: string; charCount: number }>>({});
   const [confirmedTexts, setConfirmedTexts] = useState<Record<string, string>>({});
+  const [activeSingleTargets, setActiveSingleTargets] = useState<EffectiveTargetSelection | null>(null);
   const [currentOcrLabel, setCurrentOcrLabel] = useState<string>('');
   const requestLockRef = useRef(false);
   const isMountedRef = useRef(true);
@@ -209,6 +300,7 @@ export default function Home() {
     setResults(null);
     setOcrResults({});
     setConfirmedTexts({});
+    setActiveSingleTargets(null);
     setOcrFlowStep('idle');
   }, []);
 
@@ -315,6 +407,7 @@ export default function Home() {
   // 一括OCR確認フロー用のステート
   type BatchOcrStep = 'idle' | 'ocr-loading' | 'confirm';
   const [batchOcrStep, setBatchOcrStep] = useState<BatchOcrStep>('idle');
+  const [activeBatchTargets, setActiveBatchTargets] = useState<EffectiveTargetSelection | null>(null);
   // studentId -> label -> { text, charCount, layout }
   type LayoutInfo = { total_lines: number; paragraph_count: number; indented_columns: number[] };
   const [batchOcrResults, setBatchOcrResults] = useState<Record<string, Record<string, { text: string; charCount: number; layout?: LayoutInfo }>>>({});
@@ -468,10 +561,12 @@ export default function Home() {
     if (!acquireRequestLock()) return;
     try {
     if (!validateBatchStudents()) return;
-    if (selectedProblems.length === 0) {
+    if (batchEffectiveSelection.targets.length === 0) {
       setError('採点する問題を選択してください');
       return;
     }
+    const batchTargetLabels = batchEffectiveSelection.targets.map((target) => target.label);
+    setActiveBatchTargets(batchEffectiveSelection);
 
     // 重複ファイル警告チェック
     if (duplicateFileWarnings.length > 0) {
@@ -542,7 +637,7 @@ export default function Home() {
       newConfirmedTexts[student.id] = {};
 
       // 各問題ラベルに対してOCR
-      for (const label of selectedProblems) {
+      for (const label of batchTargetLabels) {
         try {
           const formData = new FormData();
           formData.append('targetLabel', label);
@@ -616,10 +711,12 @@ export default function Home() {
   // 一括OCR確認フロー: 確認済みテキストで採点を実行
   const executeBatchGradingWithConfirmed = async () => {
     if (!validateBatchStudents()) return;
-    if (selectedProblems.length === 0) {
+    const targetSelection = activeBatchTargets ?? batchEffectiveSelection;
+    if (targetSelection.targets.length === 0) {
       setError('採点する問題を選択してください');
       return;
     }
+    const batchTargetLabels = targetSelection.targets.map((target) => target.label);
 
     setBatchOcrStep('idle');
     setError(null);
@@ -655,7 +752,7 @@ export default function Home() {
       const layoutsForStudent = batchLayouts[student.id] || {};
 
       // gradeOneStudentWithConfirmedText を呼び出す
-      const result = await gradeOneStudentWithConfirmed(student, selectedProblems, gradingStrictness, confirmedForStudent, layoutsForStudent);
+      const result = await gradeOneStudentWithConfirmed(student, batchTargetLabels, gradingStrictness, confirmedForStudent, layoutsForStudent);
 
       if (result.success && result.results) {
         successCount++;
@@ -760,6 +857,7 @@ export default function Home() {
     setBatchOcrStep('idle');
     setBatchOcrResults({});
     setBatchConfirmedTexts({});
+    setActiveBatchTargets(null);
     setCurrentBatchOcrIndex(0);
   };
 
@@ -1062,7 +1160,11 @@ export default function Home() {
         prev.map((s) => (s.id === student.id ? { ...s, status: 'processing' } : s))
       );
 
-      const result = await gradeOneStudent(student, selectedProblems, gradingStrictness);
+      const result = await gradeOneStudent(
+        student,
+        batchEffectiveSelection.targets.map((target) => target.label),
+        gradingStrictness
+      );
 
       if (result.success && result.results) {
         successCount++;
@@ -2163,6 +2265,31 @@ export default function Home() {
     return String(Math.floor(value));
   };
 
+  const draftProblemLabel = generateProblemLabel();
+  const draftProblemPoints = parsePointsValue(currentPoints);
+  const singleEffectiveSelection = deriveEffectiveTargets({
+    mode: 'single',
+    selectedLabels: selectedProblems,
+    pointsByLabel: problemPoints,
+    draftLabel: draftProblemLabel,
+    draftPoints: draftProblemPoints,
+  });
+  const batchEffectiveSelection = deriveEffectiveTargets({
+    mode: 'batch',
+    selectedLabels: selectedProblems,
+    pointsByLabel: problemPoints,
+    draftLabel: draftProblemLabel,
+    draftPoints: draftProblemPoints,
+  });
+  const displayedBatchSelection = (batchOcrStep !== 'idle' || batchState.isProcessing) && activeBatchTargets
+    ? activeBatchTargets
+    : batchEffectiveSelection;
+  const isSingleTargetSnapshotActive = (ocrFlowStep !== 'idle' || Object.keys(confirmedTexts).length > 0)
+    && activeSingleTargets !== null;
+  const displayedSingleSelection = isSingleTargetSnapshotActive && activeSingleTargets
+    ? activeSingleTargets
+    : singleEffectiveSelection;
+
   // 保存済み問題を読み込み
   const loadSavedProblem = useCallback(async (problemId: string) => {
     try {
@@ -2366,20 +2493,19 @@ export default function Home() {
     // バリデーション通過後、即座にボタンを無効化して二重タップを防止
     setIsLoading(true);
 
-    let targetLabels = selectedProblems;
+    const targetSelection = singleEffectiveSelection;
+    const targetLabels = targetSelection.targets.map((target) => target.label);
     if (targetLabels.length === 0) {
-      const currentLabel = generateProblemLabel();
-      if (!currentLabel) {
-        setError('採点対象の問題を選択または入力してください。');
-        sendGAEvent('grading_ocr_blocked', { reason: 'no_problem_label' });
-        return;
-      }
-      targetLabels = [currentLabel];
+      setError('採点対象の問題を選択または入力してください。');
+      sendGAEvent('grading_ocr_blocked', { reason: 'no_problem_label' });
+      setIsLoading(false);
+      return;
     }
-    if (targetLabels.length === 1 && selectedProblems.length === 0) {
-      const parsedPoints = parsePointsValue(currentPoints);
-      if (parsedPoints !== null) {
-        setProblemPoints((prev) => ({ ...prev, [targetLabels[0]]: parsedPoints }));
+    setActiveSingleTargets(targetSelection);
+    if (targetSelection.source === 'draft') {
+      const target = targetSelection.targets[0];
+      if (target.points !== null) {
+        setProblemPoints((prev) => ({ ...prev, [target.label]: target.points as number }));
       }
     }
 
@@ -2774,6 +2900,7 @@ export default function Home() {
     setOcrFlowStep('idle');
     setOcrResults({});
     setConfirmedTexts({});
+    setActiveSingleTargets(null);
   };
 
   const handleSampleTrial = async () => {
@@ -2931,16 +3058,13 @@ export default function Home() {
       return;
     }
 
-    // If no problems are explicitly added to the list, use the currently selected one
-    let targetLabels = selectedProblems;
+    const targetSelection = singleEffectiveSelection;
+    const targetLabels = targetSelection.targets.map((target) => target.label);
     if (targetLabels.length === 0) {
-      const currentLabel = generateProblemLabel();
-      if (!currentLabel) {
-        setError('採点対象の問題を選択または入力してください。');
-        return;
-      }
-      targetLabels = [currentLabel];
+      setError('採点対象の問題を選択または入力してください。');
+      return;
     }
+    setActiveSingleTargets(targetSelection);
 
     // 画像ファイルを圧縮（10枚対応）
     const hasImages = uploadedFiles.some(f => isImageFile(f));
@@ -3261,6 +3385,7 @@ export default function Home() {
     setOcrFlowStep('idle');
     setOcrResults({});
     setConfirmedTexts({});
+    setActiveSingleTargets(null);
     setCurrentOcrLabel('');
     setOcrEditModal(null);
     setRegradeByLabel({});
@@ -3301,6 +3426,7 @@ export default function Home() {
     setOcrFlowStep('idle');
     setOcrResults({});
     setConfirmedTexts({});
+    setActiveSingleTargets(null);
     setCurrentOcrLabel('');
     setOcrEditModal(null);
     setRegradeByLabel({});
@@ -3352,7 +3478,22 @@ export default function Home() {
           <div className="absolute bottom-[-10%] left-[20%] w-[35%] h-[35%] rounded-full bg-blue-400/20 blur-[100px] animate-pulse-slow delay-2000"></div>
         </div>
 
-        <div className="max-w-5xl mx-auto py-12 px-4 sm:px-6 lg:px-8 relative z-10 min-h-screen flex flex-col justify-center">
+        <div className="max-w-5xl mx-auto py-4 sm:py-8 px-4 sm:px-6 lg:px-8 relative z-10 min-h-screen flex flex-col justify-center">
+          <div className="mb-6 flex flex-col items-center rounded-2xl border border-indigo-200 bg-white/90 px-5 py-4 text-center shadow-lg backdrop-blur-xl sm:flex-row sm:justify-between sm:text-left">
+            <div>
+              <p className="text-sm font-bold text-indigo-700">すでにご利用中の方</p>
+              <p className="mt-1 text-sm text-slate-600">ログインすると、すぐに採点画面を利用できます。</p>
+            </div>
+            <button
+              type="button"
+              onClick={() => openAuthModal('signin')}
+              className="mt-3 inline-flex w-full items-center justify-center rounded-xl bg-indigo-600 px-8 py-3 font-bold text-white shadow-md transition-colors hover:bg-indigo-700 sm:mt-0 sm:w-auto"
+            >
+              <LogIn className="mr-2 h-5 w-5" />
+              ログイン
+            </button>
+          </div>
+
           {/* Header Section */}
           <div className="text-center mb-12 animate-fade-in relative">
             {/* Floating Icons */}
@@ -3441,27 +3582,27 @@ export default function Home() {
           <div className="max-w-md mx-auto w-full">
             <div className="bg-white/80 backdrop-blur-2xl shadow-[0_8px_30px_rgb(0,0,0,0.08)] rounded-3xl overflow-hidden border border-white/60 ring-1 ring-white/50">
               <div className="bg-gradient-to-r from-es-blue to-es-teal p-6 text-white text-center">
-                <h2 className="text-2xl font-bold">無料5回は、登録するとすぐ使えます</h2>
+                <h2 className="text-2xl font-bold">Taskal AIを利用する</h2>
                 <p className="text-es-teal-light mt-2 text-sm">
-                  メールアドレスだけで登録1分／クレジットカード不要
+                  アカウントをお持ちの方はログインしてください
                 </p>
               </div>
 
               <div className="p-8 space-y-4">
                 <button
-                  onClick={() => openAuthModal('signup')}
-                  className="w-full py-4 px-6 bg-gradient-to-r from-es-blue to-es-teal text-white font-bold rounded-xl shadow-lg hover:shadow-xl hover:-translate-y-0.5 transition-all flex items-center justify-center"
-                >
-                  <UserPlus className="w-5 h-5 mr-2" />
-                  無料で登録して5回試す
-                </button>
-
-                <button
                   onClick={() => openAuthModal('signin')}
-                  className="w-full py-4 px-6 bg-white text-es-teal font-bold rounded-xl border-2 border-es-teal/30 hover:border-es-teal hover:bg-es-teal-light transition-all flex items-center justify-center"
+                  className="w-full py-4 px-6 bg-gradient-to-r from-es-blue to-es-teal text-white font-bold rounded-xl shadow-lg hover:shadow-xl hover:-translate-y-0.5 transition-all flex items-center justify-center"
                 >
                   <LogIn className="w-5 h-5 mr-2" />
                   ログイン
+                </button>
+
+                <button
+                  onClick={() => openAuthModal('signup')}
+                  className="w-full py-4 px-6 bg-white text-es-teal font-bold rounded-xl border-2 border-es-teal/30 hover:border-es-teal hover:bg-es-teal-light transition-all flex items-center justify-center"
+                >
+                  <UserPlus className="w-5 h-5 mr-2" />
+                  無料で登録して5回試す
                 </button>
 
                 <div className="pt-4 border-t border-slate-200 space-y-3">
@@ -3828,6 +3969,17 @@ export default function Home() {
                     </div>
                   )}
 
+                  <div className="max-w-2xl mx-auto">
+                    <TargetSummary
+                      selection={displayedSingleSelection}
+                      mode="single"
+                      disabled={isLoading || isSingleTargetSnapshotActive}
+                      locked={isSingleTargetSnapshotActive}
+                      onRemove={removeProblem}
+                      onClear={clearAllProblems}
+                    />
+                  </div>
+
                   {/* Problem Selector */}
                   {!isFirstTrialUser && (
                   <div className="max-w-2xl mx-auto">
@@ -4123,59 +4275,13 @@ export default function Home() {
                         <button
                           type="button"
                           onClick={addProblem}
-                          className="bg-indigo-100 hover:bg-indigo-200 text-indigo-700 font-bold py-3 px-4 rounded-xl transition-colors flex items-center"
+                          disabled={isSingleTargetSnapshotActive}
+                          className="bg-indigo-600 hover:bg-indigo-700 disabled:bg-slate-300 text-white font-bold py-3 px-5 rounded-xl transition-colors flex items-center gap-2 shadow-md"
                           title="採点対象に追加"
                         >
                           <Plus className="w-5 h-5" />
+                          <span className="text-sm">採点対象に追加</span>
                         </button>
-                      )}
-                    </div>
-
-                    {/* 選択された採点対象 */}
-                    <div className="mt-4">
-                      {selectedProblems.length > 0 ? (
-                        <>
-                          <div className="flex items-center justify-center gap-3 mb-2">
-                            <p className="text-sm text-slate-600 font-medium">
-                              📋 選択された採点対象: <span className="text-indigo-600 font-bold">{selectedProblems.length}問</span>
-                            </p>
-                            <button
-                              type="button"
-                              onClick={clearAllProblems}
-                              className="text-xs text-slate-500 hover:text-red-500 underline transition-colors"
-                            >
-                              全てクリア
-                            </button>
-                          </div>
-                          <div className="flex flex-wrap gap-2 justify-center">
-                            {selectedProblems.map((label, index) => (
-                              <div key={index} className="bg-indigo-50 text-indigo-700 px-4 py-2 rounded-full font-bold text-sm flex items-center shadow-sm border border-indigo-100">
-                                {label}
-                                {Number.isFinite(problemPoints[label]) ? (
-                                  <span className="ml-2 text-xs text-indigo-500 font-semibold">配点{formatPointsValue(problemPoints[label])}点</span>
-                                ) : null}
-                                <button
-                                  type="button"
-                                  onClick={() => removeProblem(index)}
-                                  className="ml-2 text-indigo-400 hover:text-red-500 transition-colors"
-                                >
-                                  <Trash2 className="w-4 h-4" />
-                                </button>
-                              </div>
-                            ))}
-                          </div>
-                        </>
-                      ) : (
-                        <div className="bg-slate-100 border border-slate-200 rounded-xl p-4 text-center">
-                          <p className="text-sm text-slate-600 font-medium">
-                            問題が選択されていません
-                          </p>
-                          {problemFormat !== 'free' && (
-                            <p className="text-xs text-slate-400 mt-1">
-                              💡 一括追加モードで複数問題をまとめて追加できます
-                            </p>
-                          )}
-                        </div>
                       )}
                     </div>
 
@@ -4917,6 +5023,17 @@ export default function Home() {
                     採点する問題を選択（最大2問）
                   </p>
 
+                  <div className="mb-5">
+                    <TargetSummary
+                      selection={displayedBatchSelection}
+                      mode="batch"
+                      disabled={batchState.isProcessing || batchOcrStep !== 'idle'}
+                      locked={(batchOcrStep !== 'idle' || batchState.isProcessing) && activeBatchTargets !== null}
+                      onRemove={removeProblem}
+                      onClear={clearAllProblems}
+                    />
+                  </div>
+
                   {/* 問題形式の選択 */}
                   <div className="flex flex-wrap gap-2 justify-center mb-4">
                     <button
@@ -5050,44 +5167,13 @@ export default function Home() {
                     <button
                       type="button"
                       onClick={addProblem}
-                      disabled={batchState.isProcessing || selectedProblems.length >= 2}
-                      className="bg-indigo-500 hover:bg-indigo-600 disabled:bg-slate-300 text-white font-bold py-2 px-3 rounded-lg transition-colors flex items-center"
+                      disabled={batchState.isProcessing || batchOcrStep !== 'idle' || selectedProblems.length >= 2}
+                      className="bg-indigo-600 hover:bg-indigo-700 disabled:bg-slate-300 text-white font-bold py-2 px-4 rounded-lg transition-colors flex items-center gap-2"
                     >
                       <Plus className="w-4 h-4" />
+                      採点対象に追加
                     </button>
                   </div>
-
-                  {/* 選択された問題 */}
-                  {selectedProblems.length > 0 ? (
-                    <div className="flex flex-wrap gap-2 justify-center">
-                      {selectedProblems.map((label, index) => (
-                        <div key={index} className="bg-white text-indigo-700 px-3 py-1.5 rounded-full font-bold text-sm flex items-center border border-indigo-200">
-                          {label}
-                          {Number.isFinite(problemPoints[label]) && (
-                            <span className="ml-1 text-xs text-indigo-500">({problemPoints[label]}点)</span>
-                          )}
-                          <button
-                            type="button"
-                            onClick={() => removeProblem(index)}
-                            disabled={batchState.isProcessing}
-                            className="ml-1 text-indigo-400 hover:text-red-500"
-                          >
-                            <X className="w-3 h-3" />
-                          </button>
-                        </div>
-                      ))}
-                      <button
-                        type="button"
-                        onClick={clearAllProblems}
-                        disabled={batchState.isProcessing}
-                        className="text-xs text-slate-500 hover:text-red-500 underline"
-                      >
-                        クリア
-                      </button>
-                    </div>
-                  ) : (
-                    <p className="text-xs text-orange-500 text-center">※ 採点する問題を追加してください</p>
-                  )}
                 </div>
 
                 {/* Shared Files Section (Problem & Model Answer) */}
@@ -5387,7 +5473,7 @@ export default function Home() {
                               {student.name || `生徒${studentIdx + 1}`}
                             </span>
                           </div>
-                          {selectedProblems.map((label) => {
+                          {(activeBatchTargets ?? batchEffectiveSelection).targets.map(({ label }) => {
                             const ocrResult = batchOcrResults[student.id]?.[label];
                             const confirmedText = batchConfirmedTexts[student.id]?.[label] || '';
                             return (
@@ -5449,10 +5535,10 @@ export default function Home() {
                   <button
                     type="button"
                     onClick={startBatchOcr}
-                    disabled={isLoading || batchState.isProcessing || batchStudents.length === 0 || selectedProblems.length === 0 || sharedFiles.length === 0}
+                    disabled={isLoading || batchState.isProcessing || batchStudents.length === 0 || batchEffectiveSelection.targets.length === 0 || sharedFiles.length === 0}
                     className={clsx(
                       'w-full py-4 rounded-xl font-bold text-lg transition-all flex items-center justify-center gap-2',
-                      isLoading || batchState.isProcessing || selectedProblems.length === 0 || sharedFiles.length === 0
+                      isLoading || batchState.isProcessing || batchEffectiveSelection.targets.length === 0 || sharedFiles.length === 0
                         ? 'bg-slate-300 text-slate-500 cursor-not-allowed'
                         : 'bg-gradient-to-r from-indigo-600 to-violet-600 text-white hover:from-indigo-700 hover:to-violet-700 shadow-lg hover:shadow-xl'
                     )}

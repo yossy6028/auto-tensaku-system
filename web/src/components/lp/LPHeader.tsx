@@ -6,6 +6,7 @@ import Link from 'next/link';
 import { motion, AnimatePresence, useScroll, useMotionValueEvent } from 'framer-motion';
 import { Menu, X } from 'lucide-react';
 import { useReducedMotion } from '@/hooks/useMediaQuery';
+import { LandingPrimaryCta } from './LandingPrimaryCta';
 
 const navLinks = [
   { label: '特長', href: '#comparison' },
@@ -49,21 +50,27 @@ export function LPHeader() {
             </a>
           ))}
           <Link
-            href="/grading"
-            className="rounded-full bg-indigo-600 px-5 py-2.5 text-sm font-bold text-white shadow-lg shadow-indigo-600/20 transition-all hover:bg-indigo-700 hover:scale-105"
+            href="/login"
+            className={`text-sm font-medium transition-colors hover:text-indigo-600 ${scrolled ? 'text-slate-600' : 'text-slate-700'}`}
           >
-            無料で5回試す
+            ログイン
           </Link>
+          <LandingPrimaryCta className="rounded-full bg-indigo-600 px-5 py-2.5 text-sm font-bold text-white shadow-lg shadow-indigo-600/20 transition-all hover:bg-indigo-700 hover:scale-105" />
         </div>
 
         {/* Mobile hamburger */}
-        <button
-          className="text-slate-700 md:hidden"
-          onClick={() => setMobileOpen((prev) => !prev)}
-          aria-label={mobileOpen ? 'メニューを閉じる' : 'メニューを開く'}
-        >
-          {mobileOpen ? <X size={24} /> : <Menu size={24} />}
-        </button>
+        <div className="flex items-center gap-3 md:hidden">
+          <Link href="/login" className="text-sm font-semibold text-indigo-700">
+            ログイン
+          </Link>
+          <button
+            className="text-slate-700"
+            onClick={() => setMobileOpen((prev) => !prev)}
+            aria-label={mobileOpen ? 'メニューを閉じる' : 'メニューを開く'}
+          >
+            {mobileOpen ? <X size={24} /> : <Menu size={24} />}
+          </button>
+        </div>
       </nav>
 
       {/* Mobile menu */}
@@ -87,13 +94,7 @@ export function LPHeader() {
                   {link.label}
                 </a>
               ))}
-              <Link
-                href="/grading"
-                className="rounded-full bg-indigo-600 px-5 py-3 text-center text-sm font-bold text-white shadow-md"
-                onClick={() => setMobileOpen(false)}
-              >
-                無料で5回試す
-              </Link>
+              <LandingPrimaryCta className="rounded-full bg-indigo-600 px-5 py-3 text-center text-sm font-bold text-white shadow-md" />
             </div>
           </motion.div>
         )}

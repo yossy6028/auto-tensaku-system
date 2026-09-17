@@ -2,11 +2,11 @@
 
 import { useEffect, useRef, useState } from 'react';
 import Image from 'next/image';
-import Link from 'next/link';
 import { motion, AnimatePresence } from 'framer-motion';
-import { Sparkles, ScanLine, CheckCircle, AlertCircle, ArrowRight, Play } from 'lucide-react';
+import { Sparkles, ScanLine, CheckCircle, AlertCircle, Play } from 'lucide-react';
 import { useReducedMotion } from '@/hooks/useMediaQuery';
 import { SAMPLE_DEMO_RESULT } from '@/lib/sampleDemoResult';
+import { LandingPrimaryCta } from './LandingPrimaryCta';
 
 type Stage = 'idle' | 'grading' | 'result';
 
@@ -253,13 +253,10 @@ function DemoResult({
       </motion.div>
 
       <motion.div className="border-t border-slate-100 pt-4" {...reveal(0.4)}>
-        <Link
-          href="/grading"
+        <LandingPrimaryCta
+          trialLabel="自分の答案で試す"
           className="flex w-full items-center justify-center gap-2 rounded-full bg-es-teal px-6 py-3.5 text-base font-bold text-white shadow-lg shadow-es-teal/25 transition-all hover:brightness-110 hover:-translate-y-0.5"
-        >
-          自分の答案で試す
-          <ArrowRight className="h-5 w-5" />
-        </Link>
+        />
         <p className="mt-2 text-center text-xs text-slate-500">
           無料5回・メールアドレスだけで登録1分／クレジットカード不要
         </p>

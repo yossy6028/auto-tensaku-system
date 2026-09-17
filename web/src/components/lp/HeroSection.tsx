@@ -2,11 +2,11 @@
 
 import { useEffect } from 'react';
 import Image from 'next/image';
-import Link from 'next/link';
 import { motion, useMotionValue, useSpring, useTransform } from 'framer-motion';
 import { ChevronDown, UserRound } from 'lucide-react';
 import { useIsMobile } from '@/hooks/useMediaQuery';
 import { useMousePosition } from '@/hooks/useMousePosition';
+import { LandingPrimaryCta } from './LandingPrimaryCta';
 
 export function HeroSection() {
   const isMobile = useIsMobile();
@@ -143,12 +143,7 @@ export function HeroSection() {
             className="flex flex-col items-center gap-3"
           >
             <div className="flex flex-col gap-4 sm:flex-row">
-              <Link
-                href="/grading"
-                className="inline-flex items-center justify-center rounded-full bg-es-teal px-8 py-4 text-lg font-bold text-white shadow-lg shadow-es-teal/25 transition-all hover:brightness-110 hover:shadow-xl hover:-translate-y-0.5"
-              >
-                無料で5回試す
-              </Link>
+              <LandingPrimaryCta className="inline-flex items-center justify-center rounded-full bg-es-teal px-8 py-4 text-lg font-bold text-white shadow-lg shadow-es-teal/25 transition-all hover:brightness-110 hover:shadow-xl hover:-translate-y-0.5" />
               <a
                 href="#demo"
                 className="inline-flex items-center justify-center rounded-full border-2 border-es-teal/40 bg-white/70 px-8 py-4 text-lg font-bold text-es-teal backdrop-blur-sm transition-all hover:border-es-teal hover:bg-white hover:-translate-y-0.5"

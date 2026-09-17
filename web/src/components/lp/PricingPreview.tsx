@@ -3,6 +3,7 @@
 import { motion } from 'framer-motion';
 import Link from 'next/link';
 import { useReducedMotion, useIsMobile } from '@/hooks/useMediaQuery';
+import { LandingPrimaryCta } from './LandingPrimaryCta';
 
 type Plan = {
   name: string;
@@ -160,15 +161,12 @@ export function PricingPreview() {
                   ))}
                 </ul>
 
-                <Link
-                  href="/grading"
+                <LandingPrimaryCta
                   className={`mt-8 block rounded-lg px-6 py-3 text-center text-sm font-semibold transition-all ${plan.recommended
                       ? 'bg-gradient-to-r from-es-blue to-es-teal text-white shadow-md hover:shadow-lg hover:brightness-110'
                       : 'border border-white/20 text-white hover:bg-white/10'
                     }`}
-                >
-                  無料で5回試す
-                </Link>
+                />
               </div>
             </motion.div>
           ))}

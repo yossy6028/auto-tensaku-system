@@ -2,8 +2,8 @@
 
 import { useMemo } from 'react';
 import { motion } from 'framer-motion';
-import Link from 'next/link';
 import { useReducedMotion, useIsMobile } from '@/hooks/useMediaQuery';
+import { LandingPrimaryCta } from './LandingPrimaryCta';
 
 type Particle = {
   id: number;
@@ -106,12 +106,7 @@ export function CTASection() {
           viewport={{ once: true, amount: 0.5 }}
           transition={{ duration: 0.6, delay: 0.3 }}
         >
-          <Link
-            href="/grading"
-            className="inline-flex items-center rounded-full bg-es-teal px-8 py-4 text-lg font-semibold text-white shadow-lg shadow-[#2DB3A0]/25 transition-transform hover:scale-105"
-          >
-            無料で5回試す
-          </Link>
+          <LandingPrimaryCta className="inline-flex items-center rounded-full bg-es-teal px-8 py-4 text-lg font-semibold text-white shadow-lg shadow-[#2DB3A0]/25 transition-transform hover:scale-105" />
         </motion.div>
       </div>
     </section>

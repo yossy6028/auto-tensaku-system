@@ -11,8 +11,7 @@ import { AuthModal } from '@/components/AuthModal';
 import { UsageStatus } from '@/components/UsageStatus';
 import { DeviceLimitModal } from '@/components/DeviceLimitModal';
 import Link from 'next/link';
-import { compressMultipleImages, formatFileSize, isImageFile } from '@/lib/utils/imageCompressor';
-import { extractPdfPages } from '@/lib/utils/pdfPageExtractor';
+import { formatFileSize, isImageFile } from '@/lib/utils/imageCompressor';
 import { StudentCard } from '@/components/StudentCard';
 import { BatchProgress } from '@/components/BatchProgress';
 import { BatchResults } from '@/components/BatchResults';
@@ -38,97 +37,20 @@ import { WelcomeGuide } from '@/components/WelcomeGuide';
 import { sendGAEvent } from '@/components/GoogleAnalytics';
 import { SAMPLE_TRIAL } from '@/lib/sampleTrial';
 import { deriveEffectiveTargets, type EffectiveTargetSelection } from '@/lib/grading/effectiveTargets';
+import { TargetSummary } from '@/components/grading/TargetSummary';
+import {
+  prepareFilesForUpload as prepareFilesForUploadInternal,
+  type FileRole,
+  type PreparedFilesCache,
+} from '@/lib/grading/uploadPreparation';
+import {
+  CLIENT_MAX_FILE_SIZE_BYTES,
+  CLIENT_MAX_SINGLE_FILE_SIZE_BYTES,
+  CLIENT_MAX_TOTAL_SIZE_BYTES,
+  MAX_FILES_COUNT,
+} from '@/lib/security/uploadLimits';
 
 type GradingStrictness = 'lenient' | 'standard' | 'strict';
-
-type TargetSummaryProps = {
-  selection: EffectiveTargetSelection;
-  mode: 'single' | 'batch';
-  disabled?: boolean;
-  locked?: boolean;
-  onRemove?: (index: number) => void;
-  onClear?: () => void;
-};
-
-function TargetSummary({ selection, mode, disabled = false, locked = false, onRemove, onClear }: TargetSummaryProps) {
-  const hasTargets = selection.targets.length > 0;
-
-  return (
-    <section
-      aria-label="今回の採点対象"
-      className="rounded-2xl border-2 border-indigo-300 bg-gradient-to-br from-white to-indigo-50 p-5 shadow-sm"
-    >
-      <div className="flex flex-wrap items-center justify-between gap-2">
-        <h3 className="text-sm font-extrabold tracking-wide text-indigo-900">今回の採点対象</h3>
-        <span className="rounded-full bg-indigo-600 px-3 py-1 text-sm font-bold text-white">
-          {selection.targets.length}問
-        </span>
-      </div>
-
-      {hasTargets ? (
-        <div className="mt-4 space-y-3">
-          {selection.targets.map((target, index) => (
-            <div key={`${target.label}-${index}`} className="flex items-center gap-3 rounded-xl border border-indigo-200 bg-white px-4 py-3">
-              <div className="min-w-0 flex-1">
-                <p className="break-words text-2xl font-black leading-tight text-slate-900 sm:text-[30px]">
-                  {target.label}
-                </p>
-                <p className="mt-1 text-sm font-bold text-indigo-700">
-                  {target.points === null ? '配点未設定' : `配点 ${Math.floor(target.points)}点`}
-                </p>
-              </div>
-              {selection.source === 'selected' && onRemove && (
-                <button
-                  type="button"
-                  onClick={() => onRemove(index)}
-                  disabled={disabled}
-                  aria-label={`${target.label}を採点対象から削除`}
-                  className="rounded-lg p-2 text-slate-400 transition-colors hover:bg-red-50 hover:text-red-600 disabled:opacity-50"
-                >
-                  <Trash2 className="h-5 w-5" aria-hidden="true" />
-                </button>
-              )}
-            </div>
-          ))}
-          <div className="flex flex-wrap items-center justify-between gap-2 text-xs">
-            <p className="font-medium text-slate-600">
-              {selection.source === 'draft'
-                ? 'この入力内容を採点します。追加操作は不要です。'
-                : '追加済みの問題だけを採点します。'}
-            </p>
-            {selection.source === 'selected' && onClear && (
-              <button
-                type="button"
-                onClick={onClear}
-                disabled={disabled}
-                className="font-bold text-slate-500 underline hover:text-red-600 disabled:opacity-50"
-              >
-                {mode === 'single' ? '追加済みの問題を解除' : '採点対象をすべてクリア'}
-              </button>
-            )}
-          </div>
-        </div>
-      ) : (
-        <p className="mt-4 rounded-xl bg-white px-4 py-5 text-center text-base font-bold text-amber-700">
-          {mode === 'batch'
-            ? '採点対象はまだありません。「採点対象に追加」を押してください。'
-            : '採点対象はまだありません。問題番号を入力してください。'}
-        </p>
-      )}
-
-      {selection.draftIsPending && (
-        <p className="mt-3 rounded-lg bg-amber-50 px-3 py-2 text-sm font-bold text-amber-800">
-          入力欄を変えても、追加済みの問題・配点は変わりません。配点を直す場合は、対象を削除して追加し直してください。
-        </p>
-      )}
-      {locked && (
-        <p className="mt-3 rounded-lg bg-blue-50 px-3 py-2 text-sm font-bold text-blue-800">
-          読み取り開始時に確定した対象です。入力欄を変更しても、今回の送信対象は変わりません。
-        </p>
-      )}
-    </section>
-  );
-}
 
 type DeductionDetail = {
   reason?: string;
@@ -177,16 +99,11 @@ type GradingApiResponse = {
   usageReleaseWarning?: boolean;
 };
 
-const MAX_TOTAL_SIZE_BYTES = 4.2 * 1024 * 1024;
-const MAX_SINGLE_FILE_SIZE_BYTES = 4.3 * 1024 * 1024;
 // サーバ側OCRは合計1.5MB超で「最適化モード」（プロンプト1本・マス目分析/Agentic Vision/
 // フォールバックモデル無効）に縮退する（grader.ts の isLargeFile）。
 // 品質保持圧縮（0.6MB/2048px）で1.5MB未満に収まる見込みがあれば事前圧縮した方が
 // 読み取り精度もアップロード速度も上がるため、その発動閾値を設ける。
-const FULL_PIPELINE_TOTAL_BYTES = 1.4 * 1024 * 1024;
 const PDF_SIZE_ADVICE = 'PDFはページ番号を指定すると必要ページだけ抽出して軽くできます。難しい場合はオンライン圧縮ツール（iLovePDF等）で圧縮してから再度お試しください。';
-const MAX_FILE_SIZE = 50 * 1024 * 1024; // 50MB
-const MAX_FILES = 10;
 
 // 採点待ち中に表示する段階メッセージ。
 // atSec: 経過秒数がこの値以上になったらその message を表示する（atSec の昇順に並べる）。
@@ -204,11 +121,6 @@ const APP_STEPS = [
   { step: '2', title: '撮影してアップロード', body: '問題・答案・解答を撮影し、まとめてアップロードします。' },
   { step: '3', title: '読み取りを確認', body: '文字を直してから採点します。' },
 ];
-
-const getCompressionTimeout = (fileCount: number) => {
-  // 基本: 1ファイルあたり6秒 + バッファ10秒（最低15秒、最大60秒）
-  return Math.min(60000, Math.max(15000, fileCount * 6000 + 10000));
-};
 
 export default function Home() {
   const {
@@ -252,7 +164,6 @@ export default function Home() {
   // 各ファイルの役割を管理
   // auto=サーバー側AIが判別。手動指定するまで、クライアントでは役割に基づく推測や切り出しをしない。
   // answer=答案, problem=問題, model=模範解答, problem_model=問題+模範解答, all=全部, other=その他
-  type FileRole = 'auto' | 'answer' | 'problem' | 'model' | 'problem_model' | 'answer_problem' | 'all' | 'other';
   const [fileRoles, setFileRoles] = useState<Record<number, FileRole>>({});
 
   // 採点の厳しさ（3段階）
@@ -288,12 +199,12 @@ export default function Home() {
   // 圧縮・PDFページ抽出の結果キャッシュ。
   // OCR→採点で同じファイル一式を2回圧縮していた（体感数秒×2）ため、
   // 入力（Fileの同一参照・役割・PDFページ指定）が変わらない限り前回結果を再利用する。
-  const preparedFilesCacheRef = useRef<{
-    sources: File[];
-    rolesKey: string;
-    pdfKey: string;
-    result: File[];
-  } | null>(null);
+  const preparedFilesCacheRef = useRef<PreparedFilesCache | null>(null);
+  const prepareFilesForUpload = useCallback(
+    (files: File[], options: Parameters<typeof prepareFilesForUploadInternal>[1]) =>
+      prepareFilesForUploadInternal(files, options, preparedFilesCacheRef),
+    []
+  );
 
   const invalidateUploadDerivedState = useCallback(() => {
     preparedFilesCacheRef.current = null;
@@ -1743,189 +1654,6 @@ export default function Home() {
     return null;
   };
 
-  const parsePageRange = (input?: string): number[] => {
-    if (!input) return [];
-    const pages = new Set<number>();
-    input.split(',').forEach((part) => {
-      const trimmed = part.trim();
-      if (!trimmed) return;
-      const rangeParts = trimmed.split('-').map((token) => token.trim());
-      if (rangeParts.length === 2) {
-        const start = parseInt(rangeParts[0], 10);
-        const end = parseInt(rangeParts[1], 10);
-        if (Number.isFinite(start) && Number.isFinite(end)) {
-          const from = Math.min(start, end);
-          const to = Math.max(start, end);
-          for (let i = from; i <= to; i += 1) pages.add(i);
-        }
-        return;
-      }
-      const single = parseInt(trimmed, 10);
-      if (Number.isFinite(single)) pages.add(single);
-    });
-    return Array.from(pages).sort((a, b) => a - b);
-  };
-
-  const mergeUniquePages = (...lists: number[][]): number[] => {
-    const merged = new Set<number>();
-    lists.forEach((list) => list.forEach((page) => merged.add(page)));
-    return Array.from(merged).sort((a, b) => a - b);
-  };
-
-  const getPdfPagesForRole = (
-    role: FileRole | undefined,
-    info: { answerPage?: string; problemPage?: string; modelAnswerPage?: string }
-  ): number[] => {
-    const answerPages = parsePageRange(info.answerPage);
-    const problemPages = parsePageRange(info.problemPage);
-    const modelPages = parsePageRange(info.modelAnswerPage);
-
-    switch (role) {
-      case 'answer':
-        return answerPages;
-      case 'problem':
-        return problemPages;
-      case 'model':
-        return modelPages;
-      case 'answer_problem':
-        return mergeUniquePages(answerPages, problemPages);
-      case 'problem_model':
-        return mergeUniquePages(problemPages, modelPages);
-      case 'all':
-        return mergeUniquePages(answerPages, problemPages, modelPages);
-      default:
-        return [];
-    }
-  };
-
-  const shouldCompressImages = useCallback((files: File[]): boolean => {
-    const imageFiles = files.filter((file) => isImageFile(file));
-    if (imageFiles.length === 0) return false;
-
-    if (imageFiles.some((file) => file.size > MAX_SINGLE_FILE_SIZE_BYTES)) {
-      return true;
-    }
-
-    const totalSize = files.reduce((sum, file) => sum + file.size, 0);
-    const imageSize = imageFiles.reduce((sum, file) => sum + file.size, 0);
-    const nonImageSize = totalSize - imageSize;
-    if (nonImageSize >= MAX_TOTAL_SIZE_BYTES) {
-      return false;
-    }
-
-    const imageBudget = MAX_TOTAL_SIZE_BYTES - nonImageSize;
-    if (imageSize > imageBudget) {
-      return true;
-    }
-
-    // Vercelペイロード上限(4.3MB)は下回っていても、サーバOCRの品質パイプライン
-    // 閾値(1.5MB)を超える場合は圧縮する。典型的なスマホ写真1枚(2〜4MB)が
-    // 無圧縮のまま縮退モードでOCRされるのを防ぐ（圧縮後の方が読み取り精度が高い）。
-    return nonImageSize < FULL_PIPELINE_TOTAL_BYTES && totalSize > FULL_PIPELINE_TOTAL_BYTES;
-  }, []);
-
-  const compressWithTimeout = useCallback(async (
-    files: File[],
-    onProgress?: (progress: number, currentFile: string) => void
-  ): Promise<File[]> => {
-    const startTime = Date.now();
-    const totalSize = files.reduce((sum, f) => sum + f.size, 0);
-    const timeoutMs = getCompressionTimeout(files.length);
-    let timeoutId: ReturnType<typeof setTimeout> | undefined;
-    console.log(`[Page] Compression start: ${files.length} files, ${(totalSize / 1024 / 1024).toFixed(2)}MB, timeout: ${timeoutMs}ms`);
-
-    try {
-      // 外側タイムアウト（最終防衛線）
-      const timeoutPromise = new Promise<File[]>((resolve) => {
-        timeoutId = setTimeout(() => {
-          console.warn(`[Page] Compression timeout after ${timeoutMs}ms, using original files`);
-          resolve(files);
-        }, timeoutMs);
-      });
-
-      const result = await Promise.race([
-        compressMultipleImages(files, onProgress),
-        timeoutPromise,
-      ]);
-
-      const compressedSize = result.reduce((sum, f) => sum + f.size, 0);
-      const elapsed = Date.now() - startTime;
-      console.log(`[Page] Compression done in ${elapsed}ms: ${(totalSize / 1024 / 1024).toFixed(2)}MB → ${(compressedSize / 1024 / 1024).toFixed(2)}MB`);
-      return result;
-    } catch (err) {
-      console.error('[Page] Compression error:', err);
-      return files; // エラー時は元ファイル
-    } finally {
-      if (timeoutId) {
-        clearTimeout(timeoutId);
-      }
-    }
-  }, []);
-
-  const prepareFilesForUpload = async (
-    files: File[],
-    options: {
-      fileRoles: Record<number, FileRole>;
-      pdfPageInfo: { answerPage?: string; problemPage?: string; modelAnswerPage?: string };
-      onCompressionProgress?: (progress: number, currentFile: string) => void;
-    }
-  ): Promise<File[]> => {
-    const rolesKey = JSON.stringify(options.fileRoles);
-    const pdfKey = JSON.stringify(options.pdfPageInfo);
-    const cached = preparedFilesCacheRef.current;
-    if (
-      cached &&
-      cached.rolesKey === rolesKey &&
-      cached.pdfKey === pdfKey &&
-      cached.sources.length === files.length &&
-      cached.sources.every((file, i) => file === files[i])
-    ) {
-      return cached.result;
-    }
-    const finalize = (result: File[]): File[] => {
-      preparedFilesCacheRef.current = { sources: [...files], rolesKey, pdfKey, result };
-      return result;
-    };
-
-    // AI判別前は役割依存のPDF切り出しを行わない。全ページを残してサーバーへ渡す。
-    // 一方、画像全体を維持する既存の圧縮・HEIC変換は、送信サイズ上限のため継続する。
-    const hasAutoRole = Object.values(options.fileRoles).some((role) => role === 'auto');
-
-    let processedFiles = files;
-    const hasPdf = processedFiles.some((file) => file.type === 'application/pdf');
-    const hasPdfPageInfo = !!(
-      options.pdfPageInfo.answerPage ||
-      options.pdfPageInfo.problemPage ||
-      options.pdfPageInfo.modelAnswerPage
-    );
-
-    if (hasPdf && hasPdfPageInfo && !hasAutoRole) {
-      const extractedFiles: File[] = [];
-      for (let i = 0; i < processedFiles.length; i += 1) {
-        const file = processedFiles[i];
-        if (file.type !== 'application/pdf') {
-          extractedFiles.push(file);
-          continue;
-        }
-        const role = options.fileRoles[i];
-        const pages = getPdfPagesForRole(role, options.pdfPageInfo);
-        if (pages.length === 0) {
-          extractedFiles.push(file);
-          continue;
-        }
-        const { file: extracted } = await extractPdfPages(file, pages);
-        extractedFiles.push(extracted);
-      }
-      processedFiles = extractedFiles;
-    }
-
-    if (!shouldCompressImages(processedFiles)) {
-      return finalize(processedFiles);
-    }
-
-    return finalize(await compressWithTimeout(processedFiles, options.onCompressionProgress));
-  };
-
   const openOcrEditModal = (label: string, initialText: string, strictness: GradingStrictness, problemCondition = '') => {
     setOcrEditModal({ label, text: initialText, strictness, problemCondition });
   };
@@ -1973,8 +1701,8 @@ export default function Home() {
       }
     }
 
-    const MAX_TOTAL_SIZE = MAX_TOTAL_SIZE_BYTES;
-    const MAX_SINGLE_FILE_SIZE = MAX_SINGLE_FILE_SIZE_BYTES;
+    const MAX_TOTAL_SIZE = CLIENT_MAX_TOTAL_SIZE_BYTES;
+    const MAX_SINGLE_FILE_SIZE = CLIENT_MAX_SINGLE_FILE_SIZE_BYTES;
     const totalSize = filesToUse.reduce((sum, file) => sum + file.size, 0);
 
     const oversizedFile = filesToUse.find(file => file.size > MAX_SINGLE_FILE_SIZE);
@@ -2103,8 +1831,8 @@ export default function Home() {
     console.log(`[Page] File selected: ${files.length} files`);
 
     // ファイル数の上限チェック
-    if (files.length > MAX_FILES) {
-      setError(`一度にアップロードできるファイルは${MAX_FILES}個までです。`);
+    if (files.length > MAX_FILES_COUNT) {
+      setError(`一度にアップロードできるファイルは${MAX_FILES_COUNT}個までです。`);
       sendGAEvent('grading_upload_rejected', { reason: 'too_many_files', file_count: files.length });
       return;
     }
@@ -2113,7 +1841,7 @@ export default function Home() {
     const validFiles = files.filter(f => {
       const validMimeType = f.type.startsWith('image/') || f.type === 'application/pdf';
       const validExtension = VALID_EXTENSIONS.test(f.name);
-      const validSize = f.size <= MAX_FILE_SIZE;
+      const validSize = f.size <= CLIENT_MAX_FILE_SIZE_BYTES;
       return (validMimeType || validExtension) && validSize;
     });
 
@@ -2130,8 +1858,8 @@ export default function Home() {
     }
 
     // 追加済みのファイルを含めた上限も守る。超過時は既存の選択・採点状態を維持する。
-    if (uploadedFiles.length + validFiles.length > MAX_FILES) {
-      setError(`アップロードできるファイルは合計${MAX_FILES}個までです。`);
+    if (uploadedFiles.length + validFiles.length > MAX_FILES_COUNT) {
+      setError(`アップロードできるファイルは合計${MAX_FILES_COUNT}個までです。`);
       sendGAEvent('grading_upload_rejected', {
         reason: 'too_many_files_total',
         file_count: validFiles.length,
@@ -2542,7 +2270,7 @@ export default function Home() {
 
     // 圧縮後のファイルサイズチェック（413エラー対策）
     const totalFileSize = filesToUse.reduce((sum, file) => sum + file.size, 0);
-    const MAX_REQUEST_SIZE = MAX_TOTAL_SIZE_BYTES;
+    const MAX_REQUEST_SIZE = CLIENT_MAX_TOTAL_SIZE_BYTES;
 
     if (totalFileSize > MAX_REQUEST_SIZE) {
       const totalMB = (totalFileSize / 1024 / 1024).toFixed(1);
@@ -2787,7 +2515,7 @@ export default function Home() {
     }
 
     // 圧縮後のファイルサイズチェック
-    const MAX_TOTAL_SIZE = MAX_TOTAL_SIZE_BYTES;
+    const MAX_TOTAL_SIZE = CLIENT_MAX_TOTAL_SIZE_BYTES;
     const totalSize = filesToUse.reduce((sum, file) => sum + file.size, 0);
 
     if (totalSize > MAX_TOTAL_SIZE) {
@@ -3098,8 +2826,8 @@ export default function Home() {
     }
 
     // 圧縮後のファイルサイズチェック（Vercel Serverless Functions: 4.5MBペイロード上限）
-    const MAX_TOTAL_SIZE = MAX_TOTAL_SIZE_BYTES;
-    const MAX_SINGLE_FILE_SIZE = MAX_SINGLE_FILE_SIZE_BYTES;
+    const MAX_TOTAL_SIZE = CLIENT_MAX_TOTAL_SIZE_BYTES;
+    const MAX_SINGLE_FILE_SIZE = CLIENT_MAX_SINGLE_FILE_SIZE_BYTES;
     const totalSize = filesToUse.reduce((sum, file) => sum + file.size, 0);
 
     const oversizedFile = filesToUse.find(file => file.size > MAX_SINGLE_FILE_SIZE);

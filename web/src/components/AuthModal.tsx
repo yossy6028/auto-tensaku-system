@@ -3,6 +3,7 @@
 import React, { useState, useEffect } from 'react';
 import { X, Mail, Lock, Loader2, CheckCircle, AlertCircle } from 'lucide-react';
 import { useAuth } from './AuthProvider';
+import { normalizeAuthError, signupSuccessMessage, validateSignupPasswords } from '@/lib/auth/client';
 
 interface AuthModalProps {
   isOpen: boolean;
@@ -11,27 +12,6 @@ interface AuthModalProps {
 }
 
 type AuthMode = 'signin' | 'signup' | 'magic' | 'reset';
-
-/** Supabase GoTrue の英語エラーメッセージを日本語に変換 */
-function translateAuthError(message: string): string {
-  const translations: Record<string, string> = {
-    'Error sending confirmation email': '確認メールの送信に失敗しました。しばらくしてからお試しください。',
-    'Unable to validate email address: invalid format': 'メールアドレスの形式が正しくありません。',
-    'User already registered': 'このメールアドレスは既に登録されています。',
-    'Invalid login credentials': 'メールアドレスまたはパスワードが正しくありません。',
-    'Email rate limit exceeded': 'メール送信の制限に達しました。しばらくしてからお試しください。',
-    'Password should be at least 6 characters': 'パスワードは6文字以上で入力してください。',
-    'Signups not allowed for this instance': '現在新規登録を受け付けていません。',
-    'User not found': 'このメールアドレスのアカウントが見つかりません。先に新規登録してください。',
-    'Signup requires a valid password': '先に新規登録してください。',
-    'Email link is invalid or has expired': 'メールリンクが無効または期限切れです。再度お試しください。',
-    'For security purposes, you can only request this after 60 seconds': 'セキュリティのため、60秒後に再度お試しください。',
-  };
-  for (const [eng, jpn] of Object.entries(translations)) {
-    if (message.includes(eng)) return jpn;
-  }
-  return message;
-}
 
 export function AuthModal({ isOpen, onClose, initialMode = 'signin' }: AuthModalProps) {
   const { signInWithEmail, signInWithPassword, signUp, resetPassword, user } = useAuth();
@@ -42,9 +22,9 @@ export function AuthModal({ isOpen, onClose, initialMode = 'signin' }: AuthModal
   const [isLoading, setIsLoading] = useState(false);
   const [message, setMessage] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
 
-  // ログイン成功時にモーダルを自動的に閉じる
+  // ログインまたはメール確認不要の新規登録が成功したらモーダルを閉じる
   useEffect(() => {
-    if (user && isOpen && mode === 'signin') {
+    if (user && isOpen && (mode === 'signin' || mode === 'signup')) {
       // ユーザーがログインしたら少し待ってからモーダルを閉じる
       const timer = setTimeout(() => {
         onClose();
@@ -84,10 +64,13 @@ export function AuthModal({ isOpen, onClose, initialMode = 'signin' }: AuthModal
     setIsLoading(true);
     setMessage(null);
 
-    if (mode === 'signup' && password !== confirmPassword) {
-      setMessage({ type: 'error', text: 'パスワードが一致しません。' });
-      setIsLoading(false);
-      return;
+    if (mode === 'signup') {
+      const validationError = validateSignupPasswords(password, confirmPassword);
+      if (validationError) {
+        setMessage({ type: 'error', text: validationError });
+        setIsLoading(false);
+        return;
+      }
     }
 
     try {
@@ -110,8 +93,8 @@ export function AuthModal({ isOpen, onClose, initialMode = 'signin' }: AuthModal
         // ログイン成功時はuseEffectで自動的にモーダルが閉じられる
       } else {
         result = await signUp(email, password);
-        if (!result.error) {
-          setMessage({ type: 'success', text: 'メールを送信しました。メールをご確認ください。' });
+        if (!result.error && result.status) {
+          setMessage({ type: 'success', text: signupSuccessMessage(result.status) });
           setEmail('');
           setPassword('');
           setConfirmPassword('');
@@ -119,7 +102,7 @@ export function AuthModal({ isOpen, onClose, initialMode = 'signin' }: AuthModal
       }
 
       if (result?.error) {
-        setMessage({ type: 'error', text: translateAuthError(result.error.message) });
+        setMessage({ type: 'error', text: normalizeAuthError(result.error.message) });
       }
     } catch (err: unknown) {
       const message = err instanceof Error ? err.message : 'エラーが発生しました';
@@ -180,12 +163,13 @@ export function AuthModal({ isOpen, onClose, initialMode = 'signin' }: AuthModal
 
           <form onSubmit={handleSubmit} className="space-y-4">
             <div>
-              <label className="block text-sm font-medium text-slate-700 mb-1">
+              <label htmlFor="auth-email" className="block text-sm font-medium text-slate-700 mb-1">
                 メールアドレス
               </label>
               <div className="relative">
                 <Mail className="absolute left-3 top-1/2 -translate-y-1/2 w-5 h-5 text-slate-400" />
                 <input
+                  id="auth-email"
                   type="email"
                   value={email}
                   onChange={(e) => setEmail(e.target.value)}
@@ -198,12 +182,13 @@ export function AuthModal({ isOpen, onClose, initialMode = 'signin' }: AuthModal
 
             {mode !== 'magic' && mode !== 'reset' && (
               <div>
-                <label className="block text-sm font-medium text-slate-700 mb-1">
+                <label htmlFor="auth-password" className="block text-sm font-medium text-slate-700 mb-1">
                   パスワード
                 </label>
                 <div className="relative">
                   <Lock className="absolute left-3 top-1/2 -translate-y-1/2 w-5 h-5 text-slate-400" />
                   <input
+                    id="auth-password"
                     type="password"
                     value={password}
                     onChange={(e) => setPassword(e.target.value)}
@@ -218,12 +203,13 @@ export function AuthModal({ isOpen, onClose, initialMode = 'signin' }: AuthModal
 
             {mode === 'signup' && (
               <div>
-                <label className="block text-sm font-medium text-slate-700 mb-1">
+                <label htmlFor="auth-confirm-password" className="block text-sm font-medium text-slate-700 mb-1">
                   パスワード（確認）
                 </label>
                 <div className="relative">
                   <Lock className="absolute left-3 top-1/2 -translate-y-1/2 w-5 h-5 text-slate-400" />
                   <input
+                    id="auth-confirm-password"
                     type="password"
                     value={confirmPassword}
                     onChange={(e) => setConfirmPassword(e.target.value)}
@@ -334,4 +320,3 @@ export function AuthModal({ isOpen, onClose, initialMode = 'signin' }: AuthModal
     </div>
   );
 }
-

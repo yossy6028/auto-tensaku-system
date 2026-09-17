@@ -5,6 +5,7 @@ import type { SupabaseClient, User, Session } from '@supabase/supabase-js';
 import { createClient } from '@/lib/supabase/client';
 import type { UserProfile, Subscription, PricingPlan, Database, DeviceInfo, DeviceRegistrationResult } from '@/lib/supabase/types';
 import { getDeviceInfo, markDeviceAsRegistered, clearDeviceRegistration } from '@/lib/utils/deviceFingerprint';
+import type { SignUpResult } from '@/lib/auth/client';
 
 // Auth リダイレクト用ベースURL（NEXT_PUBLIC_APP_URL が設定済みならそちらを優先）
 function getSiteUrl() {
@@ -128,7 +129,7 @@ interface AuthContextType {
   // 認証関数
   signInWithEmail: (email: string) => Promise<{ error: Error | null }>;
   signInWithPassword: (email: string, password: string) => Promise<{ error: Error | null }>;
-  signUp: (email: string, password: string) => Promise<{ error: Error | null }>;
+  signUp: (email: string, password: string) => Promise<SignUpResult>;
   resetPassword: (email: string) => Promise<{ error: Error | null }>;
   signOut: () => Promise<void>;
   refreshUsageInfo: () => Promise<void>;
@@ -859,6 +860,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
   const signUp = async (email: string, password: string) => {
     if (!supabase) return { error: new Error('Supabase is not configured') };
+    const normalizedEmail = email.trim();
 
     // エイリアス重複チェック（Gmailの+やドット等を正規化して既存ユーザーと照合）
     let emailBlocked = false;
@@ -866,7 +868,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       const checkRes = await fetch('/api/auth/check-email', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ email }),
+        body: JSON.stringify({ email: normalizedEmail }),
       });
       if (checkRes.status === 409) {
         emailBlocked = true;
@@ -877,50 +879,54 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
     if (emailBlocked) {
       // プロファイルは存在するが、未確認ユーザーかもしれない。
-      // resend を試み、成功すれば確認メール再送。失敗なら確認済みユーザー。
+      // resend が成功しても確認済みか未確認かは断定せず、実エラーは呼び出し元へ返す。
       try {
         const { error: resendError } = await supabase.auth.resend({
           type: 'signup',
-          email,
+          email: normalizedEmail,
           options: { emailRedirectTo: `${SITE_URL}/auth/callback` },
         });
         if (!resendError) {
-          // 未確認ユーザーへの確認メール再送に成功
-          return { error: null };
+          // 確認済みユーザーでもAPIが成功を返す場合があるため、送信済みとは断定しない。
+          return { error: null, status: 'existing_or_confirmation_resent' as const };
         }
-      } catch {
-        // resend 自体の通信エラー — フォールスルー
+        return { error: resendError };
+      } catch (error) {
+        return { error: error instanceof Error ? error : new Error('確認メールの再送に失敗しました。') };
       }
-      // 確認済みユーザー → 登録済みであることを伝える
-      return { error: new Error('このメールアドレスは既に登録済みです。ログインしてください。パスワードをお忘れの場合は「パスワードを忘れた場合」からリセットできます。') };
     }
 
     const { data, error } = await supabase.auth.signUp({
-      email,
+      email: normalizedEmail,
       password,
       options: { emailRedirectTo: `${SITE_URL}/auth/callback` },
     });
 
+    if (error) return { error };
+
+    if (data.session) {
+      setSession(data.session);
+      setUser(data.session.user);
+      return { error: null, status: 'signed_in' as const };
+    }
+
     // Supabase は既存ユーザーに対して error=null + identities=[] を返す（ユーザー列挙防止）。
-    // 未確認ユーザーなら resend で確認メール再送、確認済みならログインを促す。
-    if (!error && data?.user?.identities?.length === 0) {
+    // resend が成功しても配信や確認状態は断定せず、実エラーは呼び出し元へ返す。
+    if (data.user?.identities?.length === 0) {
       try {
         const { error: resendError } = await supabase.auth.resend({
           type: 'signup',
-          email,
+          email: normalizedEmail,
           options: { emailRedirectTo: `${SITE_URL}/auth/callback` },
         });
-        if (resendError) {
-          // resend がエラー → 確認済みユーザー → 登録済みであることを伝える
-          return { error: new Error('このメールアドレスは既に登録済みです。ログインしてください。パスワードをお忘れの場合は「パスワードを忘れた場合」からリセットできます。') };
-        }
-      } catch {
-        // 通信エラー
-        return { error: new Error('このメールアドレスは既に登録済みです。ログインしてください。') };
+        if (resendError) return { error: resendError };
+      } catch (error) {
+        return { error: error instanceof Error ? error : new Error('確認メールの再送に失敗しました。') };
       }
+      return { error: null, status: 'existing_or_confirmation_resent' as const };
     }
 
-    return { error };
+    return { error: null, status: 'confirmation_sent' as const };
   };
 
   const resetPassword = async (email: string) => {

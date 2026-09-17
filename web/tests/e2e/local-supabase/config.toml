@@ -1,0 +1,39 @@
+project_id = "tascal-signup-e2e-20260917"
+[api]
+enabled = true
+port = 55431
+schemas = ["public", "graphql_public"]
+extra_search_path = ["public", "extensions"]
+[db]
+port = 55432
+shadow_port = 55430
+major_version = 17
+[db.seed]
+enabled = false
+[studio]
+enabled = false
+[inbucket]
+enabled = true
+port = 55434
+[auth]
+enabled = true
+site_url = "http://127.0.0.1:3218"
+additional_redirect_urls = ["http://127.0.0.1:3218/auth/callback", "http://127.0.0.1:3218/auth/confirm"]
+enable_signup = true
+[auth.email]
+enable_signup = true
+enable_confirmations = true
+max_frequency = "1s"
+otp_expiry = 3600
+[auth.rate_limit]
+email_sent = 1000
+sign_in_sign_ups = 1000
+token_verifications = 1000
+[storage]
+enabled = false
+[realtime]
+enabled = false
+[analytics]
+enabled = false
+[edge_runtime]
+enabled = false

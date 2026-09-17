@@ -31,6 +31,18 @@ export const MAX_REQUEST_SIZE = 4.3 * 1024 * 1024;
 /** アップロード可能なファイル数の上限 */
 export const MAX_FILES_COUNT = 10;
 
+/** クライアントが圧縮・事前検証で使う合計サイズ予算（サーバー上限より小さく保つ） */
+export const CLIENT_MAX_TOTAL_SIZE_BYTES = 4.2 * 1024 * 1024;
+
+/** クライアントが単一画像の圧縮要否を判定する上限 */
+export const CLIENT_MAX_SINGLE_FILE_SIZE_BYTES = MAX_SINGLE_FILE_SIZE;
+
+/** OCRのフル品質パイプラインを維持するための圧縮発動閾値 */
+export const CLIENT_FULL_PIPELINE_TOTAL_SIZE_BYTES = 1.4 * 1024 * 1024;
+
+/** ファイル選択時にのみ適用する、圧縮前の単一ファイル上限 */
+export const CLIENT_MAX_FILE_SIZE_BYTES = 50 * 1024 * 1024;
+
 /** 人間可読なMB上限（メッセージ用） */
 export const MAX_TOTAL_SIZE_MB_LABEL = (MAX_TOTAL_SIZE / 1024 / 1024).toFixed(1);
 

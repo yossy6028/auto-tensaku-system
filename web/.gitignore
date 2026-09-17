@@ -40,3 +40,9 @@ yarn-error.log*
 # typescript
 *.tsbuildinfo
 next-env.d.ts
+
+# Browser tests may contain local session cookies and synthetic credentials
+/test-results/
+/playwright-report/
+/auth-e2e-results/
+/tests/e2e/local-supabase/.runtime/

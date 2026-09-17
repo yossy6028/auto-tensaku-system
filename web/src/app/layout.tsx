@@ -24,7 +24,7 @@ export const metadata: Metadata = {
   appleWebApp: {
     capable: true,
     statusBarStyle: "default",
-    title: "自動添削システム",
+    title: "Taskal AI",
   },
   openGraph: {
     title: "Taskal AI — 国語記述問題の自動添削",
@@ -48,7 +48,7 @@ export const metadata: Metadata = {
     images: ["/ogp.png"],
   },
   icons: {
-    apple: "/icons/apple-touch-icon.png",
+    apple: { url: "/icons/apple-touch-icon.png?v=taskal-ai-1", sizes: "192x192", type: "image/png" },
   },
   alternates: {
     canonical: '/',

@@ -1,6 +1,6 @@
 // Batch processing types for multi-student grading
 
-export type FileRole = 'answer' | 'problem' | 'model' | 'problem_model' | 'answer_problem' | 'all' | 'other';
+export type FileRole = 'auto' | 'answer' | 'problem' | 'model' | 'problem_model' | 'answer_problem' | 'all' | 'other';
 
 export type GradingStrictness = 'lenient' | 'standard' | 'strict';
 

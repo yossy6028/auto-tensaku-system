@@ -160,14 +160,10 @@ export default function Home() {
   const [uploadedFiles, setUploadedFiles] = useState<File[]>([]);
   const [answerFileIndex, setAnswerFileIndex] = useState<number | null>(null);
   // 各ファイルの役割を管理
+  // auto=サーバー側AIが判別。手動指定するまで、クライアントでは役割に基づく推測や切り出しをしない。
   // answer=答案, problem=問題, model=模範解答, problem_model=問題+模範解答, all=全部, other=その他
-  type FileRole = 'answer' | 'problem' | 'model' | 'problem_model' | 'answer_problem' | 'all' | 'other';
+  type FileRole = 'auto' | 'answer' | 'problem' | 'model' | 'problem_model' | 'answer_problem' | 'all' | 'other';
   const [fileRoles, setFileRoles] = useState<Record<number, FileRole>>({});
-
-  // ファイル役割選択ポップアップ用の状態
-  const [showFileRoleModal, setShowFileRoleModal] = useState(false);
-  const [pendingFiles, setPendingFiles] = useState<File[]>([]);
-  const [pendingFileRoles, setPendingFileRoles] = useState<Record<number, FileRole>>({});
 
   // 採点の厳しさ（3段階）
   const [gradingStrictness, setGradingStrictness] = useState<GradingStrictness>('standard');
@@ -207,6 +203,14 @@ export default function Home() {
     pdfKey: string;
     result: File[];
   } | null>(null);
+
+  const invalidateUploadDerivedState = useCallback(() => {
+    preparedFilesCacheRef.current = null;
+    setResults(null);
+    setOcrResults({});
+    setConfirmedTexts({});
+    setOcrFlowStep('idle');
+  }, []);
 
   // 採点待ち中だけ経過秒数を刻む（GRADING_PROGRESS_STEPS の段階メッセージ切替に使用）
   useEffect(() => {
@@ -1633,10 +1637,8 @@ export default function Home() {
       }
     }
 
-    // 役割で見つからない場合はファイル名ヒューリスティック
-    const hintRegex = /(answer|ans|student|解答|答案|生徒)/i;
-    const foundIndex = files.findIndex(file => hintRegex.test(file.name));
-    return foundIndex >= 0 ? foundIndex : 0;
+    // 未判別のファイルを順序・名前だけで答案扱いにはしない。
+    return null;
   };
 
   const parsePageRange = (input?: string): number[] => {
@@ -1783,6 +1785,10 @@ export default function Home() {
       return result;
     };
 
+    // AI判別前は役割依存のPDF切り出しを行わない。全ページを残してサーバーへ渡す。
+    // 一方、画像全体を維持する既存の圧縮・HEIC変換は、送信サイズ上限のため継続する。
+    const hasAutoRole = Object.values(options.fileRoles).some((role) => role === 'auto');
+
     let processedFiles = files;
     const hasPdf = processedFiles.some((file) => file.type === 'application/pdf');
     const hasPdfPageInfo = !!(
@@ -1791,7 +1797,7 @@ export default function Home() {
       options.pdfPageInfo.modelAnswerPage
     );
 
-    if (hasPdf && hasPdfPageInfo) {
+    if (hasPdf && hasPdfPageInfo && !hasAutoRole) {
       const extractedFiles: File[] = [];
       for (let i = 0; i < processedFiles.length; i += 1) {
         const file = processedFiles[i];
@@ -1994,13 +2000,6 @@ export default function Home() {
   const processFiles = useCallback(async (files: File[]) => {
     console.log(`[Page] File selected: ${files.length} files`);
 
-    // 新しいファイルがアップロードされたら、前の採点結果をリセット
-    setResults(null);
-    setError(null);
-    setOcrFlowStep('idle');
-    setOcrResults({});
-    setConfirmedTexts({});
-
     // ファイル数の上限チェック
     if (files.length > MAX_FILES) {
       setError(`一度にアップロードできるファイルは${MAX_FILES}個までです。`);
@@ -2028,82 +2027,48 @@ export default function Home() {
       return;
     }
 
+    // 追加済みのファイルを含めた上限も守る。超過時は既存の選択・採点状態を維持する。
+    if (uploadedFiles.length + validFiles.length > MAX_FILES) {
+      setError(`アップロードできるファイルは合計${MAX_FILES}個までです。`);
+      sendGAEvent('grading_upload_rejected', {
+        reason: 'too_many_files_total',
+        file_count: validFiles.length,
+      });
+      return;
+    }
+
     // 一部のファイルが除外された場合の警告
     if (filteredCount > 0) {
       console.warn(`[Page] ${filteredCount} invalid files filtered out`);
     }
 
-    // 画像ファイルがある場合は圧縮処理
-    const hasImages = validFiles.some(f => isImageFile(f));
-    const shouldCompress = hasImages && shouldCompressImages(validFiles);
-    let processedFiles = validFiles;
-
-    if (shouldCompress) {
-      if (isMountedRef.current) {
-        setIsCompressing(true);
-        setCompressionProgress(0);
-        setCompressionFileName('');
-      }
-
-      try {
-        processedFiles = await compressWithTimeout(
-          validFiles,
-          (progress, fileName) => {
-            // 非同期コールバック内でのアンマウントチェック
-            if (isMountedRef.current) {
-              setCompressionProgress(progress);
-              setCompressionFileName(fileName);
-            }
-          }
-        );
-
-        const totalSize = processedFiles.reduce((sum, f) => sum + f.size, 0);
-        console.log(`[Page] Compression complete: ${(totalSize / 1024 / 1024).toFixed(2)}MB`);
-      } catch (err) {
-        console.error('[Page] Compression error:', err);
-        processedFiles = validFiles;
-      } finally {
-        if (isMountedRef.current) {
-          setIsCompressing(false);
-          setCompressionProgress(0);
-          setCompressionFileName('');
-        }
-      }
-    }
-
-    // 新しいファイルに対して役割を自動推定（初期値として）
-    const initialRoles: Record<number, FileRole> = {};
-    processedFiles.forEach((file, i) => {
-      const name = file.name.toLowerCase();
-      if (/(answer|ans|student|解答|答案|生徒)/.test(name)) {
-        initialRoles[i] = 'answer';
-      } else if (/(problem|question|課題|設問|問題|本文)/.test(name)) {
-        initialRoles[i] = 'problem';
-      } else if (/(model|key|模範|解説|正解|解答例)/.test(name)) {
-        initialRoles[i] = 'model';
-      } else {
-        // デフォルト: 1つ目は答案、2つ目以降は問題+模範解答
-        const existingAnswers = Object.values(initialRoles).filter(r => r === 'answer' || r === 'answer_problem' || r === 'all').length;
-        if (existingAnswers === 0) initialRoles[i] = 'answer';
-        else initialRoles[i] = 'problem_model';  // 問題と模範解答が一緒のケースが多い
-      }
-    });
-
-    // ポップアップを表示（アンマウント後の更新を防止）
+    // ファイルは直ちに一覧へ加え、役割はサーバー側でAI判別する。
+    // ファイル名・選択順からの推測や、登録を止める確認モーダルは使わない。
     if (isMountedRef.current) {
+      invalidateUploadDerivedState();
+      setError(null);
       sendGAEvent('grading_upload_selected', {
-        file_count: processedFiles.length,
-        has_pdf: processedFiles.some(f => f.type === 'application/pdf') ? 1 : 0,
+        file_count: validFiles.length,
+        has_pdf: validFiles.some(f => f.type === 'application/pdf') ? 1 : 0,
       });
       sendGAEvent('uploaded_file', {
-        file_count: processedFiles.length,
-        has_pdf: processedFiles.some(f => f.type === 'application/pdf') ? 1 : 0,
+        file_count: validFiles.length,
+        has_pdf: validFiles.some(f => f.type === 'application/pdf') ? 1 : 0,
       });
-      setPendingFiles(processedFiles);
-      setPendingFileRoles(initialRoles);
-      setShowFileRoleModal(true);
+      setUploadedFiles((previousFiles) => {
+        const startIndex = previousFiles.length;
+        setFileRoles((previousRoles) => {
+          const nextRoles = { ...previousRoles };
+          validFiles.forEach((_, index) => {
+            nextRoles[startIndex + index] = 'auto';
+          });
+          return nextRoles;
+        });
+        return [...previousFiles, ...validFiles];
+      });
+      setAnswerFileIndex(null);
     }
-  }, [compressWithTimeout, shouldCompressImages]);
+  }, [invalidateUploadDerivedState, uploadedFiles.length]);
 
   const handleFileChange = useCallback(async (e: React.ChangeEvent<HTMLInputElement>) => {
     if (e.target.files && e.target.files.length > 0) {
@@ -2127,6 +2092,7 @@ export default function Home() {
   }, [processFiles]);
 
   const removeFile = (index: number) => {
+    invalidateUploadDerivedState();
     setUploadedFiles(prev => {
       const next = prev.filter((_, i) => i !== index);
       const nextRoles: Record<number, FileRole> = {};
@@ -4470,13 +4436,13 @@ export default function Home() {
                                 <Camera className="w-8 h-8 sm:w-10 sm:h-10" />
                               </div>
                               <span className="text-base sm:text-lg text-slate-700 font-bold block mb-2">
-                                問題・答案・解答を撮影してアップロード
+                                問題用紙・答案・解答解説をまとめて追加
                               </span>
                               <span className="text-xs sm:text-sm text-slate-500 block bg-slate-100/50 px-3 sm:px-4 py-1 rounded-full mb-2">
                                 タップ or ドラッグ＆ドロップ
                               </span>
                               <span className="text-xs text-slate-400 block">
-                                複数枚OK・自動で圧縮されます
+                                画像・PDFを混在できます。内容はAIが自動判別します
                               </span>
                             </div>
                           )}
@@ -4505,11 +4471,27 @@ export default function Home() {
                             <button
                               type="button"
                               onClick={() => {
+                                const newRoles: Record<number, FileRole> = {};
+                                uploadedFiles.forEach((_, index) => {
+                                  newRoles[index] = 'auto';
+                                });
+                                invalidateUploadDerivedState();
+                                setFileRoles(newRoles);
+                                setAnswerFileIndex(null);
+                              }}
+                              className="px-3 py-1.5 text-xs font-bold bg-slate-200 text-slate-700 rounded-lg border border-slate-300 hover:bg-slate-300 transition-colors"
+                            >
+                              すべてAIで自動判別
+                            </button>
+                            <button
+                              type="button"
+                              onClick={() => {
                                 // 最初のファイルを答案、残りを問題+模範解答に設定
                                 const newRoles: Record<number, FileRole> = {};
                                 uploadedFiles.forEach((_, i) => {
                                   newRoles[i] = i === 0 ? 'answer' : 'problem_model';
                                 });
+                                invalidateUploadDerivedState();
                                 setFileRoles(newRoles);
                                 // 答案インデックスを再計算
                                 setAnswerFileIndex(detectAnswerIndexByRole(uploadedFiles, newRoles, null));
@@ -4526,6 +4508,7 @@ export default function Home() {
                                 uploadedFiles.forEach((_, i) => {
                                   newRoles[i] = 'all';
                                 });
+                                invalidateUploadDerivedState();
                                 setFileRoles(newRoles);
                                 // 答案インデックスを再計算
                                 setAnswerFileIndex(detectAnswerIndexByRole(uploadedFiles, newRoles, null));
@@ -4550,7 +4533,8 @@ export default function Home() {
                                       fileRoles[index] === 'problem_model' ? "bg-cyan-50/50 border-cyan-200" :
                                         fileRoles[index] === 'answer_problem' ? "bg-violet-50/50 border-violet-200" :
                                           fileRoles[index] === 'all' ? "bg-rose-50/50 border-rose-200" :
-                                            "bg-white border-slate-100"
+                                            fileRoles[index] === 'auto' ? "bg-slate-50 border-slate-200" :
+                                              "bg-white border-slate-100"
                               )}
                             >
                               {/* ファイル情報行 */}
@@ -4592,18 +4576,21 @@ export default function Home() {
                                     現在: {
                                       fileRoles[index] === 'answer' ? '答案' :
                                         fileRoles[index] === 'problem' ? '問題' :
-                                          fileRoles[index] === 'model' ? '模範解答' :
-                                            fileRoles[index] === 'problem_model' ? '問題+模範解答' :
+                                          fileRoles[index] === 'model' ? '解答解説' :
+                                            fileRoles[index] === 'problem_model' ? '問題+解答解説' :
+                                              fileRoles[index] === 'answer_problem' ? '答案+問題' :
                                               fileRoles[index] === 'all' ? '全部' : '自動'
                                     }
                                   </span>
                                 </summary>
                                 <div className="flex flex-wrap gap-1.5 sm:gap-2 mt-2">
                                   {[
+                                    { value: 'auto', label: 'AIで自動判別', color: 'slate' },
                                     { value: 'answer', label: '答案', color: 'indigo' },
                                     { value: 'problem', label: '問題', color: 'amber' },
-                                    { value: 'model', label: '模範解答', color: 'emerald' },
-                                    { value: 'problem_model', label: '問題+模範解答', color: 'cyan' },
+                                    { value: 'model', label: '解答解説', color: 'emerald' },
+                                    { value: 'problem_model', label: '問題+解答解説', color: 'cyan' },
+                                    { value: 'answer_problem', label: '答案+問題', color: 'violet' },
                                     { value: 'all', label: '全部', color: 'rose' },
                                   ].map(({ value, label, color }) => (
                                     <button
@@ -4611,6 +4598,7 @@ export default function Home() {
                                       type="button"
                                       onClick={() => {
                                         const newRoles = { ...fileRoles, [index]: value as FileRole };
+                                        invalidateUploadDerivedState();
                                         setFileRoles(newRoles);
                                         // 答案インデックスを再計算
                                         setAnswerFileIndex(detectAnswerIndexByRole(uploadedFiles, newRoles, answerFileIndex));
@@ -4623,10 +4611,10 @@ export default function Home() {
                                       )}
                                       style={{
                                         backgroundColor: fileRoles[index] === value
-                                          ? color === 'indigo' ? '#c7d2fe' : color === 'amber' ? '#fde68a' : color === 'emerald' ? '#a7f3d0' : color === 'cyan' ? '#a5f3fc' : '#fecdd3'
+                                          ? color === 'slate' ? '#e2e8f0' : color === 'indigo' ? '#c7d2fe' : color === 'amber' ? '#fde68a' : color === 'emerald' ? '#a7f3d0' : color === 'cyan' ? '#a5f3fc' : color === 'violet' ? '#ddd6fe' : '#fecdd3'
                                           : undefined,
                                         borderColor: fileRoles[index] === value
-                                          ? color === 'indigo' ? '#818cf8' : color === 'amber' ? '#fbbf24' : color === 'emerald' ? '#34d399' : color === 'cyan' ? '#22d3ee' : '#fb7185'
+                                          ? color === 'slate' ? '#94a3b8' : color === 'indigo' ? '#818cf8' : color === 'amber' ? '#fbbf24' : color === 'emerald' ? '#34d399' : color === 'cyan' ? '#22d3ee' : color === 'violet' ? '#a78bfa' : '#fb7185'
                                           : undefined,
                                       }}
                                     >
@@ -4647,6 +4635,7 @@ export default function Home() {
                               setUploadedFiles([]);
                               setFileRoles({});
                               setAnswerFileIndex(null);
+                              invalidateUploadDerivedState();
                             }}
                             className="mt-3 sm:mt-4 w-full py-2 text-xs sm:text-sm font-bold text-red-600 bg-red-50 border border-red-200 rounded-xl hover:bg-red-100 transition-colors"
                           >
@@ -4658,7 +4647,7 @@ export default function Home() {
                     )}
 
                     {/* PDFページ番号指定（複数ページPDF対応） */}
-                    {!isFirstTrialUser && uploadedFiles.some(f => f.type === 'application/pdf') && (
+                    {!isFirstTrialUser && uploadedFiles.some(f => f.type === 'application/pdf') && !uploadedFiles.some((_, index) => fileRoles[index] === 'auto') && (
                       <details className="bg-orange-50 rounded-2xl p-4 border border-orange-200">
                         <summary className="cursor-pointer list-none text-sm font-bold text-orange-800">
                           PDFのページ番号を指定する
@@ -6111,142 +6100,6 @@ export default function Home() {
         disabled={batchState.isProcessing}
       />
 
-      {/* File Role Selection Modal */}
-      {showFileRoleModal && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50 backdrop-blur-sm">
-          <div className="bg-white rounded-2xl shadow-2xl max-w-2xl w-full max-h-[90vh] overflow-y-auto">
-            <div className="sticky top-0 bg-white border-b border-slate-200 px-6 py-4 flex items-center justify-between z-10">
-              <h2 className="text-xl font-bold text-slate-800 flex items-center">
-                <FileText className="w-5 h-5 mr-2 text-indigo-500" />
-                アップロード内容を確認
-              </h2>
-              <button
-                onClick={() => {
-                  setShowFileRoleModal(false);
-                  setPendingFiles([]);
-                  setPendingFileRoles({});
-                }}
-                className="text-slate-400 hover:text-slate-600 transition-colors p-2"
-              >
-                <X className="w-5 h-5" />
-              </button>
-            </div>
-
-            <div className="p-6 space-y-4">
-              <p className="text-sm text-slate-600 mb-4">
-                アップロードした画像やPDFが「答案」「問題」「模範解答」のどれに該当するか選択してください。
-              </p>
-              <div className="bg-blue-50 border border-blue-200 rounded-lg p-3 mb-4">
-                <p className="text-xs text-blue-700 flex items-start">
-                  <span className="mr-2">💡</span>
-                  <span><strong>注意：</strong>ファイルの読み込みに時間がかかる場合は、複数回に分けて処理してください。</span>
-                </p>
-              </div>
-
-              {pendingFiles.map((file, index) => {
-                const role = pendingFileRoles[index] || 'other';
-                const roleOptions: { value: FileRole; label: string; icon: string }[] = [
-                  { value: 'answer', label: '答案', icon: '📝' },
-                  { value: 'problem', label: '問題', icon: '📄' },
-                  { value: 'model', label: '模範解答', icon: '⭐' },
-                  { value: 'problem_model', label: '問題+模範解答', icon: '📄⭐' },
-                  { value: 'answer_problem', label: '答案+問題', icon: '📝📄' },
-                  { value: 'all', label: '全部', icon: '📚' },
-                  { value: 'other', label: 'その他', icon: '📎' },
-                ];
-
-                return (
-                  <div key={index} className="border border-slate-200 rounded-xl p-4 bg-slate-50">
-                    <div className="flex items-center justify-between mb-3">
-                      <div className="flex items-center space-x-2 flex-1 min-w-0">
-                        <FileText className="w-4 h-4 text-indigo-500 flex-shrink-0" />
-                        <span className="text-sm font-medium text-slate-700 truncate">
-                          {file.name}
-                        </span>
-                        <span className="text-xs text-slate-500 flex-shrink-0">
-                          ({formatFileSize(file.size)})
-                        </span>
-                      </div>
-                    </div>
-
-                    <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
-                      {roleOptions.map((option) => (
-                        <button
-                          key={option.value}
-                          type="button"
-                          onClick={() => {
-                            setPendingFileRoles(prev => ({
-                              ...prev,
-                              [index]: option.value,
-                            }));
-                          }}
-                          className={clsx(
-                            'px-3 py-2.5 rounded-lg text-sm font-medium transition-all',
-                            'border-2 flex items-center justify-center space-x-1.5',
-                            role === option.value
-                              ? 'bg-indigo-500 text-white border-indigo-600 shadow-md'
-                              : 'bg-white text-slate-700 border-slate-300 hover:border-indigo-400 hover:bg-indigo-50'
-                          )}
-                        >
-                          <span className="text-base">{option.icon}</span>
-                          <span>{option.label}</span>
-                        </button>
-                      ))}
-                    </div>
-                  </div>
-                );
-              })}
-            </div>
-
-            <div className="sticky bottom-0 bg-white border-t border-slate-200 px-6 py-4 flex items-center justify-end space-x-3">
-              <button
-                type="button"
-                onClick={() => {
-                  setShowFileRoleModal(false);
-                  setPendingFiles([]);
-                  setPendingFileRoles({});
-                }}
-                className="px-4 py-2 text-slate-600 hover:text-slate-800 font-medium transition-colors"
-              >
-                キャンセル
-              </button>
-              <button
-                type="button"
-                onClick={() => {
-                  sendGAEvent('grading_upload_confirmed', {
-                    file_count: pendingFiles.length,
-                    answer_count: Object.values(pendingFileRoles).filter(role => role === 'answer' || role === 'answer_problem' || role === 'all').length,
-                  });
-                  // ファイルを追加
-                  const startIndex = uploadedFiles.length;
-                  setUploadedFiles(prev => {
-                    const next = [...prev, ...pendingFiles];
-                    // 役割情報を追加
-                    const newRoles: Record<number, FileRole> = { ...fileRoles };
-                    pendingFiles.forEach((_, i) => {
-                      newRoles[startIndex + i] = pendingFileRoles[i] || 'other';
-                    });
-                    setFileRoles(newRoles);
-
-                    // 答案ファイルのインデックスを役割優先で更新
-                    const newAnswerIdx = detectAnswerIndexByRole(next, newRoles, answerFileIndex);
-                    setAnswerFileIndex(newAnswerIdx);
-                    return next;
-                  });
-
-                  // モーダルを閉じる
-                  setShowFileRoleModal(false);
-                  setPendingFiles([]);
-                  setPendingFileRoles({});
-                }}
-                className="px-6 py-2 bg-indigo-500 text-white rounded-lg font-bold hover:bg-indigo-600 transition-colors shadow-md"
-              >
-                この内容で進む
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
     </main>
   );
 }

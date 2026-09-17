@@ -6,6 +6,13 @@ import {
     OcrHints,
     AnswerSheetAnalysis,
 } from "./agenticVision";
+import {
+    DOCUMENT_ROLE_CLASSIFICATION_PROMPT,
+    DOCUMENT_ROLE_RESPONSE_SCHEMA,
+    clearPageHintsAfterAutoSplit,
+    resolveAutoDocumentRoles,
+    type ClassificationRunner,
+} from "./documentRoleClassifier";
 
 // API呼び出しのタイムアウト設定（ミリ秒）
 // Vercel Pro + Fluid Compute対応: maxDuration=300秒
@@ -214,7 +221,7 @@ async function mapWithConcurrency<T, R>(
 
 // 型定義
 // ファイルの役割タイプ（エクスポート）
-export type FileRole = 'answer' | 'problem' | 'model' | 'problem_model' | 'answer_problem' | 'all' | 'other';
+export type FileRole = 'auto' | 'answer' | 'problem' | 'model' | 'problem_model' | 'answer_problem' | 'all' | 'other';
 
 type UploadedFilePart = {
     buffer: Buffer;
@@ -223,6 +230,7 @@ type UploadedFilePart = {
     pageNumber?: number;
     sourceFileName?: string;
     role?: FileRole;  // ユーザー指定の役割
+    autoAnswerIsolation?: boolean;
 };
 
 type CategorizedFiles = {
@@ -325,6 +333,10 @@ const FILE_PATTERNS = {
 
 export class TaskalGrader {
     private ai: GoogleGenAI;
+    private readonly autoClassificationCache = new WeakMap<UploadedFilePart[], {
+        snapshot: Array<{ file: UploadedFilePart; buffer: Buffer; role?: FileRole; size: number }>;
+        promise: Promise<UploadedFilePart[]>;
+    }>();
 
     // OCRは単純転写のため、思考を最小にする。
     // ※ MINIMAL は Gemini 3.7/3.8 Flash が 400 (INVALID_ARGUMENT) で拒否する（2026-09-03 実測）。
@@ -384,6 +396,72 @@ export class TaskalGrader {
         this.ai = new GoogleGenAI({
             apiKey: CONFIG.GEMINI_API_KEY
         });
+    }
+
+    private readonly runDocumentRoleClassification: ClassificationRunner = async (sources, signal) => {
+        const runWithModel = async (model: string): Promise<unknown> => {
+            const parts: ContentPart[] = [{ text: DOCUMENT_ROLE_CLASSIFICATION_PROMPT }];
+            for (const source of sources) {
+                parts.push({ text: `source_index=${source.sourceIndex}, page_count=${source.pageCount}` });
+                parts.push({
+                    inlineData: {
+                        data: source.buffer.toString("base64"),
+                        mimeType: source.mimeType,
+                    },
+                });
+            }
+            const result = await this.ai.models.generateContent({
+                model,
+                contents: [{ role: "user", parts }],
+                config: {
+                    responseMimeType: "application/json",
+                    responseJsonSchema: DOCUMENT_ROLE_RESPONSE_SCHEMA,
+                    maxOutputTokens: 32768,
+                    thinkingConfig: { thinkingLevel: ThinkingLevel.LOW },
+                    abortSignal: signal,
+                    temperature: 0,
+                },
+            });
+            if (!result.text) {
+                throw new Error("empty classification response");
+            }
+            try {
+                return JSON.parse(result.text);
+            } catch (error) {
+                throw new Error("invalid classification response", { cause: error });
+            }
+        };
+
+        try {
+            return await runWithModel(CONFIG.CLASSIFICATION_MODEL_NAME);
+        } catch (error) {
+            const fallback = CONFIG.CLASSIFICATION_FALLBACK_MODEL_NAME;
+            if (!fallback || fallback === CONFIG.CLASSIFICATION_MODEL_NAME || signal.aborted) throw error;
+            return runWithModel(fallback);
+        }
+    };
+
+    private resolveAutoFiles(files: UploadedFilePart[]): Promise<UploadedFilePart[]> {
+        const cached = this.autoClassificationCache.get(files);
+        const isCurrent = cached?.snapshot.every((item, index) => {
+            const current = files[index];
+            return current === item.file && current?.buffer === item.buffer && current?.role === item.role && current?.buffer.length === item.size;
+        }) && cached.snapshot.length === files.length;
+        if (cached && isCurrent) return cached.promise;
+
+        const pending = resolveAutoDocumentRoles(files, this.runDocumentRoleClassification, { requireAnswer: false })
+            .catch(error => {
+                // 一時的なモデル失敗を同一リクエスト内の再試行へ固定しない。
+                if (this.autoClassificationCache.get(files)?.promise === pending) {
+                    this.autoClassificationCache.delete(files);
+                }
+                throw error;
+            });
+        this.autoClassificationCache.set(files, {
+            snapshot: files.map(file => ({ file, buffer: file.buffer, role: file.role, size: file.buffer.length })),
+            promise: pending,
+        });
+        return pending;
     }
 
     private async generateGradingResponseText(
@@ -675,11 +753,17 @@ ${JSON.stringify(partialResult, null, 2)}`;
                     }
                 });
             }
-            const categorizedFiles = this.categorizeFiles(files, pdfPageInfo);
+            const hasAutoRole = files.some(file => file.role === 'auto');
+            const resolvedFiles = hasAutoRole ? await this.resolveAutoFiles(files) : files;
+            const effectivePdfPageInfo = clearPageHintsAfterAutoSplit(hasAutoRole, pdfPageInfo);
+            const categorizedFiles = this.categorizeFiles(resolvedFiles, effectivePdfPageInfo, hasAutoRole);
+            if (hasAutoRole && categorizedFiles.studentFiles.length === 0) {
+                throw new Error("生徒の答案を検出できませんでした。記入済みの答案が含まれているか確認してください。");
+            }
             const imageParts = this.buildContentSequence(categorizedFiles);
 
             const sanitizedLabel = targetLabel.replace(/[<>\\"'`]/g, "").trim() || "target";
-            const ocrResult = await this.performOcr(sanitizedLabel, imageParts, categorizedFiles, pdfPageInfo);
+            const ocrResult = await this.performOcr(sanitizedLabel, imageParts, categorizedFiles, effectivePdfPageInfo);
             const text = (ocrResult.text || ocrResult.fullText).trim();
             const charCount = text.replace(/\s+/g, "").length;
 
@@ -710,13 +794,17 @@ ${JSON.stringify(partialResult, null, 2)}`;
                     }
                 });
             }
-            const categorizedFiles = this.categorizeFiles(files, pdfPageInfo);
+            const hasAutoRole = files.some(file => file.role === 'auto');
+            const resolvedFiles = hasAutoRole ? await this.resolveAutoFiles(files) : files;
+            const effectivePdfPageInfo = clearPageHintsAfterAutoSplit(hasAutoRole, pdfPageInfo);
+            // 確認済み答案テキストがあるため、資料側に答案画像がなくても採点できる。
+            const categorizedFiles = this.categorizeFiles(resolvedFiles, effectivePdfPageInfo, hasAutoRole);
             const imageParts = this.buildContentSequence(categorizedFiles);
 
             const sanitizedLabel = targetLabel.replace(/[<>\\"'`]/g, "").trim() || "target";
 
             // Stage 2のみ実行（confirmedTextとlayout情報を使用）
-            return await this.executeGradingWithText(sanitizedLabel, confirmedText, imageParts, pdfPageInfo, strictness, problemCondition, layout, modelAnswerText);
+            return await this.executeGradingWithText(sanitizedLabel, confirmedText, imageParts, effectivePdfPageInfo, strictness, problemCondition, layout, modelAnswerText);
         } catch (error: unknown) {
             return this.handleError(error);
         }
@@ -743,9 +831,15 @@ ${JSON.stringify(partialResult, null, 2)}`;
                     }
                 });
             }
-            const categorizedFiles = this.categorizeFiles(files, pdfPageInfo);
+            const hasAutoRole = files.some(file => file.role === 'auto');
+            const resolvedFiles = hasAutoRole ? await this.resolveAutoFiles(files) : files;
+            const effectivePdfPageInfo = clearPageHintsAfterAutoSplit(hasAutoRole, pdfPageInfo);
+            const categorizedFiles = this.categorizeFiles(resolvedFiles, effectivePdfPageInfo, hasAutoRole);
+            if (hasAutoRole && categorizedFiles.studentFiles.length === 0) {
+                throw new Error("生徒の答案を検出できませんでした。記入済みの答案が含まれているか確認してください。");
+            }
             const imageParts = this.buildContentSequence(categorizedFiles);
-            return await this.executeTwoStageGrading(targetLabel, imageParts, pdfPageInfo, categorizedFiles, strictness, problemCondition, modelAnswerText);
+            return await this.executeTwoStageGrading(targetLabel, imageParts, effectivePdfPageInfo, categorizedFiles, strictness, problemCondition, modelAnswerText);
         } catch (error: unknown) {
             return this.handleError(error);
         }
@@ -832,7 +926,7 @@ ${JSON.stringify(partialResult, null, 2)}`;
         const fallbackModelName = CONFIG.OCR_FALLBACK_MODEL_NAME || "";
 
         // 複合ファイル（role='all'）かどうかをチェック
-        const hasAllRole = categorizedFiles?.studentFiles.some(f => f.role === 'all') ?? false;
+        const hasAllRole = categorizedFiles?.studentFiles.some(f => f.role === 'all' || f.autoAnswerIsolation) ?? false;
 
 
         // 2段階OCR: マス目構造分析と Agentic Vision 分析は互いに独立した
@@ -2326,7 +2420,8 @@ JSONのみ出力してください。`;
      */
     private categorizeFiles(
         files: UploadedFilePart[],
-        pdfPageInfo?: { answerPage?: string; problemPage?: string; modelAnswerPage?: string } | null
+        pdfPageInfo?: { answerPage?: string; problemPage?: string; modelAnswerPage?: string } | null,
+        disableFallback = false
     ): CategorizedFiles {
         const answerPages = this.parsePageRange(pdfPageInfo?.answerPage);
         const problemPages = this.parsePageRange(pdfPageInfo?.problemPage);
@@ -2386,7 +2481,10 @@ JSONのみ出力してください。`;
             buckets.otherFiles.push(file);
         }
 
-        // 不足カテゴリにその他から補充
+        // 自動分類では「その他」を答案扱いしない。誤採点を避けるため不足は呼び出し側で明示エラーにする。
+        if (disableFallback) return buckets;
+
+        // 手動・従来経路は互換性維持のため不足カテゴリにその他から補充
         const fallbackPool = [...buckets.otherFiles];
         const ensureAtLeastOne = (target: UploadedFilePart[]) => {
             if (target.length === 0 && fallbackPool.length > 0) {

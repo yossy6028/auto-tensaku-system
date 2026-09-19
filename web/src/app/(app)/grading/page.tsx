@@ -33,11 +33,13 @@ import {
   generateDefaultTitle,
 } from '@/lib/storage/savedProblems';
 import { Users } from 'lucide-react';
-import { WelcomeGuide } from '@/components/WelcomeGuide';
 import { sendGAEvent } from '@/components/GoogleAnalytics';
 import { SAMPLE_TRIAL } from '@/lib/sampleTrial';
 import { deriveEffectiveTargets, type EffectiveTargetSelection } from '@/lib/grading/effectiveTargets';
 import { TargetSummary } from '@/components/grading/TargetSummary';
+import { SampleTutorial } from '@/components/grading/SampleTutorial';
+import { useGradingTutorial } from '@/components/grading/useGradingTutorial';
+import { deriveTrialUsage, isValidGradeResponse, type TutorialStep } from '@/lib/grading/tutorial';
 import {
   prepareFilesForUpload as prepareFilesForUploadInternal,
   type FileRole,
@@ -91,14 +93,6 @@ type GradingResponseItem = {
   regradeMode?: 'new' | 'free' | 'none';
 };
 
-type GradingApiResponse = {
-  status?: string;
-  message?: string;
-  requirePlan?: boolean;
-  results?: GradingResponseItem[];
-  usageReleaseWarning?: boolean;
-};
-
 // サーバ側OCRは合計1.5MB超で「最適化モード」（プロンプト1本・マス目分析/Agentic Vision/
 // フォールバックモデル無効）に縮退する（grader.ts の isLargeFile）。
 // 品質保持圧縮（0.6MB/2048px）で1.5MB未満に収まる見込みがあれば事前圧縮した方が
@@ -130,6 +124,7 @@ export default function Home() {
     isLoading: authLoading,
     profile,
     session,
+    systemSettings,
     // デバイス制限関連
     deviceInfo,
     deviceLimitInfo,
@@ -138,7 +133,22 @@ export default function Home() {
     removeDevice,
     retryDeviceRegistration,
   } = useAuth();
-  const isFirstTrialUser = Boolean(user && usageInfo?.accessType === 'trial' && usageInfo?.usageCount === 0);
+  const trialUsage = deriveTrialUsage({
+    usageCount: usageInfo?.usageCount,
+    usageLimit: usageInfo?.usageLimit,
+    remainingCount: usageInfo?.remainingCount,
+    fallbackLimit: systemSettings?.freeTrialUsageLimit,
+  });
+  // 旧RPCのnull値は、利用回数表示と同じく上限と残数から補完する。
+  const isFirstTrialUser = Boolean(
+    user && usageInfo?.accessType === 'trial' && trialUsage.count === 0 &&
+    trialUsage.remaining >= trialUsage.limit
+  );
+  const tutorial = useGradingTutorial(user?.id, sendGAEvent);
+  const tutorialState = tutorial.state;
+  const tutorialIsLoaded = tutorial.isLoaded;
+  const reportTutorialError = tutorial.reportError;
+  const skipTutorial = tutorial.skip;
   const [isAuthModalOpen, setIsAuthModalOpen] = useState(false);
   const [authMode, setAuthMode] = useState<'signin' | 'signup'>('signin');
 
@@ -173,6 +183,7 @@ export default function Home() {
   const [regradeByLabel, setRegradeByLabel] = useState<Record<string, { token: string; remaining: number }>>({});
   const [isLoading, setIsLoading] = useState(false);
   const [isSampleLoading, setIsSampleLoading] = useState(false);
+  const [isSampleContext, setIsSampleContext] = useState(false);
   const [regradingLabel, setRegradingLabel] = useState<string | null>(null);  // 再採点中のラベル
   const [gradingElapsedSec, setGradingElapsedSec] = useState(0);  // 採点待ちの経過秒数（段階メッセージ用）
   const [results, setResults] = useState<GradingResponseItem[] | null>(null);
@@ -327,6 +338,124 @@ export default function Home() {
   // studentId -> label -> layout（採点時に渡す）
   const [batchLayouts, setBatchLayouts] = useState<Record<string, Record<string, LayoutInfo>>>({});
   const [currentBatchOcrIndex, setCurrentBatchOcrIndex] = useState<number>(0);
+  const sampleOwnerRef = useRef<string | null>(null);
+  const activeUserIdRef = useRef<string | null>(user?.id ?? null);
+  activeUserIdRef.current = user?.id ?? null;
+  const restoredTutorialRef = useRef<string | null>(null);
+  const restoringTutorialRef = useRef<string | null>(null);
+  const restoreGenerationRef = useRef(0);
+  const lastTutorialUserRef = useRef<string | null | undefined>(undefined);
+  const unrelatedWorkRef = useRef(false);
+  unrelatedWorkRef.current = !isSampleContext && (
+    uploadedFiles.length > 0 || selectedProblems.length > 0 ||
+    modelAnswerText.trim().length > 0 || Object.keys(ocrResults).length > 0 ||
+    Boolean(results?.length) || sharedFiles.length > 0 ||
+    batchStudents.some((student) => student.files.length > 0)
+  );
+
+  const loadSampleFile = useCallback(async (): Promise<File> => {
+    const sampleResponse = await fetch(SAMPLE_TRIAL.imagePath);
+    if (!sampleResponse.ok) throw new Error('サンプル画像を読み込めませんでした。');
+    const sampleBlob = await sampleResponse.blob();
+    return new File([sampleBlob], SAMPLE_TRIAL.imageFileName, {
+      type: sampleBlob.type || 'image/png',
+    });
+  }, []);
+
+  const clearSampleData = useCallback(() => {
+    preparedFilesCacheRef.current = null;
+    sampleOwnerRef.current = null;
+    setIsSampleContext(false);
+    setUploadedFiles([]);
+    setAnswerFileIndex(null);
+    setFileRoles({});
+    setSelectedProblems([]);
+    setProblemPoints({});
+    setResults(null);
+    setOcrResults({});
+    setConfirmedTexts({});
+    setActiveSingleTargets(null);
+    setOcrFlowStep('idle');
+    setCurrentOcrLabel('');
+    setModelAnswerInputMode('image');
+    setModelAnswerText('');
+    setError(null);
+    setRequirePlan(false);
+    setRegradeByLabel({});
+  }, []);
+
+  useEffect(() => {
+    const currentUserId = user?.id ?? null;
+    if (lastTutorialUserRef.current !== currentUserId) {
+      lastTutorialUserRef.current = currentUserId;
+      restoredTutorialRef.current = null;
+      restoringTutorialRef.current = null;
+      restoreGenerationRef.current += 1;
+    }
+    const ownerId = sampleOwnerRef.current;
+    if (ownerId && ownerId !== user?.id) clearSampleData();
+  }, [clearSampleData, user?.id]);
+
+  useEffect(() => {
+    const stored = tutorialState;
+    if (!user?.id || !tutorialIsLoaded || !stored || (!stored.ocr && !stored.grade)) return;
+    const restoreKey = user.id;
+    if (restoredTutorialRef.current === restoreKey || restoringTutorialRef.current === restoreKey) return;
+    if (unrelatedWorkRef.current) return;
+    restoringTutorialRef.current = restoreKey;
+    const restoreGeneration = restoreGenerationRef.current;
+
+    void loadSampleFile().then((sampleFile) => {
+      if (activeUserIdRef.current !== restoreKey ||
+          restoreGenerationRef.current !== restoreGeneration || unrelatedWorkRef.current) return;
+      sampleOwnerRef.current = user.id;
+      setIsSampleContext(true);
+      setBatchMode('single');
+      setSelectedProblems([SAMPLE_TRIAL.label]);
+      setProblemPoints({ [SAMPLE_TRIAL.label]: 10 });
+      setUploadedFiles([sampleFile]);
+      setFileRoles({ 0: 'answer' });
+      setAnswerFileIndex(0);
+      setModelAnswerInputMode('text');
+      setModelAnswerText(SAMPLE_TRIAL.modelAnswerText);
+      setActiveSingleTargets({
+        targets: [{ label: SAMPLE_TRIAL.label, points: 10 }],
+        source: 'selected',
+        draftIsPending: false,
+      });
+      if (stored.ocr) {
+        setOcrResults(stored.ocr.results);
+        setConfirmedTexts(stored.ocr.confirmedTexts);
+        setOcrFlowStep(stored.grade ? 'idle' : 'confirm');
+      }
+      if (stored.grade) setResults(stored.grade.results as GradingResponseItem[]);
+      restoredTutorialRef.current = restoreKey;
+      if (!stored.paused) {
+        const targetId = stored.step === 'confirm' ? 'tutorial-guide-confirm' :
+          stored.step === 'score' ? 'tutorial-guide-score' :
+          stored.step === 'deductions' ? 'tutorial-guide-deductions' :
+          stored.step === 'rewrite' ? 'tutorial-guide-rewrite' :
+          stored.step === 'complete' ? 'tutorial-guide-complete' : 'grading-form';
+        setTimeout(() => {
+          document.getElementById(targetId)?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+        }, 100);
+      }
+    }).catch(() => {
+      if (activeUserIdRef.current === restoreKey) reportTutorialError('restore_sample');
+    }).finally(() => {
+      if (restoreGenerationRef.current === restoreGeneration && restoringTutorialRef.current === restoreKey) {
+        restoringTutorialRef.current = null;
+      }
+    });
+  }, [
+    isSampleContext,
+    loadSampleFile,
+    reportTutorialError,
+    tutorialIsLoaded,
+    tutorialState,
+    uploadedFiles.length,
+    user?.id,
+  ]);
 
   // 一括処理: 重複ファイル検出
   // ファイル名+サイズで重複を検出（同じファイルが複数の生徒に割り当てられている場合に警告）
@@ -1745,6 +1874,11 @@ export default function Home() {
       formData.append('pdfPageInfo', JSON.stringify(pdfPageInfo));
     }
     formData.append('fileRoles', JSON.stringify(fileRoles));
+    if (isSampleContext) {
+      formData.append('problemConditions', JSON.stringify({
+        [SAMPLE_TRIAL.label]: SAMPLE_TRIAL.problemCondition,
+      }));
+    }
     // 問題条件のオーバーライド（AIが誤読した字数制限などを手動で指定）
     if (problemCondition.trim()) {
       formData.append('problemConditions', JSON.stringify({ [label]: problemCondition.trim() }));
@@ -1775,16 +1909,17 @@ export default function Home() {
         setError(data.message);
         if (data.requirePlan) setRequirePlan(true);
       } else {
+        const validItems = data.results as GradingResponseItem[];
         // 既存の結果とマージ: 同じラベルの問題は新しい結果で上書き
         setResults((prev) => {
-          const newItems = Array.isArray(data.results) ? data.results : [];
+          const newItems = validItems;
           if (!prev || prev.length === 0) return newItems;
           const byLabel = new Map(prev.map((x: GradingResponseItem) => [x.label, x]));
           for (const item of newItems) byLabel.set(item.label, item);
           return Array.from(byLabel.values());
         });
-        if (Array.isArray(data.results)) ingestRegradeInfo(data.results);
-        if (data.usageReleaseWarning) {
+        ingestRegradeInfo(validItems);
+        if ((data as { usageReleaseWarning?: boolean }).usageReleaseWarning) {
           setError('利用回数の返却に問題が発生しました。お問い合わせください。');
         }
         refreshUsageInfo().catch((err) => {
@@ -1858,7 +1993,8 @@ export default function Home() {
     }
 
     // 追加済みのファイルを含めた上限も守る。超過時は既存の選択・採点状態を維持する。
-    if (uploadedFiles.length + validFiles.length > MAX_FILES_COUNT) {
+    const existingFileCount = isSampleContext ? 0 : uploadedFiles.length;
+    if (existingFileCount + validFiles.length > MAX_FILES_COUNT) {
       setError(`アップロードできるファイルは合計${MAX_FILES_COUNT}個までです。`);
       sendGAEvent('grading_upload_rejected', {
         reason: 'too_many_files_total',
@@ -1875,6 +2011,13 @@ export default function Home() {
     // ファイルは直ちに一覧へ加え、役割はサーバー側でAI判別する。
     // ファイル名・選択順からの推測や、登録を止める確認モーダルは使わない。
     if (isMountedRef.current) {
+      restoreGenerationRef.current += 1;
+      restoringTutorialRef.current = null;
+      unrelatedWorkRef.current = true;
+      if (isSampleContext) {
+        clearSampleData();
+        skipTutorial();
+      }
       invalidateUploadDerivedState();
       setError(null);
       sendGAEvent('grading_upload_selected', {
@@ -1886,19 +2029,20 @@ export default function Home() {
         has_pdf: validFiles.some(f => f.type === 'application/pdf') ? 1 : 0,
       });
       setUploadedFiles((previousFiles) => {
-        const startIndex = previousFiles.length;
+        const baseFiles = isSampleContext ? [] : previousFiles;
+        const startIndex = baseFiles.length;
         setFileRoles((previousRoles) => {
-          const nextRoles = { ...previousRoles };
+          const nextRoles = isSampleContext ? {} : { ...previousRoles };
           validFiles.forEach((_, index) => {
             nextRoles[startIndex + index] = 'auto';
           });
           return nextRoles;
         });
-        return [...previousFiles, ...validFiles];
+        return [...baseFiles, ...validFiles];
       });
       setAnswerFileIndex(null);
     }
-  }, [invalidateUploadDerivedState, uploadedFiles.length]);
+  }, [clearSampleData, invalidateUploadDerivedState, isSampleContext, skipTutorial, uploadedFiles.length]);
 
   const handleFileChange = useCallback(async (e: React.ChangeEvent<HTMLInputElement>) => {
     if (e.target.files && e.target.files.length > 0) {
@@ -1922,6 +2066,11 @@ export default function Home() {
   }, [processFiles]);
 
   const removeFile = (index: number) => {
+    if (isSampleContext) {
+      clearSampleData();
+      skipTutorial();
+      return;
+    }
     invalidateUploadDerivedState();
     setUploadedFiles(prev => {
       const next = prev.filter((_, i) => i !== index);
@@ -2196,9 +2345,20 @@ export default function Home() {
     setIsAuthModalOpen(true);
   };
 
-  // OCRのみ実行（確認フロー開始）
-  const handleOcrStart = async (e: React.FormEvent) => {
-    e.preventDefault();
+  // OCRのみ実行（確認フロー開始）。サンプルも通常答案も同じ処理を通す。
+  const handleOcrStart = async (
+    e?: React.FormEvent,
+    source?: {
+      files: File[];
+      roles: Record<number, FileRole>;
+      targetSelection: EffectiveTargetSelection;
+      sample: boolean;
+    }
+  ) => {
+    e?.preventDefault();
+    const sourceFiles = source?.files ?? uploadedFiles;
+    const sourceRoles = source?.roles ?? fileRoles;
+    const sourceIsSample = source?.sample ?? isSampleContext;
 
     if (!user) {
       sendGAEvent('grading_auth_required', { source: 'ocr_start' });
@@ -2212,7 +2372,7 @@ export default function Home() {
       return;
     }
 
-    if (uploadedFiles.length === 0) {
+    if (sourceFiles.length === 0) {
       setError('ファイルをアップロードしてください。');
       sendGAEvent('grading_ocr_blocked', { reason: 'no_files' });
       return;
@@ -2221,7 +2381,7 @@ export default function Home() {
     // バリデーション通過後、即座にボタンを無効化して二重タップを防止
     setIsLoading(true);
 
-    const targetSelection = singleEffectiveSelection;
+    const targetSelection = source?.targetSelection ?? singleEffectiveSelection;
     const targetLabels = targetSelection.targets.map((target) => target.label);
     if (targetLabels.length === 0) {
       setError('採点対象の問題を選択または入力してください。');
@@ -2238,10 +2398,10 @@ export default function Home() {
     }
 
     // 画像ファイルを圧縮（10枚対応）
-    const hasImages = uploadedFiles.some(f => isImageFile(f));
-    const hasPdf = uploadedFiles.some(f => f.type === 'application/pdf');
+    const hasImages = sourceFiles.some(f => isImageFile(f));
+    const hasPdf = sourceFiles.some(f => f.type === 'application/pdf');
     const hasPdfPageInfoForProcessing = !!(pdfPageInfo.answerPage || pdfPageInfo.problemPage || pdfPageInfo.modelAnswerPage);
-    let filesToUse = uploadedFiles;
+    let filesToUse = sourceFiles;
 
     if (hasImages || (hasPdf && hasPdfPageInfoForProcessing)) {
       setIsCompressing(true);
@@ -2249,8 +2409,8 @@ export default function Home() {
       setCompressionFileName('');
 
       try {
-        filesToUse = await prepareFilesForUpload(uploadedFiles, {
-          fileRoles,
+        filesToUse = await prepareFilesForUpload(sourceFiles, {
+          fileRoles: sourceRoles,
           pdfPageInfo,
           onCompressionProgress: (progress, fileName) => {
             setCompressionProgress(progress);
@@ -2260,7 +2420,7 @@ export default function Home() {
       } catch (err) {
         console.error('[Page] OCR compression error:', err);
         // 圧縮に失敗しても元のファイルで続行
-        filesToUse = uploadedFiles;
+        filesToUse = sourceFiles;
       } finally {
         setIsCompressing(false);
         setCompressionProgress(0);
@@ -2290,13 +2450,13 @@ export default function Home() {
     setConfirmedTexts({});
     sendGAEvent('grading_ocr_started', {
       label_count: targetLabels.length,
-      file_count: uploadedFiles.length,
+      file_count: sourceFiles.length,
       access_type: usageInfo?.accessType || 'unknown',
     });
     sendGAEvent('ocr_started', {
       label_count: targetLabels.length,
-      file_count: uploadedFiles.length,
-      sample: 0,
+      file_count: sourceFiles.length,
+      sample: sourceIsSample ? 1 : 0,
     });
 
     // 各ラベルのOCRを並列実行する。
@@ -2318,7 +2478,7 @@ export default function Home() {
       if (pdfPageInfo.answerPage || pdfPageInfo.problemPage || pdfPageInfo.modelAnswerPage) {
         formData.append('pdfPageInfo', JSON.stringify(pdfPageInfo));
       }
-      formData.append('fileRoles', JSON.stringify(fileRoles));
+      formData.append('fileRoles', JSON.stringify(sourceRoles));
 
       // 圧縮後のファイルを使用
       filesToUse.forEach((file) => {
@@ -2392,6 +2552,7 @@ export default function Home() {
       setIsLoading(false);
       setCurrentOcrLabel('');
       sendGAEvent('grading_ocr_failed', { reason: firstFailure.reason });
+      if (sourceIsSample) tutorial.reportError('ocr');
       return;
     }
 
@@ -2414,8 +2575,22 @@ export default function Home() {
     setIsLoading(false);
     sendGAEvent('grading_ocr_completed', {
       label_count: Object.keys(newOcrResults).length,
-      file_count: uploadedFiles.length,
+      file_count: sourceFiles.length,
     });
+    if (sourceIsSample) {
+      tutorial.saveOcr({
+        results: newOcrResults,
+        confirmedTexts: Object.fromEntries(
+          Object.entries(newOcrResults).map(([label, value]) => [
+            label,
+            /読み取れませんでした|取得できませんでした|判読不能|認識できません/.test(value.text) ? '' : value.text,
+          ])
+        ),
+      });
+      setTimeout(() => {
+        document.getElementById('tutorial-guide-confirm')?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+      }, 100);
+    }
   };
 
   // 確認済みテキストで採点を実行
@@ -2535,6 +2710,11 @@ export default function Home() {
     formData.append('targetLabels', JSON.stringify(targetLabels));
     formData.append('confirmedTexts', JSON.stringify(confirmedTexts));
     formData.append('strictness', gradingStrictness);
+    if (isSampleContext) {
+      formData.append('problemConditions', JSON.stringify({
+        [SAMPLE_TRIAL.label]: SAMPLE_TRIAL.problemCondition,
+      }));
+    }
     if (deviceInfo?.fingerprint) {
       formData.append('deviceFingerprint', deviceInfo.fingerprint);
     }
@@ -2554,6 +2734,7 @@ export default function Home() {
       formData.append('files', file);
     });
 
+    let gradingSucceeded = false;
     try {
       console.log('[Page] Sending request to /api/grade...');
 
@@ -2574,51 +2755,75 @@ export default function Home() {
       const data = await res.json();
       console.log('[Page] Response data:', data);
 
-      if (data.status === 'error') {
-        setError(data.message);
+      if (!res.ok || !isValidGradeResponse(data)) {
+        const failureReason = data.requirePlan ? 'plan_required' :
+          data.status === 'error' ? 'api_error' : 'incomplete_result';
+        setError(data.message || '採点結果を最後まで取得できませんでした。もう一度お試しください。');
         if (data.requirePlan) {
           setRequirePlan(true);
         }
-        sendGAEvent('grading_failed', { reason: data.requirePlan ? 'plan_required' : 'api_error' });
-        sendGAEvent('grade_error', { reason: data.requirePlan ? 'plan_required' : 'api_error', sample: 0 });
+        if (Array.isArray(data.results)) {
+          const returnedItems = data.results as GradingResponseItem[];
+          setResults(returnedItems);
+          ingestRegradeInfo(returnedItems);
+          refreshUsageInfo().catch((err) => {
+            console.warn('Failed to refresh usage info after incomplete response:', err);
+          });
+        }
+        sendGAEvent('grading_failed', { reason: failureReason });
+        sendGAEvent('grade_error', { reason: failureReason, sample: isSampleContext ? 1 : 0 });
+        if (isSampleContext) tutorial.reportError('grade');
       } else {
+        const validItems = data.results as GradingResponseItem[];
+        gradingSucceeded = true;
         // 既存の結果とマージ: 同じラベルの問題は新しい結果で上書き
         setResults((prev) => {
-          const newItems = Array.isArray(data.results) ? data.results : [];
+          const newItems = validItems;
           if (!prev || prev.length === 0) return newItems;
           const byLabel = new Map(prev.map((x: GradingResponseItem) => [x.label, x]));
           for (const item of newItems) byLabel.set(item.label, item);
           return Array.from(byLabel.values());
         });
-        if (Array.isArray(data.results)) ingestRegradeInfo(data.results);
-        if (data.usageReleaseWarning) {
+        ingestRegradeInfo(validItems);
+        if ((data as { usageReleaseWarning?: boolean }).usageReleaseWarning) {
           setError('利用回数の返却に問題が発生しました。お問い合わせください。');
         }
         refreshUsageInfo().catch((err) => {
           console.warn('Failed to refresh usage info:', err);
         });
         sendGAEvent('grading_completed', {
-          label_count: Array.isArray(data.results) ? data.results.length : 0,
+          label_count: validItems.length,
         });
         sendGAEvent('grade_success', {
-          label_count: Array.isArray(data.results) ? data.results.length : 0,
-          sample: 0,
+          label_count: validItems.length,
+          sample: isSampleContext ? 1 : 0,
         });
+        if (isSampleContext) {
+          if (tutorial.saveGrade(validItems)) {
+            setTimeout(() => {
+              document.getElementById('tutorial-guide-score')?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+            }, 100);
+          }
+        } else {
+          sendGAEvent('own_answer_grading_completed', { label_count: validItems.length });
+        }
       }
     } catch (err) {
       console.error('[Page] Grading error:', err);
       if (err instanceof Error && err.name === 'AbortError') {
         setError('採点処理がタイムアウトしました（5分経過）。画像ファイルのサイズが大きい場合、圧縮してから再度お試しください。');
         sendGAEvent('grading_failed', { reason: 'timeout' });
-        sendGAEvent('grade_error', { reason: 'timeout', sample: 0 });
+        sendGAEvent('grade_error', { reason: 'timeout', sample: isSampleContext ? 1 : 0 });
+        if (isSampleContext) tutorial.reportError('grade_timeout');
       } else {
         setError('採点処理中にエラーが発生しました。ネットワーク接続を確認し、再度お試しください。');
         sendGAEvent('grading_failed', { reason: 'network_error' });
-        sendGAEvent('grade_error', { reason: 'network_error', sample: 0 });
+        sendGAEvent('grade_error', { reason: 'network_error', sample: isSampleContext ? 1 : 0 });
+        if (isSampleContext) tutorial.reportError('grade_network');
       }
     } finally {
       setIsLoading(false);
-      setOcrFlowStep('idle');
+      setOcrFlowStep(isSampleContext && !gradingSucceeded ? 'confirm' : 'idle');
       releaseRequestLock();
     }
   };
@@ -2629,9 +2834,10 @@ export default function Home() {
     setOcrResults({});
     setConfirmedTexts({});
     setActiveSingleTargets(null);
+    if (isSampleContext) tutorial.setStep('select');
   };
 
-  const handleSampleTrial = async () => {
+  const prepareAndReadSample = async () => {
     if (!user) {
       sendGAEvent('grading_auth_required', { source: 'sample_trial' });
       openAuthModal('signin');
@@ -2646,106 +2852,47 @@ export default function Home() {
 
     if (isLoading || isSampleLoading) return;
 
-    if (!acquireRequestLock()) {
-      return;
-    }
-
     setBatchMode('single');
     setIsSampleLoading(true);
-    setIsLoading(true);
     setError(null);
     setRequirePlan(false);
     setResults(null);
-    setOcrFlowStep('grading');
-    sendGAEvent('sample_trial_started');
     sendGAEvent('uploaded_file', { file_count: 1, has_pdf: 0, sample: 1 });
-    sendGAEvent('ocr_started', { label_count: 1, file_count: 1, sample: 1 });
 
     try {
-      const sampleResponse = await fetch(SAMPLE_TRIAL.imagePath);
-      if (!sampleResponse.ok) {
-        throw new Error('サンプル画像を読み込めませんでした。');
-      }
-
-      const sampleBlob = await sampleResponse.blob();
-      const sampleFile = new File([sampleBlob], SAMPLE_TRIAL.imageFileName, {
-        type: sampleBlob.type || 'image/png',
-      });
-
-      const targetLabels = [SAMPLE_TRIAL.label];
-      const sampleConfirmedTexts = { [SAMPLE_TRIAL.label]: SAMPLE_TRIAL.answerText };
-      const sampleProblemConditions = { [SAMPLE_TRIAL.label]: SAMPLE_TRIAL.problemCondition };
+      const sampleFile = await loadSampleFile();
       const sampleFileRoles: Record<number, FileRole> = { 0: 'answer' };
+      const targetSelection: EffectiveTargetSelection = {
+        targets: [{ label: SAMPLE_TRIAL.label, points: 10 }],
+        source: 'selected',
+        draftIsPending: false,
+      };
 
-      setSelectedProblems(targetLabels);
+      sampleOwnerRef.current = user.id;
+      setIsSampleContext(true);
+      setSelectedProblems([SAMPLE_TRIAL.label]);
       setProblemPoints({ [SAMPLE_TRIAL.label]: 10 });
       setUploadedFiles([sampleFile]);
       setFileRoles(sampleFileRoles);
       setAnswerFileIndex(0);
-      setConfirmedTexts(sampleConfirmedTexts);
-      setOcrResults({
-        [SAMPLE_TRIAL.label]: {
-          text: SAMPLE_TRIAL.answerText,
-          charCount: SAMPLE_TRIAL.answerText.replace(/\s+/g, '').length,
-        },
-      });
+      setOcrResults({});
+      setConfirmedTexts({});
+      setActiveSingleTargets(targetSelection);
       setModelAnswerInputMode('text');
       setModelAnswerText(SAMPLE_TRIAL.modelAnswerText);
-
-      const formData = new FormData();
-      formData.append('targetLabels', JSON.stringify(targetLabels));
-      formData.append('confirmedTexts', JSON.stringify(sampleConfirmedTexts));
-      formData.append('problemConditions', JSON.stringify(sampleProblemConditions));
-      formData.append('strictness', 'standard');
-      formData.append('modelAnswerText', SAMPLE_TRIAL.modelAnswerText);
-      formData.append('fileRoles', JSON.stringify(sampleFileRoles));
-      if (deviceInfo?.fingerprint) {
-        formData.append('deviceFingerprint', deviceInfo.fingerprint);
-      }
-      formData.append('files', sampleFile);
-
-      sendGAEvent('grading_started', { label_count: 1, file_count: 1, sample: 1 });
-
-      const res = await fetch('/api/grade', {
-        method: 'POST',
-        body: formData,
-        credentials: 'include',
+      await handleOcrStart(undefined, {
+        files: [sampleFile],
+        roles: sampleFileRoles,
+        targetSelection,
+        sample: true,
       });
-
-      const data = await res.json() as GradingApiResponse;
-
-      if (!res.ok || data.status === 'error') {
-        setError(data.message || 'サンプル問題の採点に失敗しました。');
-        if (data.requirePlan) setRequirePlan(true);
-        sendGAEvent('grade_error', {
-          reason: data.requirePlan ? 'plan_required' : `http_${res.status}`,
-          sample: 1,
-        });
-        return;
-      }
-
-      const newItems = Array.isArray(data.results) ? data.results : [];
-      setResults(newItems);
-      ingestRegradeInfo(newItems);
-      sendGAEvent('grade_success', { label_count: newItems.length, sample: 1 });
-      sendGAEvent('sample_trial_completed', { label_count: newItems.length });
-
-      refreshUsageInfo().catch((err) => {
-        console.warn('[Page] Failed to refresh usage info:', err);
-      });
-
-      setTimeout(() => {
-        document.getElementById('grading-results')?.scrollIntoView({ behavior: 'smooth', block: 'start' });
-      }, 100);
     } catch (err) {
       console.error('[Page] Sample trial error:', err);
-      setError(err instanceof Error ? err.message : 'サンプル問題の採点中にエラーが発生しました。');
+      setError(err instanceof Error ? err.message : 'サンプル問題の準備中にエラーが発生しました。');
       sendGAEvent('grade_error', { reason: 'sample_error', sample: 1 });
+      tutorial.reportError('prepare_sample');
     } finally {
-      setOcrFlowStep('idle');
-      setIsLoading(false);
       setIsSampleLoading(false);
-      releaseRequestLock();
     }
   };
 
@@ -3182,6 +3329,91 @@ export default function Home() {
     window.scrollTo({ top: 400, behavior: 'smooth' });
   };
 
+  const tutorialStep: TutorialStep = tutorial.state?.step ?? 'intro';
+  const tutorialPaused = tutorial.state?.paused ?? false;
+  const tutorialCompleted = tutorial.state?.completed ?? false;
+  const hasOwnFiles = !isSampleContext && (
+    uploadedFiles.length > 0 || selectedProblems.length > 0 ||
+    modelAnswerText.trim().length > 0 || Object.keys(ocrResults).length > 0 ||
+    Boolean(results?.length) || sharedFiles.length > 0 ||
+    batchStudents.some((student) => student.files.length > 0)
+  );
+  const showTutorial = Boolean(
+    user && tutorial.isLoaded && (isFirstTrialUser || tutorial.hasSavedState)
+  );
+
+  const handleTutorialStart = () => {
+    if (hasOwnFiles) {
+      setError('入力中の答案があります。現在の答案を採点するか、ファイルを削除してからサンプルを開始してください。');
+      document.getElementById('upload-section')?.scrollIntoView({ behavior: 'smooth', block: 'center' });
+      return;
+    }
+    sampleOwnerRef.current = user?.id ?? null;
+    setIsSampleContext(true);
+    setBatchMode('single');
+    setSelectedProblems([SAMPLE_TRIAL.label]);
+    setProblemPoints({ [SAMPLE_TRIAL.label]: 10 });
+    setModelAnswerInputMode('text');
+    setModelAnswerText(SAMPLE_TRIAL.modelAnswerText);
+    tutorial.start();
+  };
+
+  const handleTutorialResume = () => {
+    if (hasOwnFiles) {
+      setError('入力中の答案があるため、サンプルで上書きできません。現在の作業を終えてから再開してください。');
+      return;
+    }
+    restoredTutorialRef.current = null;
+    restoringTutorialRef.current = null;
+    restoreGenerationRef.current += 1;
+    tutorial.resume();
+    const targetId = tutorialStep === 'confirm' ? 'tutorial-guide-confirm' :
+      tutorialStep === 'score' ? 'tutorial-guide-score' :
+      tutorialStep === 'deductions' ? 'tutorial-guide-deductions' :
+      tutorialStep === 'rewrite' ? 'tutorial-guide-rewrite' : 'grading-form';
+    setTimeout(() => document.getElementById(targetId)?.scrollIntoView({ behavior: 'smooth', block: 'center' }), 0);
+  };
+
+  const handleTutorialNext = () => {
+    const nextStep = tutorial.next();
+    const targetId = nextStep === 'score' ? 'tutorial-guide-score' :
+      nextStep === 'deductions' ? 'tutorial-guide-deductions' :
+      nextStep === 'rewrite' ? 'tutorial-guide-rewrite' : 'tutorial-guide-complete';
+    setTimeout(() => document.getElementById(targetId)?.scrollIntoView({ behavior: 'smooth', block: 'center' }), 0);
+  };
+
+  const handleTutorialUseOwn = () => {
+    if (isSampleContext) clearSampleData();
+    if (!tutorialCompleted) tutorial.skip();
+    setTimeout(() => document.getElementById('upload-section')?.scrollIntoView({ behavior: 'smooth', block: 'center' }), 0);
+  };
+
+  const renderTutorialGuide = (placement: 'top' | TutorialStep) => {
+    if (!showTutorial) return null;
+    const belongsHere = placement === 'top'
+      ? tutorialPaused || tutorialStep === 'intro' || tutorialStep === 'select'
+      : !tutorialPaused && tutorialStep === placement;
+    if (!belongsHere) return null;
+
+    return (
+      <SampleTutorial
+        step={tutorialStep}
+        paused={tutorialPaused}
+        completed={tutorialCompleted}
+        busy={isLoading || isSampleLoading || isCompressing}
+        error={error}
+        remainingCount={usageInfo?.remainingCount ?? null}
+        hasOwnFiles={hasOwnFiles}
+        onStart={handleTutorialStart}
+        onRead={prepareAndReadSample}
+        onNext={handleTutorialNext}
+        onSkip={tutorial.skip}
+        onResume={handleTutorialResume}
+        onUseOwn={handleTutorialUseOwn}
+      />
+    );
+  };
+
   // ローディング中
   if (authLoading) {
     return (
@@ -3549,20 +3781,7 @@ export default function Home() {
           </div>
         </div>
 
-        {/* Welcome Guide for first-time trial users */}
-        {isFirstTrialUser && (
-          <WelcomeGuide
-            remainingCount={usageInfo?.remainingCount ?? 3}
-            onStartSample={handleSampleTrial}
-            isSampleLoading={isSampleLoading}
-            onStartTrial={() => {
-              sendGAEvent('trial_welcome_start', {
-                remaining_count: usageInfo?.remainingCount ?? 0,
-              });
-              document.getElementById('upload-section')?.scrollIntoView({ behavior: 'smooth', block: 'center' });
-            }}
-          />
-        )}
+        <div className="mb-8">{renderTutorialGuide('top')}</div>
 
         <div className="grid gap-3 sm:grid-cols-3 mb-6">
           {APP_STEPS.map((item) => (
@@ -3697,7 +3916,10 @@ export default function Home() {
                     </div>
                   )}
 
-                  <div className="max-w-2xl mx-auto">
+                  <div
+                    id={isSampleContext ? 'tutorial-targets' : undefined}
+                    className="max-w-2xl mx-auto scroll-mt-24"
+                  >
                     <TargetSummary
                       selection={displayedSingleSelection}
                       mode="single"
@@ -4657,7 +4879,9 @@ export default function Home() {
 
                 {/* OCR確認UI */}
                 {ocrFlowStep === 'confirm' && Object.keys(ocrResults).length > 0 && (
-                  <div className="mt-8 p-6 bg-gradient-to-br from-amber-50 to-orange-50 border border-amber-200 rounded-2xl">
+                  <>
+                  <div id="tutorial-guide-confirm" className="mt-8 scroll-mt-24">{renderTutorialGuide('confirm')}</div>
+                  <div id="tutorial-confirm" className="mt-8 p-6 bg-gradient-to-br from-amber-50 to-orange-50 border border-amber-200 rounded-2xl scroll-mt-24">
                     <h3 className="text-lg font-bold text-amber-800 mb-4 flex items-center">
                       <Edit3 className="mr-2 h-5 w-5" />
                       読み取り結果を確認・修正してください
@@ -4676,7 +4900,11 @@ export default function Home() {
                         </div>
                         <textarea
                           value={confirmedTexts[label] || ''}
-                          onChange={(e) => setConfirmedTexts(prev => ({ ...prev, [label]: e.target.value }))}
+                          onChange={(e) => {
+                            const next = { ...confirmedTexts, [label]: e.target.value };
+                            setConfirmedTexts(next);
+                            if (isSampleContext) tutorial.updateConfirmedTexts(next);
+                          }}
                           className="w-full h-40 p-4 border border-slate-300 rounded-xl focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 font-mono text-sm leading-relaxed resize-y"
                           placeholder="読み取り結果がここに表示されます"
                         />
@@ -4693,23 +4921,24 @@ export default function Home() {
                       </div>
                     ))}
 
-                    <div className="flex gap-4 mt-6">
+                    <div className="mt-6 flex flex-col-reverse gap-3 sm:flex-row sm:gap-4">
                       <button
                         onClick={handleOcrCancel}
-                        className="flex-1 py-3 px-6 border border-slate-300 rounded-xl text-slate-700 font-semibold hover:bg-slate-50 transition-colors"
+                        className="flex-1 whitespace-nowrap py-3 px-6 border border-slate-300 rounded-xl text-slate-700 font-semibold hover:bg-slate-50 transition-colors"
                       >
                         キャンセル
                       </button>
                       <button
                         onClick={handleGradeWithConfirmed}
                         disabled={isLoading}
-                        className="flex-1 py-3 px-6 bg-gradient-to-r from-emerald-500 to-teal-500 text-white font-bold rounded-xl shadow-lg hover:shadow-xl transition-all disabled:opacity-70 flex items-center justify-center"
+                        className="flex-1 whitespace-nowrap py-3 px-6 bg-gradient-to-r from-emerald-500 to-teal-500 text-white font-bold rounded-xl shadow-lg hover:shadow-xl transition-all disabled:opacity-70 flex items-center justify-center"
                       >
-                        <CheckCircle className="mr-2 h-5 w-5" />
+                        <CheckCircle className="mr-2 h-5 w-5 shrink-0" />
                         採点を開始
                       </button>
                     </div>
                   </div>
+                  </>
                 )}
 
                 {/* 採点中の大きな表示（独立） */}
@@ -5492,8 +5721,13 @@ export default function Home() {
                     )}
 
                     {/* Deduction Details */}
-                    {deductionDetails.length > 0 && (
-                      <div className="bg-red-50 rounded-2xl p-6 border border-red-100">
+                    {index === 0 && <div id="tutorial-guide-deductions" className="mb-5 scroll-mt-24">{renderTutorialGuide('deductions')}</div>}
+                    <div
+                      id={index === 0 && isSampleContext ? 'tutorial-deductions' : undefined}
+                      className={`${deductionDetails.length > 0 ? 'bg-red-50 border-red-100' : 'bg-slate-50 border-slate-200'} scroll-mt-24 rounded-2xl border p-6`}
+                    >
+                      {deductionDetails.length > 0 ? (
+                        <>
                         <div className="flex items-center justify-between mb-4">
                           <h4 className="font-bold text-red-800 flex items-center">
                             <AlertCircle className="w-5 h-5 mr-2" />
@@ -5513,12 +5747,19 @@ export default function Home() {
                             </li>
                           ))}
                         </ul>
-                      </div>
-                    )}
+                        </>
+                      ) : (
+                        <p className="text-sm font-semibold text-slate-600">この答案には減点項目はありません。</p>
+                      )}
+                    </div>
                   </div>
 
                   {/* Score Section (Updated) */}
-                  <div className="grid grid-cols-1 md:grid-cols-3 gap-8 mb-16">
+                  {index === 0 && <div id="tutorial-guide-score" className="mb-5 scroll-mt-24">{renderTutorialGuide('score')}</div>}
+                  <div
+                    id={index === 0 && isSampleContext ? 'tutorial-score' : undefined}
+                    className="grid grid-cols-1 md:grid-cols-3 gap-8 mb-16 scroll-mt-24"
+                  >
                     <div className="md:col-span-1 bg-gradient-to-br from-indigo-600 via-violet-600 to-fuchsia-700 rounded-[2.5rem] p-8 text-white shadow-2xl shadow-indigo-200 relative overflow-hidden group">
                       <div className="absolute top-0 right-0 w-48 h-48 bg-white/10 rounded-full blur-3xl -mr-20 -mt-20 group-hover:scale-150 transition-transform duration-1000 ease-out"></div>
                       <div className="absolute bottom-0 left-0 w-32 h-32 bg-black/10 rounded-full blur-2xl -ml-10 -mb-10"></div>
@@ -5676,7 +5917,11 @@ export default function Home() {
                   </div>
 
                   {/* Rewrite Example */}
-                  <div className="bg-gradient-to-br from-amber-50 to-orange-50 rounded-[2.5rem] p-8 md:p-10 border border-amber-100 relative overflow-hidden shadow-lg shadow-amber-100/50 group">
+                  {index === 0 && <div id="tutorial-guide-rewrite" className="mb-5 scroll-mt-24">{renderTutorialGuide('rewrite')}</div>}
+                  <div
+                    id={index === 0 && isSampleContext ? 'tutorial-rewrite' : undefined}
+                    className="bg-gradient-to-br from-amber-50 to-orange-50 rounded-[2.5rem] p-8 md:p-10 border border-amber-100 relative overflow-hidden shadow-lg shadow-amber-100/50 group scroll-mt-24"
+                  >
                     <div className="absolute top-0 right-0 w-64 h-64 bg-gradient-to-br from-amber-200/20 to-orange-200/20 rounded-full blur-3xl -mr-20 -mt-20 group-hover:scale-110 transition-transform duration-700"></div>
                     <div className="flex items-center justify-between mb-8 relative z-10">
                       <h3 className="text-2xl font-bold text-amber-900 flex items-center">
@@ -5727,6 +5972,8 @@ export default function Home() {
                       )}
                     </div>
                   </div>
+
+                  {index === 0 && <div id="tutorial-guide-complete" className="mt-8 scroll-mt-24">{renderTutorialGuide('complete')}</div>}
 
                 </div>
               </div>
